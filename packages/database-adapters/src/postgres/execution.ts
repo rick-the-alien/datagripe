@@ -1,5 +1,6 @@
 import { isRowReturningStatement } from "@datagripe/sql-tools";
 import type { ReservedSQL, SQL } from "bun";
+import { emitRows, type RunState } from "../execute/common";
 import type {
 	ExecuteLimits,
 	ExecutionRunResult,
@@ -21,26 +22,6 @@ const TIMEOUT_MESSAGE = "canceling statement due to statement timeout";
 const QUERY_TIMEOUT_CODE = "QUERY_TIMEOUT";
 
 type Reserved = ReservedSQL;
-
-/** JSON-safe, size-bounded value normalization for the wire. */
-function normalizeValue(value: unknown): unknown {
-	if (typeof value === "bigint") {
-		return value.toString();
-	}
-	if (value instanceof Date) {
-		return value.toISOString();
-	}
-	if (value instanceof Uint8Array) {
-		return `\\x${Buffer.from(value).toString("hex")}`;
-	}
-	return value;
-}
-
-interface RunState {
-	rowCount: number;
-	bytes: number;
-	truncated: boolean;
-}
 
 export async function beginPostgresExecution(
 	client: SQL,
@@ -171,42 +152,6 @@ class PostgresExecutionSession implements ExecutionSession {
 		}
 	}
 
-	/**
-	 * Normalize and emit rows under the row/byte caps. Returns false when
-	 * a cap was hit (state.truncated set).
-	 */
-	private emitRows(
-		resultSet: number,
-		records: Array<Record<string, unknown>>,
-		offset: number,
-		sink: ExecutionSink,
-		state: RunState,
-	): void {
-		if (records.length === 0) {
-			return;
-		}
-		const columns = Object.keys(records[0] as Record<string, unknown>);
-		const fitted: unknown[][] = [];
-		for (const record of records) {
-			if (state.rowCount + fitted.length >= this.limits.maxRows) {
-				state.truncated = true;
-				break;
-			}
-			const row = columns.map((column) => normalizeValue(record[column]));
-			const size = JSON.stringify(row).length;
-			if (state.bytes + size > this.limits.maxBytes) {
-				state.truncated = true;
-				break;
-			}
-			state.bytes += size;
-			fitted.push(row);
-		}
-		if (fitted.length > 0) {
-			sink.rows(resultSet, fitted, offset);
-			state.rowCount += fitted.length;
-		}
-	}
-
 	/** Cursor path. Returns rows fetched, or null when DECLARE failed and
 	 * the caller must fall back to direct execution. */
 	private async runCursor(
@@ -253,7 +198,7 @@ class PostgresExecutionSession implements ExecutionSession {
 				if (batch.length === 0 || state.truncated) {
 					break;
 				}
-				this.emitRows(resultSet, batch, offset, sink, state);
+				emitRows(this.limits, state, resultSet, batch, offset, sink);
 				offset += batch.length;
 			}
 		} finally {
@@ -284,7 +229,7 @@ class PostgresExecutionSession implements ExecutionSession {
 				resultSet + 1,
 				columns.map((name) => ({ name, dataType: "unknown" })),
 			);
-			this.emitRows(resultSet + 1, result, 0, sink, state);
+			emitRows(this.limits, state, resultSet + 1, result, 0, sink);
 			sink.statementDone(index, {
 				command: result.command ?? "SELECT",
 				...(typeof result.count === "number"

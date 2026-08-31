@@ -1,4 +1,9 @@
-import { PostgresAdapter } from "@datagripe/database-adapters";
+import {
+	MysqlAdapter,
+	PostgresAdapter,
+	RedisAdapter,
+	SqliteAdapter,
+} from "@datagripe/database-adapters";
 import { serve } from "bun";
 import { defaultWorkspaceFor } from "./auth/accounts";
 import { createSessionStore } from "./auth/sessions";
@@ -21,7 +26,12 @@ const config = await loadConfig();
 const appDb = createAppDb(config);
 const keyring = createKeyring(new Map([[1, config.CONNECTION_ENCRYPTION_KEY]]));
 const predefined = await loadPredefinedConnections(config);
-const adapter = new PostgresAdapter();
+const adapters = {
+	postgres: new PostgresAdapter(),
+	mysql: new MysqlAdapter(),
+	sqlite: new SqliteAdapter(),
+	redis: new RedisAdapter(),
+};
 const hub = new SocketHub();
 const sessions = createSessionStore(appDb);
 const rateLimiter = createRateLimiter({
@@ -35,12 +45,12 @@ const rateLimiter = createRateLimiter({
 const connections = createConnectionsService({
 	appDb,
 	keyring,
-	adapter,
+	adapters,
 	predefined,
 	ssrf: createSsrfPolicy(config.TARGET_HOST_ALLOWLIST),
 });
 const executions = createExecutionRegistry({
-	adapter,
+	adapters,
 	appDb,
 	limits: {
 		timeoutMs: config.QUERY_TIMEOUT_MS,
@@ -166,7 +176,7 @@ async function shutdown() {
 	server.stop();
 	sessions.stopSweep();
 	rateLimiter.stop();
-	await adapter.close();
+	await Promise.all(Object.values(adapters).map((a) => a.close()));
 	await appDb.close();
 	process.exit(0);
 }

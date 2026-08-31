@@ -79,11 +79,11 @@ export async function loadPredefinedConnections(
 		entries.set(definition.id, {
 			definition,
 			resolved: {
-				adapter: "postgres",
-				host: definition.host,
-				port: definition.port,
+				adapter: definition.adapter,
+				host: definition.host ?? "",
+				port: definition.port ?? 0,
 				database: definition.database,
-				username: definition.username,
+				username: definition.username ?? "",
 				password,
 				tlsMode: definition.tlsMode,
 				readOnly: definition.readOnly,

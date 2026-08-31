@@ -19,6 +19,10 @@ export const schemaNodeKindSchema = z.enum([
 	"table",
 	"view",
 	"column",
+	// Keyspace browsing (Redis): db index → key prefix → key.
+	"db",
+	"prefix",
+	"key",
 ]);
 
 export type SchemaNodeKind = z.infer<typeof schemaNodeKindSchema>;
@@ -58,3 +62,31 @@ export const schemaChildrenResultSchema = z.object({
 });
 
 export type SchemaChildrenResult = z.infer<typeof schemaChildrenResultSchema>;
+
+/** Fetch one key's value for the keyspace browser (`redis.get`). */
+export const redisGetRequestSchema = z.object({
+	connectionId: z.string().min(1).max(255),
+	key: z.string().min(1).max(4096),
+});
+
+export type RedisGetRequest = z.infer<typeof redisGetRequestSchema>;
+
+export const redisValueEntrySchema = z.object({
+	/** Hash field / set member index, absent for plain strings. */
+	field: z.string().optional(),
+	value: z.string(),
+});
+
+export type RedisValueEntry = z.infer<typeof redisValueEntrySchema>;
+
+export const redisGetResultSchema = z.object({
+	key: z.string(),
+	type: z.enum(["string", "hash", "list", "set", "zset", "other"]),
+	/** -1 = no expiry, -2 = key vanished between browse and fetch. */
+	ttlSeconds: z.number().int(),
+	entries: z.array(redisValueEntrySchema),
+	/** True when the value was capped (large collections show a prefix). */
+	truncated: z.boolean(),
+});
+
+export type RedisGetResult = z.infer<typeof redisGetResultSchema>;

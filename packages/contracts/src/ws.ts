@@ -24,6 +24,7 @@ export const clientActionSchema = z.enum([
 	"connection.test",
 	"connection.delete",
 	"schema.children",
+	"redis.get",
 	"execution.start",
 	"execution.cancel",
 	"execution.subscribe",

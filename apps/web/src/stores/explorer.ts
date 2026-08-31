@@ -1,4 +1,8 @@
-import type { SchemaNode, SchemaPathSegment } from "@datagripe/contracts";
+import type {
+	RedisGetResult,
+	SchemaNode,
+	SchemaPathSegment,
+} from "@datagripe/contracts";
 import { create } from "zustand";
 import type { WsRequestFn } from "../api/ws";
 
@@ -24,12 +28,24 @@ export function nodeKey(
 	return `${connectionId}/${suffix}`;
 }
 
+export type KeyValueState =
+	| { status: "loading" }
+	| { status: "loaded"; value: RedisGetResult }
+	| { status: "error"; message: string };
+
 export type ExplorerState = {
 	children: Record<string, ChildrenState>;
 	/** Key → path; presence means expanded. The path travels along so
 	 * refresh can re-request without reverse-parsing the key. */
 	expanded: Record<string, { connectionId: string; path: SchemaPathSegment[] }>;
+	/** Fetched keyspace values keyed by node key. */
+	keyValues: Record<string, KeyValueState>;
 	toggle: (connectionId: string, path: SchemaPathSegment[]) => Promise<void>;
+	toggleKeyValue: (
+		connectionId: string,
+		path: SchemaPathSegment[],
+		key: string,
+	) => Promise<void>;
 	refresh: (connectionId: string) => Promise<void>;
 	reset: () => void;
 };
@@ -72,6 +88,7 @@ export function createExplorerStore(request: WsRequestFn) {
 		return {
 			children: {},
 			expanded: {},
+			keyValues: {},
 
 			async toggle(connectionId, path) {
 				const key = nodeKey(connectionId, path);
@@ -88,6 +105,46 @@ export function createExplorerStore(request: WsRequestFn) {
 				});
 				if (get().children[key] === undefined) {
 					await fetchChildren(connectionId, path, false);
+				}
+			},
+
+			async toggleKeyValue(connectionId, path, keyName) {
+				const key = nodeKey(connectionId, path);
+				if (get().expanded[key] !== undefined) {
+					const { [key]: _collapsed, ...expanded } = get().expanded;
+					set({ expanded });
+					return;
+				}
+				set({
+					expanded: {
+						...get().expanded,
+						[key]: { connectionId, path },
+					},
+				});
+				set({
+					keyValues: { ...get().keyValues, [key]: { status: "loading" } },
+				});
+				try {
+					const result = await request<RedisGetResult>("redis.get", {
+						connectionId,
+						key: keyName,
+					});
+					set({
+						keyValues: {
+							...get().keyValues,
+							[key]: { status: "loaded", value: result },
+						},
+					});
+				} catch (error) {
+					set({
+						keyValues: {
+							...get().keyValues,
+							[key]: {
+								status: "error",
+								message: error instanceof Error ? error.message : "Load failed",
+							},
+						},
+					});
 				}
 			},
 
@@ -115,7 +172,7 @@ export function createExplorerStore(request: WsRequestFn) {
 			},
 
 			reset() {
-				set({ children: {}, expanded: {} });
+				set({ children: {}, expanded: {}, keyValues: {} });
 			},
 		};
 	});

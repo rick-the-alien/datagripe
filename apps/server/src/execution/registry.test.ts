@@ -83,7 +83,12 @@ beforeAll(async () => {
 
 	events = [];
 	registry = createExecutionRegistry({
-		adapter,
+		adapters: {
+			postgres: adapter,
+			mysql: adapter,
+			sqlite: adapter,
+			redis: adapter,
+		} as never,
 		appDb,
 		limits: LIMITS,
 		resolveConnection: async () => TARGET,
@@ -192,7 +197,12 @@ describe("execution registry", () => {
 
 	pgTest("row cap truncates and marks the history row", async () => {
 		const small = createExecutionRegistry({
-			adapter,
+			adapters: {
+				postgres: adapter,
+				mysql: adapter,
+				sqlite: adapter,
+				redis: adapter,
+			} as never,
 			appDb,
 			limits: { ...LIMITS, maxRows: 5 },
 			resolveConnection: async () => TARGET,
@@ -266,7 +276,12 @@ describe("execution registry", () => {
 	pgTest("read-only connections reject writes", async () => {
 		const readOnly = { ...TARGET, readOnly: true };
 		const ro = createExecutionRegistry({
-			adapter,
+			adapters: {
+				postgres: adapter,
+				mysql: adapter,
+				sqlite: adapter,
+				redis: adapter,
+			} as never,
 			appDb,
 			limits: LIMITS,
 			resolveConnection: async () => readOnly,

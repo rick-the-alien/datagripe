@@ -1,8 +1,10 @@
 import type {
+	ConnectionAdapter,
 	ConnectionMetadata,
 	ConnectionTestResult,
 	WorkspaceOpenResult,
 } from "@datagripe/contracts";
+import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { create } from "zustand";
 import type { WsRequestFn } from "../api/ws";
 
@@ -12,7 +14,24 @@ import type { WsRequestFn } from "../api/ws";
  * connects; mutations go through WS actions and refresh the list.
  */
 
+/** Only fields the adapter actually uses — nothing phantom is stored. */
+function scopedPayload(draft: ConnectionDraft) {
+	const caps = ADAPTER_CAPABILITIES[draft.adapter];
+	return {
+		name: draft.name,
+		adapter: draft.adapter,
+		...(caps.fields.includes("host") ? { host: draft.host } : {}),
+		...(caps.fields.includes("port") ? { port: draft.port } : {}),
+		databaseName: draft.databaseName,
+		...(caps.fields.includes("username") ? { username: draft.username } : {}),
+		password: draft.password,
+		...(caps.fields.includes("tlsMode") ? { tlsMode: draft.tlsMode } : {}),
+		readOnly: draft.readOnly,
+	};
+}
+
 export type ConnectionDraft = {
+	adapter: ConnectionAdapter;
 	name: string;
 	host: string;
 	port: number;
@@ -86,23 +105,18 @@ export function createConnectionsStore(request: WsRequestFn) {
 		async saveDraft(draft, editingId) {
 			set({ saving: true });
 			try {
+				const scoped = scopedPayload(draft);
 				if (editingId === null) {
 					await request("connection.create", {
-						...draft,
-						adapter: "postgres",
+						...scoped,
 						idempotencyKey: crypto.randomUUID(),
 					});
 				} else {
+					const { password: _password, ...withoutPassword } = scoped;
 					await request("connection.update", {
 						id: editingId,
-						name: draft.name,
-						host: draft.host,
-						port: draft.port,
-						databaseName: draft.databaseName,
-						username: draft.username,
+						...withoutPassword,
 						...(draft.password.length > 0 ? { password: draft.password } : {}),
-						tlsMode: draft.tlsMode,
-						readOnly: draft.readOnly,
 						idempotencyKey: crypto.randomUUID(),
 					});
 				}
@@ -129,12 +143,7 @@ export function createConnectionsStore(request: WsRequestFn) {
 				const payload =
 					editingId !== null && draft.password.length === 0
 						? { connectionId: editingId }
-						: {
-								draft: {
-									...draft,
-									adapter: "postgres" as const,
-								},
-							};
+						: { draft: scopedPayload(draft) };
 				const result = await request<ConnectionTestResult>(
 					"connection.test",
 					payload,

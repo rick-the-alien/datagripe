@@ -47,6 +47,9 @@ export type ExecutionsState = {
 	latestByDocument: Record<string, string>;
 	/** Start-failures that never produced an execution (per document). */
 	runErrors: Record<string, string>;
+	/** Events that arrived before their execution.start response (fast
+	 * executions race the response on the wire). Drained on register. */
+	earlyEvents: Record<string, ServerEvent[]>;
 	run: (viewId: string, mode: RunMode) => Promise<void>;
 	cancel: (executionId: string) => Promise<void>;
 	handleEvent: (event: ServerEvent) => void;
@@ -67,10 +70,103 @@ export function createExecutionsStore(request: WsRequestFn) {
 			});
 		};
 
+		function applyEvent(id: string, event: ServerEvent): void {
+			const current = get().executions[id];
+			if (current === undefined) {
+				return;
+			}
+			switch (event.topic) {
+				case "execution.started": {
+					const payload = event.payload as {
+						startedAt: string;
+						statements: number;
+					};
+					patch(id, {
+						status: "running",
+						startedAt: payload.startedAt,
+						statements: payload.statements,
+					});
+					break;
+				}
+				case "execution.columns": {
+					const payload = event.payload as {
+						resultSet: number;
+						columns: ColumnDescriptor[];
+					};
+					const resultSets = [...current.resultSets];
+					resultSets[payload.resultSet] = {
+						columns: payload.columns,
+						rows: [],
+					};
+					patch(id, { resultSets });
+					break;
+				}
+				case "execution.rows": {
+					const payload = event.payload as {
+						resultSet: number;
+						rows: unknown[][];
+					};
+					const resultSets = [...current.resultSets];
+					const existing = resultSets[payload.resultSet] ?? {
+						columns: [],
+						rows: [],
+					};
+					resultSets[payload.resultSet] = {
+						...existing,
+						rows: [...existing.rows, ...payload.rows],
+					};
+					patch(id, { resultSets });
+					break;
+				}
+				case "execution.progress": {
+					const payload = event.payload as ExecutionProgress;
+					patch(id, { progress: [...current.progress, payload] });
+					break;
+				}
+				case "execution.completed": {
+					const payload = event.payload as {
+						rowCount: number;
+						truncated: boolean;
+						elapsedMs: number;
+					};
+					patch(id, {
+						status: "succeeded",
+						rowCount: payload.rowCount,
+						truncated: payload.truncated,
+						elapsedMs: payload.elapsedMs,
+					});
+					break;
+				}
+				case "execution.failed": {
+					const payload = event.payload as {
+						code?: string;
+						message: string;
+					};
+					patch(id, {
+						status: "failed",
+						error: {
+							...(payload.code !== undefined ? { code: payload.code } : {}),
+							message: payload.message,
+						},
+					});
+					break;
+				}
+				case "execution.cancelled": {
+					const payload = event.payload as { elapsedMs: number };
+					patch(id, {
+						status: "cancelled",
+						elapsedMs: payload.elapsedMs,
+					});
+					break;
+				}
+			}
+		}
+
 		return {
 			executions: {},
 			latestByDocument: {},
 			runErrors: {},
+			earlyEvents: {},
 
 			async run(viewId, mode) {
 				const view = useViewsStore.getState().views[viewId];
@@ -144,6 +240,16 @@ export function createExecutionsStore(request: WsRequestFn) {
 						},
 						runErrors,
 					});
+					// Drain events that raced the response.
+					const early = get().earlyEvents[result.executionId];
+					if (early !== undefined && early.length > 0) {
+						const { [result.executionId]: _drained, ...earlyEvents } =
+							get().earlyEvents;
+						set({ earlyEvents });
+						for (const event of early) {
+							applyEvent(result.executionId, event);
+						}
+					}
 				} catch (error) {
 					set({
 						runErrors: {
@@ -164,95 +270,21 @@ export function createExecutionsStore(request: WsRequestFn) {
 					return;
 				}
 				const id = event.executionId;
-				const current = get().executions[id];
-				if (current === undefined) {
-					return;
-				}
-				switch (event.topic) {
-					case "execution.started": {
-						const payload = event.payload as {
-							startedAt: string;
-							statements: number;
-						};
-						patch(id, {
-							status: "running",
-							startedAt: payload.startedAt,
-							statements: payload.statements,
-						});
-						break;
-					}
-					case "execution.columns": {
-						const payload = event.payload as {
-							resultSet: number;
-							columns: ColumnDescriptor[];
-						};
-						const resultSets = [...current.resultSets];
-						resultSets[payload.resultSet] = {
-							columns: payload.columns,
-							rows: [],
-						};
-						patch(id, { resultSets });
-						break;
-					}
-					case "execution.rows": {
-						const payload = event.payload as {
-							resultSet: number;
-							rows: unknown[][];
-						};
-						const resultSets = [...current.resultSets];
-						const existing = resultSets[payload.resultSet] ?? {
-							columns: [],
-							rows: [],
-						};
-						resultSets[payload.resultSet] = {
-							...existing,
-							rows: [...existing.rows, ...payload.rows],
-						};
-						patch(id, { resultSets });
-						break;
-					}
-					case "execution.progress": {
-						const payload = event.payload as ExecutionProgress;
-						patch(id, { progress: [...current.progress, payload] });
-						break;
-					}
-					case "execution.completed": {
-						const payload = event.payload as {
-							rowCount: number;
-							truncated: boolean;
-							elapsedMs: number;
-						};
-						patch(id, {
-							status: "succeeded",
-							rowCount: payload.rowCount,
-							truncated: payload.truncated,
-							elapsedMs: payload.elapsedMs,
-						});
-						break;
-					}
-					case "execution.failed": {
-						const payload = event.payload as {
-							code?: string;
-							message: string;
-						};
-						patch(id, {
-							status: "failed",
-							error: {
-								...(payload.code !== undefined ? { code: payload.code } : {}),
-								message: payload.message,
+				if (get().executions[id] === undefined) {
+					// Fast executions emit before their start response arrives;
+					// buffer and drain on registration.
+					const buffered = get().earlyEvents[id] ?? [];
+					if (buffered.length < 500) {
+						set({
+							earlyEvents: {
+								...get().earlyEvents,
+								[id]: [...buffered, event],
 							},
 						});
-						break;
 					}
-					case "execution.cancelled": {
-						const payload = event.payload as { elapsedMs: number };
-						patch(id, {
-							status: "cancelled",
-							elapsedMs: payload.elapsedMs,
-						});
-						break;
-					}
+					return;
 				}
+				applyEvent(id, event);
 			},
 		};
 	});

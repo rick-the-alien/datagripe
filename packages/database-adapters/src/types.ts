@@ -1,4 +1,6 @@
 import type {
+	AdapterCapabilities,
+	ConnectionAdapter,
 	ConnectionTestResult,
 	SchemaNode,
 	SchemaPathSegment,
@@ -7,9 +9,11 @@ import type {
 /**
  * A connection with its secret resolved in server memory, immediately
  * before use. Adapters never see ciphertext and never persist this.
+ * File-based adapters (SQLite) leave host/port/username empty and carry
+ * the file path in `database`.
  */
 export interface ResolvedConnection {
-	adapter: "postgres";
+	adapter: ConnectionAdapter;
 	host: string;
 	port: number;
 	database: string;
@@ -19,24 +23,36 @@ export interface ResolvedConnection {
 	readOnly: boolean;
 }
 
+/** One key's value from a keyspace adapter (Redis). */
+export interface KeyValue {
+	key: string;
+	type: "string" | "hash" | "list" | "set" | "zset" | "other";
+	ttlSeconds: number;
+	entries: Array<{ field?: string; value: string }>;
+	truncated: boolean;
+}
+
 /**
- * Target-database adapter boundary (docs/initial_idea.md §6). Phase 2
- * covers connection testing and lazy introspection; execution arrives in
- * Phase 3 with its own request/handle types.
+ * Target-database adapter boundary (docs/initial_idea.md §6). Every
+ * adapter reports honest `capabilities`; the dispatcher and UI gate on
+ * those, never on the adapter id.
  */
 export interface DatabaseAdapter {
-	readonly adapterId: "postgres";
+	readonly adapterId: ConnectionAdapter;
+	readonly capabilities: AdapterCapabilities;
 	testConnection(connection: ResolvedConnection): Promise<ConnectionTestResult>;
 	introspectChildren(
 		connection: ResolvedConnection,
 		path: SchemaPathSegment[],
 	): Promise<SchemaNode[]>;
-	/** Reserve a target connection for one execution (statement timeout,
-	 * read-only mode, backend pid registration). */
+	/** Reserve a target connection for one execution. Only called when
+	 * capabilities.execution is non-null. */
 	beginExecution(
 		connection: ResolvedConnection,
 		limits: ExecuteLimits,
 	): Promise<ExecutionSession>;
+	/** Fetch one key's value (keyspace adapters only). */
+	getKeyValue?(connection: ResolvedConnection, key: string): Promise<KeyValue>;
 	/** Close every pooled target client this adapter created. */
 	close(): Promise<void>;
 }

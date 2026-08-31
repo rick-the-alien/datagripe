@@ -591,3 +591,33 @@ button:disabled {
 	padding: 5px 8px;
 	font: inherit;
 }
+
+.dg-kv {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	padding: 2px 0 6px;
+}
+
+.dg-kv-meta {
+	color: #8a8d96;
+	padding: 2px 0 4px;
+}
+
+.dg-kv-entry {
+	display: flex;
+	gap: 8px;
+	padding: 1px 0;
+	max-width: 100%;
+}
+
+.dg-kv-field {
+	color: #8a8d96;
+	flex: none;
+	min-width: 60px;
+}
+
+.dg-kv-value {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

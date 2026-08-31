@@ -57,11 +57,11 @@ Exit: queries run, stream bounded results, cancel reliably, and produce an audit
 
 Exit: production-readiness review passes for the intended deployment model.
 
-## Phase 5 — Additional adapters
+## Phase 5 — Additional adapters · shipped 2026-08-31
 
-- [ ] MySQL adapter (`Bun.SQL`)
-- [ ] SQLite adapter where server-side file access fits deployment
-- [ ] Redis connection + command browser (`RedisClient`), distinct capability
+- [x] MySQL adapter (`Bun.SQL`)
+- [x] SQLite adapter where server-side file access fits deployment
+- [x] Redis connection + command browser (`RedisClient`), distinct capability
 
 Exit: adapters expose honest capability flags; no dialect leaks into generic UI state.
 

@@ -92,7 +92,12 @@ beforeAll(async () => {
 	service = createConnectionsService({
 		appDb,
 		keyring: createKeyring(new Map([[1, "service-test-key-0123456789abcdef"]])),
-		adapter,
+		adapters: {
+			postgres: adapter,
+			mysql: adapter,
+			sqlite: adapter,
+			redis: adapter,
+		} as never,
 		predefined: new Map([[PREDEFINED.definition.id, PREDEFINED]]),
 		ssrf: { assertHostAllowed: async () => {} },
 	});
@@ -149,7 +154,6 @@ describe("connections service", () => {
 	});
 
 	pgTest("update changes fields and re-encrypts a new password", async () => {
-		const [before] = await service.listConnections(workspace);
 		const managed = await service.listConnections(workspace);
 		const target = managed.find((c) => c.source === "managed");
 		expect(target).toBeDefined();
@@ -167,7 +171,7 @@ describe("connections service", () => {
 			idempotencyKey: "test-key-0002",
 		});
 		expect(updated.name).toBe("Renamed PG");
-		expect(updated.host).toBe(target?.host ?? before?.host);
+		expect(updated.host).toBe(target?.host ?? null);
 
 		const newSecret = await appDb<{ ciphertext: Buffer }[]>`
 			SELECT ciphertext FROM connection_secrets WHERE connection_id = ${target.id}

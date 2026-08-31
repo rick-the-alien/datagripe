@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+	ConnectionAdapter,
 	ExecutionCancelResult,
 	ExecutionStartRequest,
 	ExecutionStartResult,
@@ -11,7 +12,7 @@ import type {
 	ExecutionSession,
 	ResolvedConnection,
 } from "@datagripe/database-adapters";
-import { splitStatements } from "@datagripe/sql-tools";
+import { splitOptionsForDialect, splitStatements } from "@datagripe/sql-tools";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
 import { log } from "../log";
@@ -50,7 +51,7 @@ interface ExecutionRecord {
 }
 
 export interface ExecutionRegistryDeps {
-	adapter: DatabaseAdapter;
+	adapters: Readonly<Record<ConnectionAdapter, DatabaseAdapter>>;
 	appDb: AppDb;
 	limits: RegistryLimits;
 	resolveConnection: (
@@ -98,7 +99,7 @@ function queryHash(sql: string): string {
 export function createExecutionRegistry(
 	deps: ExecutionRegistryDeps,
 ): ExecutionRegistry {
-	const { adapter, appDb, limits } = deps;
+	const { adapters, appDb, limits } = deps;
 	const records = new Map<string, ExecutionRecord>();
 
 	function bufferEvent(
@@ -167,7 +168,7 @@ export function createExecutionRegistry(
 
 		let session: ExecutionSession | undefined;
 		try {
-			session = await adapter.beginExecution(connection, {
+			session = await adapters[connection.adapter].beginExecution(connection, {
 				timeoutMs: limits.timeoutMs,
 				maxRows: limits.maxRows,
 				maxBytes: limits.maxBytes,
@@ -257,21 +258,29 @@ export function createExecutionRegistry(
 				);
 			}
 
-			const statements = splitStatements(request.sql).map(
-				(statement) => statement.text,
+			// Resolve before anything dialect-specific so unknown
+			// connections fail fast and the splitter sees the adapter.
+			const connection = await deps.resolveConnection(
+				workspace,
+				request.connectionId,
 			);
+			if (adapters[connection.adapter].capabilities.execution === null) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${request.connectionId}' does not support SQL execution`,
+				);
+			}
+
+			const statements = splitStatements(
+				request.sql,
+				splitOptionsForDialect(connection.adapter),
+			).map((statement) => statement.text);
 			if (statements.length === 0) {
 				throw new ServiceError(
 					ErrorCodes.BadRequest,
 					"No executable statement found",
 				);
 			}
-
-			// Resolve before inserting history so unknown connections fail fast.
-			const connection = await deps.resolveConnection(
-				workspace,
-				request.connectionId,
-			);
 
 			const id = crypto.randomUUID();
 			const isPredefined = connection.source === "predefined";

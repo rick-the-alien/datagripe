@@ -24,6 +24,29 @@ jobs:
           --health-timeout 3s
           --health-retries 10
 
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: datagripe
+          MYSQL_DATABASE: demo
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -uroot -pdatagripe"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 

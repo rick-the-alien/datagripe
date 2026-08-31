@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { connectionAdapterSchema } from "./adapters";
 import { tlsModeSchema } from "./connections";
 
 /**
@@ -12,11 +13,11 @@ export const predefinedConnectionSchema = z
 		/** Stable kebab-case slug; disjoint from managed UUID ids. */
 		id: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "id must be kebab-case"),
 		name: z.string().min(1).max(255),
-		adapter: z.literal("postgres"),
-		host: z.string().min(1).max(255),
-		port: z.number().int().min(1).max(65535),
-		database: z.string().min(1).max(255),
-		username: z.string().min(1).max(255),
+		adapter: connectionAdapterSchema,
+		host: z.string().min(1).max(255).optional(),
+		port: z.number().int().min(1).max(65535).optional(),
+		database: z.string().min(1).max(1024),
+		username: z.string().max(255).optional(),
 		/** Indirection into the process environment (preferred). */
 		passwordEnv: z.string().min(1).max(255).optional(),
 		/** Inline secret — development only. */
@@ -27,15 +28,31 @@ export const predefinedConnectionSchema = z
 		workspaces: z.array(z.string().min(1)).min(1),
 	})
 	.check((ctx) => {
-		if (
-			ctx.value.passwordEnv === undefined &&
-			ctx.value.password === undefined
-		) {
+		const value = ctx.value;
+		if (value.adapter !== "sqlite") {
+			if (value.host === undefined) {
+				ctx.issues.push({
+					code: "custom",
+					message: "host is required",
+					path: ["host"],
+					input: value,
+				});
+			}
+			if (value.port === undefined) {
+				ctx.issues.push({
+					code: "custom",
+					message: "port is required",
+					path: ["port"],
+					input: value,
+				});
+			}
+		}
+		if (value.passwordEnv === undefined && value.password === undefined) {
 			ctx.issues.push({
 				code: "custom",
 				message: "either passwordEnv or password is required",
 				path: ["passwordEnv"],
-				input: ctx.value,
+				input: value,
 			});
 		}
 	});

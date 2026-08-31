@@ -1,4 +1,5 @@
 import type { HistoryEntry, HistoryListResult } from "@datagripe/contracts";
+import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
 import { type DocumentsState, useDocumentsStore } from "../stores/documents";
@@ -110,6 +111,14 @@ export function ResultsPanel() {
 	const executions = useExecutionsStore.getState();
 	const documents = useDocumentsStore.getState();
 
+	const connection = connections.find((c) => c.id === defaultConnectionId);
+	const capabilities =
+		connection === undefined
+			? undefined
+			: ADAPTER_CAPABILITIES[connection.adapter];
+	const canExecute = capabilities?.execution != null;
+	const canCancel = capabilities?.cancellation === true;
+
 	const resultSet =
 		execution !== undefined && execution.resultSets.length > 0
 			? execution.resultSets[execution.resultSets.length - 1]
@@ -139,8 +148,12 @@ export function ResultsPanel() {
 				</select>
 				<button
 					type="button"
-					disabled={lastEditorViewId === null}
-					title="Run selection or statement (Ctrl+Enter)"
+					disabled={lastEditorViewId === null || !canExecute}
+					title={
+						canExecute
+							? "Run selection or statement (Ctrl+Enter)"
+							: "This connection does not support SQL execution"
+					}
 					onClick={() => {
 						if (lastEditorViewId !== null) {
 							void executions.run(lastEditorViewId, "auto");
@@ -151,8 +164,12 @@ export function ResultsPanel() {
 				</button>
 				<button
 					type="button"
-					disabled={lastEditorViewId === null}
-					title="Run whole document (Ctrl+Shift+Enter)"
+					disabled={lastEditorViewId === null || !canExecute}
+					title={
+						canExecute
+							? "Run whole document (Ctrl+Shift+Enter)"
+							: "This connection does not support SQL execution"
+					}
 					onClick={() => {
 						if (lastEditorViewId !== null) {
 							void executions.run(lastEditorViewId, "document");
@@ -161,16 +178,17 @@ export function ResultsPanel() {
 				>
 					Run all
 				</button>
-				{(execution?.status === "running" ||
-					execution?.status === "queued") && (
-					<button
-						type="button"
-						className="dg-cancel"
-						onClick={() => void executions.cancel(execution.id)}
-					>
-						Cancel
-					</button>
-				)}
+				{canCancel &&
+					(execution?.status === "running" ||
+						execution?.status === "queued") && (
+						<button
+							type="button"
+							className="dg-cancel"
+							onClick={() => void executions.cancel(execution.id)}
+						>
+							Cancel
+						</button>
+					)}
 				<span className="dg-results-status">
 					{execution === undefined && runError === undefined && "No results"}
 					{execution?.status === "queued" && "Queued…"}

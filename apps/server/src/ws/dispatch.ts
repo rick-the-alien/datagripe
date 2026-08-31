@@ -9,6 +9,7 @@ import {
 	historyListRequestSchema,
 	memberAddRequestSchema,
 	memberRemoveRequestSchema,
+	redisGetRequestSchema,
 	schemaChildrenRequestSchema,
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
@@ -124,7 +125,17 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				return {
 					workspace,
 					connections: await connections.listConnections(workspace),
+					adapters: connections.adapterInfos(),
 				};
+
+			case "redis.get": {
+				const request = redisGetRequestSchema.parse(payload);
+				return connections.getKeyValue(
+					workspace,
+					request.connectionId,
+					request.key,
+				);
+			}
 
 			case "workspace.members":
 				return { members: await listMembers(appDb, workspace.id) };

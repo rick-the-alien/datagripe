@@ -1,10 +1,9 @@
 import { z } from "zod";
+import { adapterInfoSchema, connectionAdapterSchema } from "./adapters";
 
 /** Connection contracts. Secrets are write-only; never serialized back to clients. */
 
-export const connectionAdapterSchema = z.enum(["postgres"]);
-
-export type ConnectionAdapter = z.infer<typeof connectionAdapterSchema>;
+export type { ConnectionAdapter } from "./adapters";
 
 export const tlsModeSchema = z.enum(["disable", "require", "verify-full"]);
 
@@ -19,11 +18,13 @@ export const connectionMetadataSchema = z.object({
 	workspaceId: z.uuid(),
 	name: z.string().min(1).max(255),
 	adapter: connectionAdapterSchema,
-	host: z.string().min(1).max(255),
-	port: z.number().int().min(1).max(65535),
-	databaseName: z.string().min(1).max(255),
-	username: z.string().min(1).max(255),
-	tlsMode: tlsModeSchema,
+	/** Null for file-based adapters (SQLite). */
+	host: z.string().min(1).max(255).nullable(),
+	port: z.number().int().min(1).max(65535).nullable(),
+	/** Database name, file path (SQLite), or DB index (Redis). */
+	databaseName: z.string().min(1).max(1024),
+	username: z.string().max(255).nullable(),
+	tlsMode: tlsModeSchema.nullable(),
 	readOnly: z.boolean(),
 	source: connectionSourceSchema,
 	createdAt: z.iso.datetime(),
@@ -32,18 +33,53 @@ export const connectionMetadataSchema = z.object({
 
 export type ConnectionMetadata = z.infer<typeof connectionMetadataSchema>;
 
-export const connectionCreateRequestSchema = z.object({
+const connectionBaseFields = z.object({
 	name: z.string().min(1).max(255),
 	adapter: connectionAdapterSchema,
-	host: z.string().min(1).max(255),
-	port: z.number().int().min(1).max(65535),
-	databaseName: z.string().min(1).max(255),
-	username: z.string().min(1).max(255),
+	host: z.string().min(1).max(255).optional(),
+	port: z.number().int().min(1).max(65535).optional(),
+	databaseName: z.string().min(1).max(1024),
+	username: z.string().max(255).optional(),
 	password: z.string().max(1024),
-	tlsMode: tlsModeSchema,
+	tlsMode: tlsModeSchema.optional(),
 	readOnly: z.boolean().default(true),
-	idempotencyKey: z.string().min(8).max(128),
 });
+
+function checkAdapterFields(ctx: {
+	value: z.infer<typeof connectionBaseFields>;
+	issues: Array<Record<string, unknown>>;
+}): void {
+	const value = ctx.value;
+	if (value.adapter === "sqlite") {
+		return; // file path only; no host/port/auth fields apply
+	}
+	const missing: string[] = [];
+	if (value.host === undefined) missing.push("host");
+	if (value.port === undefined) missing.push("port");
+	if (value.tlsMode === undefined) missing.push("tlsMode");
+	if (value.adapter !== "redis" && value.username === undefined) {
+		missing.push("username");
+	}
+	if (missing.length > 0) {
+		ctx.issues.push({
+			code: "custom",
+			message: `${missing.join(", ")} required for ${value.adapter}`,
+			path: ["adapter"],
+			input: value,
+		});
+	}
+}
+
+/** Dialog-draft fields (no idempotency key). */
+export const connectionDraftSchema = connectionBaseFields.check(
+	checkAdapterFields as never,
+);
+
+export type ConnectionDraft = z.infer<typeof connectionDraftSchema>;
+
+export const connectionCreateRequestSchema = connectionBaseFields
+	.extend({ idempotencyKey: z.string().min(8).max(128) })
+	.check(checkAdapterFields as never);
 
 export type ConnectionCreateRequest = z.infer<
 	typeof connectionCreateRequestSchema
@@ -82,9 +118,7 @@ export type ConnectionDeleteRequest = z.infer<
  */
 export const connectionTestRequestSchema = z.union([
 	z.object({ connectionId: z.string().min(1).max(255) }),
-	z.object({
-		draft: connectionCreateRequestSchema.omit({ idempotencyKey: true }),
-	}),
+	z.object({ draft: connectionDraftSchema }),
 ]);
 
 export type ConnectionTestRequest = z.infer<typeof connectionTestRequestSchema>;
@@ -100,6 +134,8 @@ export type WorkspaceDescriptor = z.infer<typeof workspaceDescriptorSchema>;
 export const workspaceOpenResultSchema = z.object({
 	workspace: workspaceDescriptorSchema,
 	connections: z.array(connectionMetadataSchema),
+	/** Capability descriptors for every registered adapter. */
+	adapters: z.array(adapterInfoSchema),
 });
 
 export type WorkspaceOpenResult = z.infer<typeof workspaceOpenResultSchema>;

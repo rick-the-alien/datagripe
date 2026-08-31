@@ -3,6 +3,7 @@ import type {
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
+import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { SQL } from "bun";
 import {
 	type DatabaseAdapter,
@@ -20,6 +21,7 @@ import { beginPostgresExecution } from "./execution";
  */
 export class PostgresAdapter implements DatabaseAdapter {
 	readonly adapterId = "postgres" as const;
+	readonly capabilities = ADAPTER_CAPABILITIES.postgres;
 
 	private readonly clients = new Map<string, SQL>();
 

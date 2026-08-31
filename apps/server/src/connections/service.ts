@@ -1,12 +1,16 @@
 import type {
+	AdapterInfo,
+	ConnectionAdapter,
 	ConnectionCreateRequest,
 	ConnectionMetadata,
 	ConnectionTestRequest,
 	ConnectionTestResult,
 	ConnectionUpdateRequest,
+	RedisGetResult,
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
+import { adapterInfoOf } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type {
 	DatabaseAdapter,
@@ -37,12 +41,12 @@ type ConnectionRow = {
 	id: string;
 	workspace_id: string;
 	name: string;
-	adapter: "postgres";
-	host: string;
-	port: number;
+	adapter: ConnectionAdapter;
+	host: string | null;
+	port: number | null;
 	database_name: string;
-	username: string;
-	tls_mode: "disable" | "require" | "verify-full";
+	username: string | null;
+	tls_mode: "disable" | "require" | "verify-full" | null;
 	read_only: boolean;
 	created_at: string;
 	updated_at: string;
@@ -56,7 +60,7 @@ export interface WorkspaceRef {
 export interface ConnectionsServiceDeps {
 	appDb: AppDb;
 	keyring: SecretKeyring;
-	adapter: DatabaseAdapter;
+	adapters: Readonly<Record<ConnectionAdapter, DatabaseAdapter>>;
 	predefined: ReadonlyMap<string, PredefinedEntry>;
 	ssrf: SsrfPolicy;
 	/** Introspection cache TTL in ms (default 30s). */
@@ -92,6 +96,16 @@ export interface ConnectionsService {
 	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
 	/** Display name of a predefined connection, for history rendering. */
 	predefinedName: (connectionId: string) => string | undefined;
+	/** Adapter for a resolved connection's dialect. */
+	adapterFor: (adapter: ConnectionAdapter) => DatabaseAdapter;
+	/** Capability descriptors for every registered adapter. */
+	adapterInfos: () => AdapterInfo[];
+	/** Fetch one key's value (keyspace adapters). */
+	getKeyValue: (
+		workspace: WorkspaceRef,
+		connectionId: string,
+		key: string,
+	) => Promise<RedisGetResult>;
 }
 
 function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
@@ -115,7 +129,7 @@ function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
 export function createConnectionsService(
 	deps: ConnectionsServiceDeps,
 ): ConnectionsService {
-	const { appDb, keyring, adapter, predefined, ssrf } = deps;
+	const { appDb, keyring, adapters, predefined, ssrf } = deps;
 	const cacheTtl = deps.introspectionCacheTtlMs ?? 30_000;
 	const introspectionCache = new Map<
 		string,
@@ -132,10 +146,10 @@ export function createConnectionsService(
 			workspaceId: workspace.id,
 			name: definition.name,
 			adapter: definition.adapter,
-			host: definition.host,
-			port: definition.port,
+			host: definition.host ?? null,
+			port: definition.port ?? null,
 			databaseName: definition.database,
-			username: definition.username,
+			username: definition.username ?? null,
 			tlsMode: definition.tlsMode,
 			readOnly: definition.readOnly,
 			source: "predefined",
@@ -179,7 +193,9 @@ export function createConnectionsService(
 	): Promise<ResolvedConnection> {
 		const entry = predefined.get(id);
 		if (entry !== undefined) {
-			await guardHost(entry.resolved.host);
+			if (entry.resolved.host !== "") {
+				await guardHost(entry.resolved.host);
+			}
 			return entry.resolved;
 		}
 		const rows = await appDb<
@@ -197,15 +213,17 @@ export function createConnectionsService(
 				`Connection '${id}' not found`,
 			);
 		}
-		await guardHost(row.host);
+		if (row.host !== null) {
+			await guardHost(row.host);
+		}
 		return {
 			adapter: row.adapter,
-			host: row.host,
-			port: row.port,
+			host: row.host ?? "",
+			port: row.port ?? 0,
 			database: row.database_name,
-			username: row.username,
+			username: row.username ?? "",
 			password: keyring.decrypt(row.ciphertext, row.key_version),
-			tlsMode: row.tls_mode,
+			tlsMode: row.tls_mode ?? "disable",
 			readOnly: row.read_only,
 		};
 	}
@@ -226,7 +244,9 @@ export function createConnectionsService(
 		},
 
 		async createConnection(workspace, request) {
-			await guardHost(request.host);
+			if (request.host !== undefined) {
+				await guardHost(request.host);
+			}
 			const secret = keyring.encrypt(request.password);
 			const rows = await appDb.begin(async (tx) => {
 				const inserted = await tx<ConnectionRow[]>`
@@ -235,8 +255,8 @@ export function createConnectionsService(
 						database_name, username, tls_mode, read_only
 					) VALUES (
 						${workspace.id}, ${request.name}, ${request.adapter},
-						${request.host}, ${request.port}, ${request.databaseName},
-						${request.username}, ${request.tlsMode}, ${request.readOnly}
+						${request.host ?? null}, ${request.port ?? null}, ${request.databaseName},
+						${request.username ?? null}, ${request.tlsMode ?? null}, ${request.readOnly}
 					)
 					RETURNING *
 				`;
@@ -346,19 +366,21 @@ export function createConnectionsService(
 			if ("connectionId" in request) {
 				resolved = await resolveConnection(workspace, request.connectionId);
 			} else {
-				await guardHost(request.draft.host);
+				if (request.draft.host !== undefined) {
+					await guardHost(request.draft.host);
+				}
 				resolved = {
 					adapter: request.draft.adapter,
-					host: request.draft.host,
-					port: request.draft.port,
+					host: request.draft.host ?? "",
+					port: request.draft.port ?? 0,
 					database: request.draft.databaseName,
-					username: request.draft.username,
+					username: request.draft.username ?? "",
 					password: request.draft.password,
-					tlsMode: request.draft.tlsMode,
+					tlsMode: request.draft.tlsMode ?? "disable",
 					readOnly: request.draft.readOnly,
 				};
 			}
-			return adapter.testConnection(resolved);
+			return adapters[resolved.adapter].testConnection(resolved);
 		},
 
 		async resolveForExecution(workspace, connectionId) {
@@ -373,6 +395,28 @@ export function createConnectionsService(
 			return predefined.get(connectionId)?.definition.name;
 		},
 
+		adapterFor(adapter) {
+			return adapters[adapter];
+		},
+
+		adapterInfos() {
+			return Object.values(adapters).map((adapter) =>
+				adapterInfoOf(adapter.adapterId, adapter.capabilities),
+			);
+		},
+
+		async getKeyValue(workspace, connectionId, key) {
+			const resolved = await resolveConnection(workspace, connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (adapter.getKeyValue === undefined) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${connectionId}' does not support key browsing`,
+				);
+			}
+			return adapter.getKeyValue(resolved, key);
+		},
+
 		async schemaChildren(workspace, connectionId, path, refresh) {
 			const cacheKey = `${workspace.id}:${connectionId}:${JSON.stringify(path)}`;
 			const cached = introspectionCache.get(cacheKey);
@@ -380,7 +424,10 @@ export function createConnectionsService(
 				return cached.nodes;
 			}
 			const resolved = await resolveConnection(workspace, connectionId);
-			const nodes = await adapter.introspectChildren(resolved, path);
+			const nodes = await adapters[resolved.adapter].introspectChildren(
+				resolved,
+				path,
+			);
 			introspectionCache.set(cacheKey, {
 				expiresAt: Date.now() + cacheTtl,
 				nodes,

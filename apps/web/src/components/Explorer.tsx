@@ -23,6 +23,9 @@ const KIND_GLYPHS: Record<SchemaNode["kind"], string> = {
 	table: "▦",
 	view: "◍",
 	column: "·",
+	db: "⛁",
+	prefix: "▸",
+	key: "⚿",
 };
 
 function NodeRows(props: {
@@ -72,6 +75,52 @@ function NodeRows(props: {
 	);
 }
 
+function KeyValueView(props: {
+	connectionId: string;
+	path: SchemaPathSegment[];
+	depth: number;
+}) {
+	const key = nodeKey(props.connectionId, props.path);
+	const state = useExplorerStore((s) => s.keyValues[key]);
+
+	if (state === undefined || state.status === "loading") {
+		return (
+			<div className="dg-tree-note" style={{ paddingLeft: props.depth * 14 }}>
+				Loading…
+			</div>
+		);
+	}
+	if (state.status === "error") {
+		return (
+			<div
+				className="dg-tree-note dg-tree-error"
+				style={{ paddingLeft: props.depth * 14 }}
+			>
+				{state.message}
+			</div>
+		);
+	}
+	const { value } = state;
+	return (
+		<div className="dg-kv" style={{ paddingLeft: props.depth * 14 }}>
+			<div className="dg-kv-meta">
+				{value.type}
+				{value.ttlSeconds >= 0 ? ` · ttl ${value.ttlSeconds}s` : " · no expiry"}
+				{value.truncated ? " · truncated" : ""}
+			</div>
+			{value.entries.map((entry, index) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: value entries have no stable identity
+				<div key={index} className="dg-kv-entry">
+					{entry.field !== undefined && (
+						<span className="dg-kv-field">{entry.field}</span>
+					)}
+					<span className="dg-kv-value">{entry.value}</span>
+				</div>
+			))}
+		</div>
+	);
+}
+
 function TreeNode(props: {
 	connectionId: string;
 	parentPath: SchemaPathSegment[];
@@ -88,6 +137,45 @@ function TreeNode(props: {
 		(state) => state.expanded[key] !== undefined,
 	);
 	const toggle = useExplorerStore((state) => state.toggle);
+	const toggleKeyValue = useExplorerStore((state) => state.toggleKeyValue);
+
+	if (props.node.kind === "key") {
+		// Redis key = path segments after the db node, joined by ":".
+		const redisKey = path
+			.slice(1)
+			.map((s) => s.name)
+			.join(":");
+		return (
+			<>
+				<div className="dg-tree-row" style={{ paddingLeft: props.depth * 14 }}>
+					<button
+						type="button"
+						className="dg-tree-chevron"
+						aria-label={expanded ? "Hide value" : "Show value"}
+						aria-expanded={expanded}
+						onClick={() =>
+							void toggleKeyValue(props.connectionId, path, redisKey)
+						}
+					>
+						{expanded ? "▾" : "▸"}
+					</button>
+					<span className="dg-tree-label">
+						<span className="dg-tree-glyph">
+							{KIND_GLYPHS[props.node.kind]}
+						</span>
+						{props.node.name}
+					</span>
+				</div>
+				{expanded && (
+					<KeyValueView
+						connectionId={props.connectionId}
+						path={path}
+						depth={props.depth + 1}
+					/>
+				)}
+			</>
+		);
+	}
 
 	return (
 		<>

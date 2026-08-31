@@ -29,7 +29,7 @@ function createTestDispatcher() {
 	const connections = createConnectionsService({
 		appDb,
 		keyring: {} as never,
-		adapter: {} as never,
+		adapters: {} as never,
 		predefined: new Map(),
 		ssrf: { assertHostAllowed: async () => {} },
 	});

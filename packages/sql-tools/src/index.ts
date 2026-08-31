@@ -14,6 +14,21 @@ export interface SqlStatement {
 	end: number;
 }
 
+export interface SplitOptions {
+	/** MySQL/SQLite allow backslash escapes inside strings. */
+	backslashEscapes?: boolean;
+	/** MySQL/SQLite quote identifiers with backticks. */
+	backtickIdentifiers?: boolean;
+}
+
+const DIALECT_OPTIONS: Record<string, SplitOptions> = {
+	postgres: {},
+	mysql: { backslashEscapes: true, backtickIdentifiers: true },
+	sqlite: { backtickIdentifiers: true },
+};
+
+export type SqlDialect = keyof typeof DIALECT_OPTIONS;
+
 type DollarQuote = { tag: string };
 
 function readDollarQuoteTag(sql: string, at: number): DollarQuote | null {
@@ -38,7 +53,14 @@ function readDollarQuoteTag(sql: string, at: number): DollarQuote | null {
 	return null;
 }
 
-export function splitStatements(sql: string): SqlStatement[] {
+export function splitOptionsForDialect(dialect: SqlDialect): SplitOptions {
+	return DIALECT_OPTIONS[dialect] ?? {};
+}
+
+export function splitStatements(
+	sql: string,
+	options: SplitOptions = {},
+): SqlStatement[] {
 	const statements: SqlStatement[] = [];
 	let i = 0;
 	/** Start of the current segment's first code character, -1 = none yet. */
@@ -89,17 +111,17 @@ export function splitStatements(sql: string): SqlStatement[] {
 			}
 			continue;
 		}
-		// Single-quoted string; E'' allows backslash escapes
+		// Single-quoted string; E'' (postgres) and dialect backslash escapes
 		if (
 			ch === "'" ||
 			(ch === "E" && next === "'") ||
 			(ch === "e" && next === "'")
 		) {
-			const extended = ch !== "'";
+			const extended = ch !== "'" || options.backslashEscapes === true;
 			if (codeStart === -1) {
 				codeStart = i;
 			}
-			i = extended ? i + 2 : i + 1;
+			i = ch !== "'" ? i + 2 : i + 1;
 			while (i < sql.length) {
 				if (extended && sql[i] === "\\") {
 					i += 2;
@@ -117,15 +139,16 @@ export function splitStatements(sql: string): SqlStatement[] {
 			}
 			continue;
 		}
-		// Quoted identifier
-		if (ch === '"') {
+		// Quoted identifier ("…" or dialect backticks)
+		if (ch === '"' || (ch === "`" && options.backtickIdentifiers === true)) {
+			const quote = ch;
 			if (codeStart === -1) {
 				codeStart = i;
 			}
 			i++;
 			while (i < sql.length) {
-				if (sql[i] === '"') {
-					if (sql[i + 1] === '"') {
+				if (sql[i] === quote) {
+					if (sql[i + 1] === quote) {
 						i += 2;
 						continue;
 					}
@@ -171,8 +194,12 @@ export function splitStatements(sql: string): SqlStatement[] {
  * between two statements, the following statement wins; at the very end,
  * the last statement. Returns null when there are no statements.
  */
-export function statementAt(sql: string, offset: number): SqlStatement | null {
-	const statements = splitStatements(sql);
+export function statementAt(
+	sql: string,
+	offset: number,
+	options: SplitOptions = {},
+): SqlStatement | null {
+	const statements = splitStatements(sql, options);
 	if (statements.length === 0) {
 		return null;
 	}
@@ -196,7 +223,10 @@ const READ_PATTERN = /^(?:select|with|values|table)\b/i;
  * to direct execution when DECLARE fails, so a misclassification is a
  * retry, never a user-facing error.
  */
-export function isRowReturningStatement(statement: string): boolean {
-	const [code] = splitStatements(statement);
+export function isRowReturningStatement(
+	statement: string,
+	options: SplitOptions = {},
+): boolean {
+	const [code] = splitStatements(statement, options);
 	return code !== undefined && READ_PATTERN.test(code.text);
 }

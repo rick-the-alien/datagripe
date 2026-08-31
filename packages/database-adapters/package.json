@@ -11,7 +11,8 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@datagripe/contracts": "*"
+		"@datagripe/contracts": "*",
+		"@datagripe/sql-tools": "*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.2.21",

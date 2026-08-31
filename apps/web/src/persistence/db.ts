@@ -39,6 +39,12 @@ export interface StoredViewState {
 	updatedAt: string;
 }
 
+export interface StoredDocumentPref {
+	/** Document id. */
+	id: string;
+	defaultConnectionId?: string;
+}
+
 export const LOCAL_LAYOUT_ID = "local";
 
 export const db = new Dexie("datagripe") as Dexie & {
@@ -46,6 +52,7 @@ export const db = new Dexie("datagripe") as Dexie & {
 	drafts: EntityTable<StoredDraft, "id">;
 	layouts: EntityTable<StoredLayout, "id">;
 	viewStates: EntityTable<StoredViewState, "id">;
+	documentPrefs: EntityTable<StoredDocumentPref, "id">;
 };
 
 db.version(1).stores({
@@ -53,4 +60,8 @@ db.version(1).stores({
 	drafts: "id",
 	layouts: "id",
 	viewStates: "id, documentId",
+});
+
+db.version(2).stores({
+	documentPrefs: "id",
 });

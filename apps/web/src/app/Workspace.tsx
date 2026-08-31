@@ -10,19 +10,25 @@ import { ConnectionDialog } from "../components/ConnectionDialog";
 import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
+import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
 import { db, LOCAL_LAYOUT_ID } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
-import { useConnectionsStore, useExplorerStore } from "../stores/runtime";
+import {
+	useConnectionsStore,
+	useExecutionsStore,
+	useExplorerStore,
+} from "../stores/runtime";
 import { useViewsStore } from "../stores/views";
 import {
 	closeEditorPanels,
 	openEditorPanel,
 	panelDocumentId,
 } from "./editorPanels";
+import { registerResultsOpener } from "./resultsPanel";
 
 const LAYOUT_SAVE_DELAY_MS = 500;
 
@@ -35,7 +41,7 @@ function ensureHydrated(): Promise<void> {
 	return hydratePromise;
 }
 
-const components = { editor: EditorView };
+const components = { editor: EditorView, results: ResultsPanel };
 
 function persistLayout(api: DockviewApi): void {
 	void db.layouts.put({
@@ -68,11 +74,11 @@ async function restoreLayout(api: DockviewApi): Promise<void> {
 	api.fromJSON(serialized);
 }
 
-/** Route the save shortcut to the active view's document. */
+/** Route the save shortcut to the last editor view's document. */
 function saveActiveDocument(): void {
-	const { activeViewId, views } = useViewsStore.getState();
+	const { lastEditorViewId, views } = useViewsStore.getState();
 	const documentId =
-		activeViewId !== null ? views[activeViewId]?.documentId : undefined;
+		lastEditorViewId !== null ? views[lastEditorViewId]?.documentId : undefined;
 	if (documentId !== undefined) {
 		void useDocumentsStore.getState().saveDocument(documentId);
 	}
@@ -100,27 +106,49 @@ export function Workspace() {
 	// metadata and drops cached explorer trees.
 	useEffect(() => {
 		wsClient.connect();
-		return wsClient.onOpen(() => {
+		const offOpen = wsClient.onOpen(() => {
 			useExplorerStore.getState().reset();
 			void useConnectionsStore.getState().load();
 		});
+		const offEvent = wsClient.onEvent((event) => {
+			useExecutionsStore.getState().handleEvent(event);
+		});
+		return () => {
+			offOpen();
+			offEvent();
+		};
 	}, []);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && event.key === "s") {
 				event.preventDefault();
+				event.stopPropagation();
 				saveActiveDocument();
+				return;
+			}
+			// Capture phase is required: Monaco's own Ctrl+Enter binding
+			// (insertLineAfter) otherwise consumes the event first.
+			if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+				const lastEditorViewId = useViewsStore.getState().lastEditorViewId;
+				if (lastEditorViewId === null) {
+					return;
+				}
+				event.preventDefault();
+				event.stopPropagation();
+				void useExecutionsStore
+					.getState()
+					.run(lastEditorViewId, event.shiftKey ? "document" : "auto");
 			}
 		};
 		const onBeforeUnload = () => {
 			draftDebouncer.flush();
 			layoutDebouncer.flush();
 		};
-		window.addEventListener("keydown", onKeyDown);
+		window.addEventListener("keydown", onKeyDown, true);
 		window.addEventListener("beforeunload", onBeforeUnload);
 		return () => {
-			window.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("keydown", onKeyDown, true);
 			window.removeEventListener("beforeunload", onBeforeUnload);
 		};
 	}, []);
@@ -150,8 +178,34 @@ export function Workspace() {
 			setActiveView(panel?.id ?? null);
 		});
 
+		registerResultsOpener(() => {
+			const existing = api.getPanel("results");
+			if (existing !== undefined) {
+				existing.focus();
+				return;
+			}
+			api.addPanel({
+				id: "results",
+				component: "results",
+				title: "Results",
+				position: { direction: "below" },
+			});
+		});
+
 		setDockApi(api);
-		void ensureHydrated().then(() => restoreLayout(api));
+		void ensureHydrated().then(async () => {
+			await restoreLayout(api);
+			// onDidAddPanel does not reliably fire for panels restored via
+			// fromJSON; sync the view store from Dockview (source of truth).
+			const { registerView, setActiveView } = useViewsStore.getState();
+			for (const panel of api.panels) {
+				const documentId = panelDocumentId(panel.params);
+				if (documentId !== undefined) {
+					registerView(panel.id, documentId);
+				}
+			}
+			setActiveView(api.activePanel?.id ?? null);
+		});
 	};
 
 	const newQuery = () => {

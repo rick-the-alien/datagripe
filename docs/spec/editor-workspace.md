@@ -88,13 +88,15 @@ constant `"local"`. Multi-workspace keying arrives with server sync.
 - **Save** (Ctrl/Cmd+S or Save button) → write `currentContent` to
   `documents`, `revision += 1`, then delete the draft row. Order matters:
   a crash between the two writes leaves a recoverable draft, never a lost
-  save. Ctrl/Cmd+S is handled by one window-level listener routed to the
-  view with Monaco text focus (tracked via `onDidFocusEditorText`),
-  falling back to Dockview's active panel when focus is on a tab header.
-  Per-editor `editor.addCommand` bindings are deliberately not used:
-  Monaco command registrations are global, so identical keybindings from
-  multiple editor instances collide and the latest editor shadows the
-  rest.
+  save. Ctrl/Cmd+S is handled by one window-level listener (capture
+  phase, so Monaco's own bindings cannot consume shortcuts) routed to
+  the most recent editor view (`lastEditorViewId` in the view store):
+  Monaco text focus (`onDidFocusEditorText`) and Dockview panel
+  activation both update it, so commands keep working while a non-editor
+  panel (e.g. Results) is active. Per-editor `editor.addCommand`
+  bindings are deliberately not used: Monaco command registrations are
+  global, so identical keybindings from multiple editor instances
+  collide and the latest editor shadows the rest.
 - **Layout change** → Dockview `onDidLayoutChange` → debounced (500 ms)
   `toJSON()` into `layouts`.
 - **View state change** (cursor/selection/scroll) → debounced (500 ms)

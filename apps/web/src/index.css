@@ -409,3 +409,87 @@ button:disabled {
 .dg-modal-actions-spacer {
 	flex: 1;
 }
+
+.dg-results {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.dg-results-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border-bottom: 1px solid #2c2e35;
+	flex: none;
+}
+
+.dg-connection-select {
+	background: #17181c;
+	border: 1px solid #3d4048;
+	border-radius: 4px;
+	color: #d7d7db;
+	padding: 3px 6px;
+	font: inherit;
+	max-width: 220px;
+}
+
+.dg-results-status {
+	color: #8a8d96;
+	font-size: 12px;
+}
+
+.dg-cancel {
+	color: #e06c75;
+}
+
+.dg-results-body {
+	flex: 1;
+	overflow: auto;
+	min-height: 0;
+}
+
+.dg-results-error {
+	color: #e06c75;
+	padding: 8px 10px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	white-space: pre-wrap;
+}
+
+.dg-grid {
+	border-collapse: collapse;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+	min-width: 100%;
+}
+
+.dg-grid th {
+	position: sticky;
+	top: 0;
+	background: #17181c;
+	border-bottom: 1px solid #3d4048;
+	text-align: left;
+	padding: 4px 10px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.dg-grid td {
+	border-bottom: 1px solid #23242b;
+	padding: 3px 10px;
+	white-space: nowrap;
+	max-width: 320px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dg-grid-null {
+	color: #8a8d96;
+	font-style: italic;
+}
+
+.dg-grid-clip {
+	max-width: 420px;
+}

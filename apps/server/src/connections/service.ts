@@ -73,6 +73,13 @@ export interface ConnectionsService {
 		path: SchemaPathSegment[],
 		refresh: boolean,
 	) => Promise<SchemaNode[]>;
+	/** Resolve a connection with its secret for server-side execution.
+	 * Never exposed over the wire. */
+	resolveForExecution: (
+		connectionId: string,
+	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
+	/** Display name of a predefined connection, for history rendering. */
+	predefinedName: (connectionId: string) => string | undefined;
 }
 
 function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
@@ -301,6 +308,18 @@ export function createConnectionsService(
 				};
 			}
 			return adapter.testConnection(resolved);
+		},
+
+		async resolveForExecution(connectionId) {
+			const resolved = await resolveConnection(connectionId);
+			return {
+				...resolved,
+				source: predefined.has(connectionId) ? "predefined" : "managed",
+			};
+		},
+
+		predefinedName(connectionId) {
+			return predefined.get(connectionId)?.definition.name;
 		},
 
 		async schemaChildren(connectionId, path, refresh) {

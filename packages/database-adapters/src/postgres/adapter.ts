@@ -6,9 +6,12 @@ import type {
 import { SQL } from "bun";
 import {
 	type DatabaseAdapter,
+	type ExecuteLimits,
+	type ExecutionSession,
 	InvalidIntrospectionPathError,
 	type ResolvedConnection,
 } from "../types";
+import { beginPostgresExecution } from "./execution";
 
 /**
  * PostgreSQL adapter over Bun.SQL. Target clients are pooled per
@@ -178,5 +181,16 @@ export class PostgresAdapter implements DatabaseAdapter {
 			[...this.clients.values()].map((client) => client.close()),
 		);
 		this.clients.clear();
+	}
+
+	beginExecution(
+		connection: ResolvedConnection,
+		limits: ExecuteLimits,
+	): Promise<ExecutionSession> {
+		return beginPostgresExecution(
+			this.clientFor(connection),
+			connection,
+			limits,
+		);
 	}
 }

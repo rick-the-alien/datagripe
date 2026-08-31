@@ -16,6 +16,7 @@
       "dependencies": {
         "@datagripe/contracts": "*",
         "@datagripe/database-adapters": "*",
+        "@datagripe/sql-tools": "*",
         "zod": "^4.1.5",
       },
     },
@@ -24,6 +25,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@datagripe/contracts": "*",
+        "@datagripe/sql-tools": "*",
         "@tanstack/react-query": "^5.85.5",
         "dexie": "^4.0.11",
         "dockview-react": "^4.9.0",
@@ -57,9 +59,17 @@
       "version": "0.0.0",
       "dependencies": {
         "@datagripe/contracts": "*",
+        "@datagripe/sql-tools": "*",
       },
       "devDependencies": {
         "@types/bun": "^1.2.21",
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/sql-tools": {
+      "name": "@datagripe/sql-tools",
+      "version": "0.0.0",
+      "devDependencies": {
         "typescript": "^5.9.2",
       },
     },
@@ -126,6 +136,8 @@
     "@datagripe/database-adapters": ["@datagripe/database-adapters@workspace:packages/database-adapters"],
 
     "@datagripe/server": ["@datagripe/server@workspace:apps/server"],
+
+    "@datagripe/sql-tools": ["@datagripe/sql-tools@workspace:packages/sql-tools"],
 
     "@datagripe/web": ["@datagripe/web@workspace:apps/web"],
 

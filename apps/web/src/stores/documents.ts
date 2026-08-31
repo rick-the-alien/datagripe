@@ -22,6 +22,8 @@ export type DocumentsState = {
 	documents: Record<string, EditorDocument>;
 	/** Document ids in creation order — sidebar order. */
 	order: string[];
+	/** Per-document preferences (default connection) from documentPrefs. */
+	prefs: Record<string, { defaultConnectionId?: string | undefined }>;
 	hydrated: boolean;
 	hydrate: () => Promise<void>;
 	createDocument: (title?: string) => EditorDocument;
@@ -29,6 +31,7 @@ export type DocumentsState = {
 	updateContent: (id: string, content: string) => void;
 	saveDocument: (id: string) => Promise<void>;
 	discardDocument: (id: string) => Promise<void>;
+	setDefaultConnection: (id: string, connectionId: string) => void;
 };
 
 export const DRAFT_CHECKPOINT_DELAY_MS = 750;
@@ -64,12 +67,14 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 	return create<DocumentsState>()((set, get) => ({
 		documents: {},
 		order: [],
+		prefs: {},
 		hydrated: false,
 
 		async hydrate() {
-			const [documents, drafts] = await Promise.all([
+			const [documents, drafts, prefs] = await Promise.all([
 				db.documents.toArray(),
 				db.drafts.toArray(),
+				db.documentPrefs.toArray(),
 			]);
 			const recovered = mergeDrafts(documents, drafts);
 			set({
@@ -78,6 +83,12 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					.slice()
 					.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 					.map((doc) => doc.id),
+				prefs: Object.fromEntries(
+					prefs.map((pref) => [
+						pref.id,
+						{ defaultConnectionId: pref.defaultConnectionId },
+					]),
+				),
 				hydrated: true,
 			});
 		},
@@ -182,12 +193,25 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 				db.documents.delete(id),
 				db.drafts.delete(id),
 				db.viewStates.where("documentId").equals(id).delete(),
+				db.documentPrefs.delete(id),
 			]);
 			const { [id]: _removed, ...documents } = get().documents;
+			const { [id]: _removedPrefs, ...prefs } = get().prefs;
 			set({
 				documents,
+				prefs,
 				order: get().order.filter((existing) => existing !== id),
 			});
+		},
+
+		setDefaultConnection(id, connectionId) {
+			set({
+				prefs: {
+					...get().prefs,
+					[id]: { defaultConnectionId: connectionId },
+				},
+			});
+			void db.documentPrefs.put({ id, defaultConnectionId: connectionId });
 		},
 	}));
 }

@@ -6,19 +6,22 @@ import { loadPredefinedConnections } from "./connections/predefined";
 import { createConnectionsService } from "./connections/service";
 import { createKeyring } from "./crypto/keyring";
 import { createAppDb } from "./db/app/pool";
+import { createExecutionRegistry } from "./execution/registry";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
 import { createDispatcher } from "./ws/dispatch";
 import { createWebsocketHandler, type SocketData } from "./ws/handler";
+import { SocketHub } from "./ws/hub";
 
 const config = await loadConfig();
 const appDb = createAppDb(config);
 
 // Pre-auth stub (Phase 4): one local user/workspace owns all rows.
-const workspace = await ensureLocalWorkspace(appDb);
+const { workspace, user } = await ensureLocalWorkspace(appDb);
 const keyring = createKeyring(new Map([[1, config.CONNECTION_ENCRYPTION_KEY]]));
 const predefined = await loadPredefinedConnections(config);
 const adapter = new PostgresAdapter();
+const hub = new SocketHub();
 
 const connections = createConnectionsService({
 	appDb,
@@ -27,7 +30,37 @@ const connections = createConnectionsService({
 	workspace,
 	predefined,
 });
-const dispatch = createDispatcher({ appDb, workspace, connections });
+const executions = createExecutionRegistry({
+	adapter,
+	appDb,
+	userId: user.id,
+	limits: {
+		timeoutMs: config.QUERY_TIMEOUT_MS,
+		maxRows: config.QUERY_MAX_ROWS,
+		maxBytes: config.QUERY_MAX_BYTES,
+		maxConcurrentPerUser: config.MAX_CONCURRENT_QUERIES_PER_USER,
+	},
+	resolveConnection: (id) => connections.resolveForExecution(id),
+	emit: (executionId, topic, sequence, payload) => {
+		hub.broadcast({
+			version: 1,
+			kind: "event",
+			eventId: crypto.randomUUID(),
+			topic,
+			executionId,
+			sequence,
+			occurredAt: new Date().toISOString(),
+			payload,
+		});
+	},
+});
+const dispatch = createDispatcher({
+	appDb,
+	workspace,
+	userId: user.id,
+	connections,
+	executions,
+});
 
 const server = serve<SocketData>({
 	port: config.PORT,
@@ -72,7 +105,7 @@ const server = serve<SocketData>({
 		return errorResponse(404, "NOT_FOUND", "Not found", requestId);
 	},
 
-	websocket: createWebsocketHandler(dispatch),
+	websocket: createWebsocketHandler(dispatch, hub),
 });
 
 async function shutdown() {

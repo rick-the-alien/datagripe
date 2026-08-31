@@ -8,6 +8,7 @@ import { ZodError } from "zod";
 import { ServiceError } from "../connections/service";
 import { log } from "../log";
 import type { Dispatch } from "./dispatch";
+import type { SocketHub } from "./hub";
 
 export type SocketData = {
 	requestId: string;
@@ -45,9 +46,10 @@ function failure(
  * action. Auth binding and per-object authorization land in Phase 4 with
  * the workspace session.
  */
-export function createWebsocketHandler(dispatch: Dispatch) {
+export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 	return {
 		open(ws: ServerWebSocket) {
+			hub.add(ws);
 			log.info("websocket connected", { requestId: ws.data.requestId });
 		},
 
@@ -124,6 +126,7 @@ export function createWebsocketHandler(dispatch: Dispatch) {
 		},
 
 		close(ws: ServerWebSocket) {
+			hub.remove(ws);
 			log.info("websocket disconnected", { requestId: ws.data.requestId });
 		},
 	};

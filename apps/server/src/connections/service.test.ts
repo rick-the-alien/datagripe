@@ -88,7 +88,7 @@ beforeAll(async () => {
 			documents, workspace_layouts, query_executions,
 			workspace_members, workspaces, users CASCADE
 	`);
-	workspace = await ensureLocalWorkspace(appDb);
+	workspace = (await ensureLocalWorkspace(appDb)).workspace;
 	service = createConnectionsService({
 		appDb,
 		keyring: createKeyring(new Map([[1, "service-test-key-0123456789abcdef"]])),

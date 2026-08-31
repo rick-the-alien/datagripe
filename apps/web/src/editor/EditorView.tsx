@@ -4,6 +4,7 @@ import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "../stores/documents";
 import { useViewsStore } from "../stores/views";
+import { registerEditorHandle, unregisterEditorHandle } from "./handles";
 import { monaco } from "./monacoSetup";
 import { modelRegistry } from "./registry";
 
@@ -55,6 +56,22 @@ export function EditorView(props: IDockviewPanelProps) {
 			fontSize: 13,
 			scrollBeyondLastLine: false,
 			padding: { top: 8 },
+		});
+
+		const viewId = props.api.id;
+		registerEditorHandle(viewId, {
+			getText: () => model.getValue(),
+			getSelection: () => {
+				const selection = editor.getSelection();
+				if (selection === null || selection.isEmpty()) {
+					return { text: "", isEmpty: true };
+				}
+				return { text: model.getValueInRange(selection), isEmpty: false };
+			},
+			getCursorOffset: () => {
+				const position = editor.getPosition();
+				return position === null ? 0 : model.getOffsetAt(position);
+			},
 		});
 
 		let disposed = false;
@@ -118,6 +135,7 @@ export function EditorView(props: IDockviewPanelProps) {
 			for (const subscription of subscriptions) {
 				subscription.dispose();
 			}
+			unregisterEditorHandle(viewId);
 			editor.dispose();
 			modelRegistry.release(documentId);
 		};

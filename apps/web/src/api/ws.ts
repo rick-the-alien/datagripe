@@ -1,5 +1,7 @@
 import {
 	type ClientAction,
+	type ServerEvent,
+	serverEventSchema,
 	serverResponseSchema,
 	WS_PROTOCOL_VERSION,
 } from "@datagripe/contracts/ws";
@@ -32,6 +34,7 @@ export class WsClient {
 	private readonly pending = new Map<string, PendingRequest>();
 	private readonly queue: Array<() => void> = [];
 	private readonly openListeners = new Set<() => void>();
+	private readonly eventListeners = new Set<(event: ServerEvent) => void>();
 
 	/** Connect once; subsequent calls are no-ops. Reconnects automatically. */
 	connect(): void {
@@ -46,6 +49,12 @@ export class WsClient {
 	onOpen(listener: () => void): () => void {
 		this.openListeners.add(listener);
 		return () => this.openListeners.delete(listener);
+	}
+
+	/** Server events (execution lifecycle). */
+	onEvent(listener: (event: ServerEvent) => void): () => void {
+		this.eventListeners.add(listener);
+		return () => this.eventListeners.delete(listener);
 	}
 
 	get isOpen(): boolean {
@@ -101,6 +110,20 @@ export class WsClient {
 			try {
 				raw = JSON.parse(String(event.data));
 			} catch {
+				return;
+			}
+			if (
+				typeof raw === "object" &&
+				raw !== null &&
+				"kind" in raw &&
+				raw.kind === "event"
+			) {
+				const parsedEvent = serverEventSchema.safeParse(raw);
+				if (parsedEvent.success) {
+					for (const listener of this.eventListeners) {
+						listener(parsedEvent.data as ServerEvent);
+					}
+				}
 				return;
 			}
 			const parsed = serverResponseSchema.safeParse(raw);

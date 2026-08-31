@@ -35,14 +35,14 @@ Exit: multiple documents survive tab switching, splitting, and reload without lo
 
 Exit: a user can save a connection and browse schemas/tables/columns without seeing credentials.
 
-## Phase 3 — Query execution
+## Phase 3 — Query execution · shipped 2026-08-31
 
-- [ ] Selection / statement-at-cursor / document execution
-- [ ] Execution registry, WebSocket lifecycle events, result batching
-- [ ] Data grid: columns, rows, duration, affected rows, truncation, errors
-- [ ] Server-enforced row/byte/timeout/concurrency limits
-- [ ] Reliable cancellation on a non-blocked control path
-- [ ] Query history metadata
+- [x] Selection / statement-at-cursor / document execution
+- [x] Execution registry, WebSocket lifecycle events, result batching
+- [x] Data grid: columns, rows, duration, affected rows, truncation, errors
+- [x] Server-enforced row/byte/timeout/concurrency limits
+- [x] Reliable cancellation on a non-blocked control path
+- [x] Query history metadata
 
 Exit: queries run, stream bounded results, cancel reliably, and produce an auditable terminal state.
 

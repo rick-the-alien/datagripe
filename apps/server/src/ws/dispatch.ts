@@ -3,6 +3,10 @@ import {
 	connectionDeleteRequestSchema,
 	connectionTestRequestSchema,
 	connectionUpdateRequestSchema,
+	executionCancelRequestSchema,
+	executionStartRequestSchema,
+	executionSubscribeRequestSchema,
+	historyListRequestSchema,
 	schemaChildrenRequestSchema,
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
@@ -11,6 +15,8 @@ import type { ConnectionsService } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import { withIdempotency } from "../db/app/idempotency";
 import type { AppDb } from "../db/app/pool";
+import { listHistory } from "../execution/history";
+import type { ExecutionRegistry } from "../execution/registry";
 
 /**
  * Action dispatcher: validates each action's payload with the shared Zod
@@ -25,11 +31,13 @@ export type Dispatch = (
 export interface DispatcherDeps {
 	appDb: AppDb;
 	workspace: { id: string; name: string };
+	userId: string;
 	connections: ConnectionsService;
+	executions: ExecutionRegistry;
 }
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
-	const { appDb, workspace, connections } = deps;
+	const { appDb, workspace, connections, executions, userId } = deps;
 
 	return async (action, payload) => {
 		switch (action) {
@@ -86,6 +94,36 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						request.refresh,
 					),
 				};
+			}
+
+			case "execution.start": {
+				const request = executionStartRequestSchema.parse(payload);
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => executions.start(request),
+				);
+			}
+
+			case "execution.cancel": {
+				const request = executionCancelRequestSchema.parse(payload);
+				return executions.cancel(request.executionId);
+			}
+
+			case "execution.subscribe": {
+				const request = executionSubscribeRequestSchema.parse(payload);
+				return {
+					events: executions.replay(request.executionId, request.afterSequence),
+				};
+			}
+
+			case "history.list": {
+				const request = historyListRequestSchema.parse(payload);
+				return listHistory(appDb, userId, request.limit, request.offset, (id) =>
+					connections.predefinedName(id),
+				);
 			}
 
 			default:

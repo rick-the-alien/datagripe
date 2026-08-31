@@ -1,0 +1,261 @@
+import type { ColumnDescriptor, ExecutionStatus } from "@datagripe/contracts";
+import type { ServerEvent } from "@datagripe/contracts/ws";
+import { statementAt } from "@datagripe/sql-tools";
+import { create } from "zustand";
+import type { WsRequestFn } from "../api/ws";
+import { ensureResultsPanel } from "../app/resultsPanel";
+import { getEditorHandle } from "../editor/handles";
+import { useDocumentsStore } from "./documents";
+import { useViewsStore } from "./views";
+
+/**
+ * Client execution state (docs/spec/query-execution.md): accumulates
+ * streamed columns/rows per execution, fed by server events. The Results
+ * panel renders the active document's latest execution.
+ */
+
+export type RunMode = "auto" | "document";
+
+export interface ResultSetData {
+	columns: ColumnDescriptor[];
+	rows: unknown[][];
+}
+
+export interface ExecutionProgress {
+	statement: number;
+	command: string;
+	affectedRows?: number | undefined;
+}
+
+export interface ExecutionViewState {
+	id: string;
+	documentId?: string | undefined;
+	connectionId: string;
+	status: ExecutionStatus;
+	statements: number;
+	resultSets: ResultSetData[];
+	progress: ExecutionProgress[];
+	rowCount?: number | undefined;
+	truncated?: boolean | undefined;
+	elapsedMs?: number | undefined;
+	error?: { code?: string | undefined; message: string } | undefined;
+	startedAt?: string | undefined;
+}
+
+export type ExecutionsState = {
+	executions: Record<string, ExecutionViewState>;
+	latestByDocument: Record<string, string>;
+	/** Start-failures that never produced an execution (per document). */
+	runErrors: Record<string, string>;
+	run: (viewId: string, mode: RunMode) => Promise<void>;
+	cancel: (executionId: string) => Promise<void>;
+	handleEvent: (event: ServerEvent) => void;
+};
+
+export function createExecutionsStore(request: WsRequestFn) {
+	return create<ExecutionsState>()((set, get) => {
+		const patch = (id: string, partial: Partial<ExecutionViewState>) => {
+			const current = get().executions[id];
+			if (current === undefined) {
+				return;
+			}
+			set({
+				executions: {
+					...get().executions,
+					[id]: { ...current, ...partial },
+				},
+			});
+		};
+
+		return {
+			executions: {},
+			latestByDocument: {},
+			runErrors: {},
+
+			async run(viewId, mode) {
+				const view = useViewsStore.getState().views[viewId];
+				const documentId = view?.documentId;
+				if (documentId === undefined) {
+					return;
+				}
+				const handle = getEditorHandle(viewId);
+				if (handle === undefined) {
+					return;
+				}
+
+				let sql: string;
+				if (mode === "document") {
+					sql = handle.getText();
+				} else {
+					const selection = handle.getSelection();
+					sql = selection.isEmpty
+						? (statementAt(handle.getText(), handle.getCursorOffset())?.text ??
+							"")
+						: selection.text;
+				}
+				if (sql.trim().length === 0) {
+					return;
+				}
+
+				const connectionId =
+					useDocumentsStore.getState().prefs[documentId]?.defaultConnectionId;
+				if (connectionId === undefined) {
+					set({
+						runErrors: {
+							...get().runErrors,
+							[documentId]:
+								"Choose a connection for this document (Results panel).",
+						},
+					});
+					ensureResultsPanel();
+					return;
+				}
+
+				ensureResultsPanel();
+				try {
+					const result = await request<{ executionId: string }>(
+						"execution.start",
+						{
+							connectionId,
+							documentId,
+							editorViewId: viewId,
+							sql,
+							idempotencyKey: crypto.randomUUID(),
+						},
+					);
+					const execution: ExecutionViewState = {
+						id: result.executionId,
+						documentId,
+						connectionId,
+						status: "queued",
+						statements: 1,
+						resultSets: [],
+						progress: [],
+					};
+					const { [documentId]: _cleared, ...runErrors } = get().runErrors;
+					set({
+						executions: {
+							...get().executions,
+							[result.executionId]: execution,
+						},
+						latestByDocument: {
+							...get().latestByDocument,
+							[documentId]: result.executionId,
+						},
+						runErrors,
+					});
+				} catch (error) {
+					set({
+						runErrors: {
+							...get().runErrors,
+							[documentId]:
+								error instanceof Error ? error.message : "Run failed",
+						},
+					});
+				}
+			},
+
+			async cancel(executionId) {
+				await request("execution.cancel", { executionId });
+			},
+
+			handleEvent(event) {
+				if (event.executionId === undefined) {
+					return;
+				}
+				const id = event.executionId;
+				const current = get().executions[id];
+				if (current === undefined) {
+					return;
+				}
+				switch (event.topic) {
+					case "execution.started": {
+						const payload = event.payload as {
+							startedAt: string;
+							statements: number;
+						};
+						patch(id, {
+							status: "running",
+							startedAt: payload.startedAt,
+							statements: payload.statements,
+						});
+						break;
+					}
+					case "execution.columns": {
+						const payload = event.payload as {
+							resultSet: number;
+							columns: ColumnDescriptor[];
+						};
+						const resultSets = [...current.resultSets];
+						resultSets[payload.resultSet] = {
+							columns: payload.columns,
+							rows: [],
+						};
+						patch(id, { resultSets });
+						break;
+					}
+					case "execution.rows": {
+						const payload = event.payload as {
+							resultSet: number;
+							rows: unknown[][];
+						};
+						const resultSets = [...current.resultSets];
+						const existing = resultSets[payload.resultSet] ?? {
+							columns: [],
+							rows: [],
+						};
+						resultSets[payload.resultSet] = {
+							...existing,
+							rows: [...existing.rows, ...payload.rows],
+						};
+						patch(id, { resultSets });
+						break;
+					}
+					case "execution.progress": {
+						const payload = event.payload as ExecutionProgress;
+						patch(id, { progress: [...current.progress, payload] });
+						break;
+					}
+					case "execution.completed": {
+						const payload = event.payload as {
+							rowCount: number;
+							truncated: boolean;
+							elapsedMs: number;
+						};
+						patch(id, {
+							status: "succeeded",
+							rowCount: payload.rowCount,
+							truncated: payload.truncated,
+							elapsedMs: payload.elapsedMs,
+						});
+						break;
+					}
+					case "execution.failed": {
+						const payload = event.payload as {
+							code?: string;
+							message: string;
+						};
+						patch(id, {
+							status: "failed",
+							error: {
+								...(payload.code !== undefined ? { code: payload.code } : {}),
+								message: payload.message,
+							},
+						});
+						break;
+					}
+					case "execution.cancelled": {
+						const payload = event.payload as { elapsedMs: number };
+						patch(id, {
+							status: "cancelled",
+							elapsedMs: payload.elapsedMs,
+						});
+						break;
+					}
+				}
+			},
+		};
+	});
+}
+
+export type ExecutionsStore = ReturnType<typeof createExecutionsStore>;

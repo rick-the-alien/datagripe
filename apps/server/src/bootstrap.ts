@@ -7,7 +7,7 @@ import type { AppDb } from "./db/app/pool";
  */
 export async function ensureLocalWorkspace(
 	appDb: AppDb,
-): Promise<{ id: string; name: string }> {
+): Promise<{ workspace: { id: string; name: string }; user: { id: string } }> {
 	const email = "local@datagripe.local";
 	const name = "Local";
 
@@ -28,7 +28,7 @@ export async function ensureLocalWorkspace(
 	`;
 	const workspace = existing[0];
 	if (workspace !== undefined) {
-		return workspace;
+		return { workspace, user };
 	}
 
 	const created = await appDb<{ id: string; name: string }[]>`
@@ -39,5 +39,5 @@ export async function ensureLocalWorkspace(
 	if (row === undefined) {
 		throw new Error("Failed to bootstrap local workspace");
 	}
-	return row;
+	return { workspace: row, user };
 }

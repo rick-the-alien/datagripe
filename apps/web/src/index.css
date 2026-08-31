@@ -1,0 +1,14 @@
+:root {
+	color-scheme: dark;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	background: #1e1f24;
+	color: #d7d7db;
+}
+
+body {
+	margin: 0;
+}
+
+.shell {
+	padding: 2rem;
+}

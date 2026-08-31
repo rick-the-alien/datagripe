@@ -1,0 +1,25 @@
+{
+	"name": "datagripe",
+	"private": true,
+	"packageManager": "bun@1.4.0",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "bun run --filter './apps/*' --parallel dev",
+		"dev:web": "bun run --cwd apps/web dev",
+		"dev:server": "bun run --cwd apps/server dev",
+		"test": "bun test",
+		"typecheck": "bun run --filter '*' typecheck",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"db:migrate": "bun run --cwd apps/server db:migrate"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.11",
+		"@types/bun": "^1.2.21",
+		"typescript": "^5.9.2"
+	}
+}

@@ -1,0 +1,25 @@
+{
+	"name": "@datagripe/server",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./config": "./src/config.ts",
+		"./db/app/pool": "./src/db/app/pool.ts",
+		"./db/app/migrate": "./src/db/app/migrate.ts",
+		"./ws/handler": "./src/ws/handler.ts",
+		"./http/errors": "./src/http/errors.ts",
+		"./log": "./src/log.ts"
+	},
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"start": "bun run src/index.ts",
+		"db:migrate": "bun run src/db/app/migrate.ts",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@datagripe/contracts": "*",
+		"zod": "^4.1.5"
+	}
+}

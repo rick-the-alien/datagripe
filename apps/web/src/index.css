@@ -1,14 +1,217 @@
 :root {
 	color-scheme: dark;
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 	background: #1e1f24;
 	color: #d7d7db;
+	font-size: 13px;
+}
+
+html,
+body,
+#root {
+	height: 100%;
 }
 
 body {
 	margin: 0;
 }
 
-.shell {
-	padding: 2rem;
+button {
+	font: inherit;
+	color: inherit;
+	background: #2c2e35;
+	border: 1px solid #3d4048;
+	border-radius: 4px;
+	padding: 3px 10px;
+	cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+	background: #363943;
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.dg-workspace {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.dg-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	background: #17181c;
+	border-bottom: 1px solid #2c2e35;
+	flex: none;
+}
+
+.dg-brand {
+	font-weight: 600;
+	margin-right: 12px;
+}
+
+.dg-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.dg-sidebar {
+	width: 220px;
+	flex: none;
+	background: #1a1b20;
+	border-right: 1px solid #2c2e35;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+}
+
+.dg-sidebar-heading {
+	padding: 8px 10px 4px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: #8a8d96;
+}
+
+.dg-document-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dg-document-row {
+	display: flex;
+	align-items: center;
+	padding: 0 4px 0 10px;
+}
+
+.dg-document-row:hover {
+	background: #23242b;
+}
+
+.dg-document-row-active {
+	background: #2b3040;
+}
+
+.dg-document-open {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: none;
+	border: none;
+	padding: 5px 0;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dg-document-open:hover:not(:disabled) {
+	background: none;
+}
+
+.dg-document-delete {
+	background: none;
+	border: none;
+	padding: 0 6px;
+	color: #8a8d96;
+	visibility: hidden;
+}
+
+.dg-document-row:hover .dg-document-delete {
+	visibility: visible;
+}
+
+.dg-document-delete:hover:not(:disabled) {
+	background: none;
+	color: #e06c75;
+}
+
+.dg-sidebar-empty {
+	padding: 8px 10px;
+	color: #8a8d96;
+}
+
+.dg-dock-container {
+	flex: 1;
+	min-width: 0;
+	position: relative;
+}
+
+.dg-dock {
+	position: absolute;
+	inset: 0;
+}
+
+.dg-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	color: #8a8d96;
+}
+
+.dg-tab {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	max-width: 220px;
+}
+
+.dg-tab-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dg-tab-dirty {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #e5c07b;
+	flex: none;
+}
+
+.dg-tab-close {
+	background: none;
+	border: none;
+	padding: 0 4px;
+	color: #8a8d96;
+	line-height: 1;
+}
+
+.dg-tab-close:hover:not(:disabled) {
+	background: none;
+	color: #e06c75;
+}
+
+.dg-watermark {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	height: 100%;
+	color: #8a8d96;
+}
+
+.editor-container {
+	height: 100%;
+	width: 100%;
+}
+
+.editor-missing {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 100%;
+	color: #8a8d96;
 }

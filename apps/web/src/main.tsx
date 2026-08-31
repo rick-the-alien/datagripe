@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
+import "dockview-react/dist/styles/dockview.css";
 import "./index.css";
 
 const queryClient = new QueryClient();

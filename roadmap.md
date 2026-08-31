@@ -15,13 +15,13 @@ Legend: `[ ]` planned · `[~]` in progress · `[x]` shipped
 - [x] Shared Zod contracts: errors, WS protocol v1, documents, connections, executions
 - [x] CI: typecheck, unit tests, migrations, web build
 
-## Phase 1 — IDE shell
+## Phase 1 — IDE shell · shipped 2026-08-31
 
-- [ ] Dockview workspace: movable tabs, horizontal/vertical splits
-- [ ] Monaco model registry: one model per document, split-safe editor views
-- [ ] Zustand document/view stores
-- [ ] IndexedDB draft + layout recovery (Dexie)
-- [ ] Spec: `docs/spec/editor-workspace.md`
+- [x] Dockview workspace: movable tabs, horizontal/vertical splits
+- [x] Monaco model registry: one model per document, split-safe editor views
+- [x] Zustand document/view stores
+- [x] IndexedDB draft + layout recovery (Dexie)
+- [x] Spec: `docs/spec/editor-workspace.md`
 
 Exit: multiple documents survive tab switching, splitting, and reload without lost changes.
 

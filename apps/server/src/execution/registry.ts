@@ -14,6 +14,7 @@ import type {
 import { splitStatements } from "@datagripe/sql-tools";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
+import { log } from "../log";
 
 /**
  * Execution registry (docs/spec/query-execution.md): owns lifecycle,
@@ -51,14 +52,14 @@ interface ExecutionRecord {
 export interface ExecutionRegistryDeps {
 	adapter: DatabaseAdapter;
 	appDb: AppDb;
-	/** Pre-auth stub user id. */
-	userId: string;
 	limits: RegistryLimits;
 	resolveConnection: (
+		workspace: { id: string; name: string },
 		id: string,
 	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
 	/** Broadcast a sequenced event for an execution. */
 	emit: (
+		userId: string,
 		executionId: string,
 		topic: string,
 		sequence: number,
@@ -67,9 +68,20 @@ export interface ExecutionRegistryDeps {
 }
 
 export interface ExecutionRegistry {
-	start: (request: ExecutionStartRequest) => Promise<ExecutionStartResult>;
-	cancel: (executionId: string) => Promise<ExecutionCancelResult>;
-	replay: (executionId: string, afterSequence: number) => BufferedEvent[];
+	start: (
+		userId: string,
+		workspace: { id: string; name: string },
+		request: ExecutionStartRequest,
+	) => Promise<ExecutionStartResult>;
+	cancel: (
+		userId: string,
+		executionId: string,
+	) => Promise<ExecutionCancelResult>;
+	replay: (
+		userId: string,
+		executionId: string,
+		afterSequence: number,
+	) => BufferedEvent[];
 	/** Test/inspection seam. */
 	get: (executionId: string) => { status: ExecutionStatus } | undefined;
 }
@@ -86,7 +98,7 @@ function queryHash(sql: string): string {
 export function createExecutionRegistry(
 	deps: ExecutionRegistryDeps,
 ): ExecutionRegistry {
-	const { adapter, appDb, userId, limits } = deps;
+	const { adapter, appDb, limits } = deps;
 	const records = new Map<string, ExecutionRecord>();
 
 	function bufferEvent(
@@ -110,7 +122,7 @@ export function createExecutionRegistry(
 				(event) => !drop.has(event.sequence),
 			);
 		}
-		deps.emit(record.id, topic, sequence, payload);
+		deps.emit(record.userId, record.id, topic, sequence, payload);
 	}
 
 	function finish(
@@ -232,7 +244,7 @@ export function createExecutionRegistry(
 	}
 
 	return {
-		async start(request) {
+		async start(userId, workspace, request) {
 			const running = [...records.values()].filter(
 				(record) =>
 					record.userId === userId &&
@@ -256,7 +268,10 @@ export function createExecutionRegistry(
 			}
 
 			// Resolve before inserting history so unknown connections fail fast.
-			const connection = await deps.resolveConnection(request.connectionId);
+			const connection = await deps.resolveConnection(
+				workspace,
+				request.connectionId,
+			);
 
 			const id = crypto.randomUUID();
 			const isPredefined = connection.source === "predefined";
@@ -288,13 +303,19 @@ export function createExecutionRegistry(
 				cancelRequested: false,
 			};
 			records.set(id, record);
+			log.audit("execution.start", {
+				userId,
+				executionId: id,
+				connectionId: request.connectionId,
+			});
 			void run(record, connection);
 			return { executionId: id };
 		},
 
-		async cancel(executionId) {
+		async cancel(userId, executionId) {
 			const record = records.get(executionId);
-			if (record === undefined) {
+			// Same response for missing and foreign executions — no existence leak.
+			if (record === undefined || record.userId !== userId) {
 				throw new ServiceError(
 					ErrorCodes.NotFound,
 					`Execution '${executionId}' not found`,
@@ -309,13 +330,14 @@ export function createExecutionRegistry(
 				return { executionId, status: record.status };
 			}
 			record.cancelRequested = true;
+			log.audit("execution.cancel", { userId, executionId });
 			await record.session?.cancel();
 			return { executionId, status: record.status };
 		},
 
-		replay(executionId, afterSequence) {
+		replay(userId, executionId, afterSequence) {
 			const record = records.get(executionId);
-			if (record === undefined) {
+			if (record === undefined || record.userId !== userId) {
 				throw new ServiceError(
 					ErrorCodes.NotFound,
 					`Execution '${executionId}' not found`,

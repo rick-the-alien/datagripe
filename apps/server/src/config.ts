@@ -12,6 +12,13 @@ const envSchema = z.object({
 	SESSION_SECRET: z.string().min(32),
 	/** Predefined connections file; defaults to connections.json at repo root. */
 	CONNECTIONS_FILE: z.string().min(1).optional(),
+	/** Allow account signup after the bootstrap user exists. */
+	ALLOW_SIGNUP: z
+		.enum(["true", "false"])
+		.default("false")
+		.transform((value) => value === "true"),
+	/** Comma-separated hostnames allowed despite SSRF private-range blocks. */
+	TARGET_HOST_ALLOWLIST: z.string().default(""),
 	QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 	QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10_000),
 	QUERY_MAX_BYTES: z.coerce.number().int().positive().default(25_000_000),

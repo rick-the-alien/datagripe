@@ -54,6 +54,7 @@ let events: Array<{
 	payload: unknown;
 }>;
 let USER_ID = "";
+const WORKSPACE = { id: "00000000-0000-4000-8000-0000000000ff", name: "Local" };
 
 const LIMITS = {
 	timeoutMs: 1_000,
@@ -84,10 +85,9 @@ beforeAll(async () => {
 	registry = createExecutionRegistry({
 		adapter,
 		appDb,
-		userId: USER_ID,
 		limits: LIMITS,
 		resolveConnection: async () => TARGET,
-		emit: (executionId, topic, sequence, payload) => {
+		emit: (_userId, executionId, topic, sequence, payload) => {
 			events.push({ executionId, topic, sequence, payload });
 		},
 	});
@@ -131,6 +131,8 @@ async function waitForTerminal(
 describe("execution registry", () => {
 	pgTest("SELECT streams columns and rows, then completes", async () => {
 		const { executionId } = await registry.start(
+			USER_ID,
+			WORKSPACE,
 			request("select id, sku, title from shop.products order by id"),
 		);
 		expect(await waitForTerminal(registry, executionId)).toBe("succeeded");
@@ -166,6 +168,8 @@ describe("execution registry", () => {
 		"multi-statement document runs sequentially with progress",
 		async () => {
 			const { executionId } = await registry.start(
+				USER_ID,
+				WORKSPACE,
 				request(
 					"create temp table multi_t (id int); insert into multi_t values (1),(2); select count(*) as n from multi_t",
 				),
@@ -190,14 +194,15 @@ describe("execution registry", () => {
 		const small = createExecutionRegistry({
 			adapter,
 			appDb,
-			userId: USER_ID,
 			limits: { ...LIMITS, maxRows: 5 },
 			resolveConnection: async () => TARGET,
-			emit: (executionId, topic, sequence, payload) => {
+			emit: (_userId, executionId, topic, sequence, payload) => {
 				events.push({ executionId, topic, sequence, payload });
 			},
 		});
 		const { executionId } = await small.start(
+			USER_ID,
+			WORKSPACE,
 			request("select generate_series(1, 100) AS n"),
 		);
 		expect(await waitForTerminal(small, executionId)).toBe("succeeded");
@@ -212,7 +217,11 @@ describe("execution registry", () => {
 	});
 
 	pgTest("statement timeout fails with QUERY_TIMEOUT", async () => {
-		const { executionId } = await registry.start(request("select pg_sleep(5)"));
+		const { executionId } = await registry.start(
+			USER_ID,
+			WORKSPACE,
+			request("select pg_sleep(5)"),
+		);
 		expect(await waitForTerminal(registry, executionId)).toBe("failed");
 		const failed = eventsFor(executionId).find(
 			(event) => event.topic === "execution.failed",
@@ -225,22 +234,26 @@ describe("execution registry", () => {
 		"cancellation returns cancelled quickly via the control path",
 		async () => {
 			const { executionId } = await registry.start(
+				USER_ID,
+				WORKSPACE,
 				request("select pg_sleep(30)"),
 			);
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			const before = Date.now();
-			const ack = await registry.cancel(executionId);
+			const ack = await registry.cancel(USER_ID, executionId);
 			expect(ack.status).toBe("running");
 			expect(await waitForTerminal(registry, executionId)).toBe("cancelled");
 			expect(Date.now() - before).toBeLessThan(5_000);
 			// Idempotent: cancelling again returns the terminal state.
-			const again = await registry.cancel(executionId);
+			const again = await registry.cancel(USER_ID, executionId);
 			expect(again.status).toBe("cancelled");
 		},
 	);
 
 	pgTest("syntax error fails with the database message", async () => {
 		const { executionId } = await registry.start(
+			USER_ID,
+			WORKSPACE,
 			request("select * from no_such_table_xyz"),
 		);
 		expect(await waitForTerminal(registry, executionId)).toBe("failed");
@@ -255,14 +268,15 @@ describe("execution registry", () => {
 		const ro = createExecutionRegistry({
 			adapter,
 			appDb,
-			userId: USER_ID,
 			limits: LIMITS,
 			resolveConnection: async () => readOnly,
-			emit: (executionId, topic, sequence, payload) => {
+			emit: (_userId, executionId, topic, sequence, payload) => {
 				events.push({ executionId, topic, sequence, payload });
 			},
 		});
 		const { executionId } = await ro.start(
+			USER_ID,
+			WORKSPACE,
 			request("create table should_not_exist (id int)"),
 		);
 		expect(await waitForTerminal(ro, executionId)).toBe("failed");
@@ -273,23 +287,38 @@ describe("execution registry", () => {
 	});
 
 	pgTest("concurrency limit rejects excess executions", async () => {
-		const first = await registry.start(request("select pg_sleep(5)"));
-		const second = await registry.start(request("select pg_sleep(5)"));
-		await expect(registry.start(request("select 1"))).rejects.toMatchObject({
+		const first = await registry.start(
+			USER_ID,
+			WORKSPACE,
+			request("select pg_sleep(5)"),
+		);
+		const second = await registry.start(
+			USER_ID,
+			WORKSPACE,
+			request("select pg_sleep(5)"),
+		);
+		await expect(
+			registry.start(USER_ID, WORKSPACE, request("select 1")),
+		).rejects.toMatchObject({
 			code: "RATE_LIMITED",
 		});
-		await registry.cancel(first.executionId);
-		await registry.cancel(second.executionId);
+		await registry.cancel(USER_ID, first.executionId);
+		await registry.cancel(USER_ID, second.executionId);
 		await waitForTerminal(registry, first.executionId);
 		await waitForTerminal(registry, second.executionId);
 	});
 
 	pgTest("replay returns buffered events after a sequence", async () => {
-		const { executionId } = await registry.start(request("select 1 AS one"));
+		const { executionId } = await registry.start(
+			USER_ID,
+			WORKSPACE,
+			request("select 1 AS one"),
+		);
 		expect(await waitForTerminal(registry, executionId)).toBe("succeeded");
-		const all = registry.replay(executionId, 0);
+		const all = registry.replay(USER_ID, executionId, 0);
 		expect(all.length).toBeGreaterThanOrEqual(4);
 		const tail = registry.replay(
+			USER_ID,
 			executionId,
 			all[all.length - 2]?.sequence ?? 0,
 		);
@@ -299,7 +328,7 @@ describe("execution registry", () => {
 
 	pgTest("start with no executable statement is rejected", async () => {
 		await expect(
-			registry.start(request("-- only a comment")),
+			registry.start(USER_ID, WORKSPACE, request("-- only a comment")),
 		).rejects.toMatchObject({ code: "BAD_REQUEST" });
 	});
 });

@@ -157,6 +157,7 @@ function ConnectionRow(props: { connection: ConnectionMetadata }) {
 					<button
 						type="button"
 						title="Refresh"
+						aria-label={`Refresh ${connection.name}`}
 						onClick={() => void explorer.refresh(connection.id)}
 					>
 						⟳
@@ -164,6 +165,7 @@ function ConnectionRow(props: { connection: ConnectionMetadata }) {
 					<button
 						type="button"
 						title={connection.source === "predefined" ? "View" : "Edit"}
+						aria-label={`${connection.source === "predefined" ? "View" : "Edit"} ${connection.name}`}
 						onClick={() => connections.openEditDialog(connection)}
 					>
 						✎
@@ -172,6 +174,7 @@ function ConnectionRow(props: { connection: ConnectionMetadata }) {
 						<button
 							type="button"
 							title="Delete"
+							aria-label={`Delete ${connection.name}`}
 							onClick={() => {
 								if (window.confirm(`Delete connection "${connection.name}"?`)) {
 									void connections.remove(connection.id);

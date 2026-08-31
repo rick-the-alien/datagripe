@@ -7,11 +7,16 @@ import { InvalidIntrospectionPathError } from "@datagripe/database-adapters";
 import { ZodError } from "zod";
 import { ServiceError } from "../connections/service";
 import { log } from "../log";
+import { SsrfBlockedError } from "../security/ssrf";
 import type { Dispatch } from "./dispatch";
 import type { SocketHub } from "./hub";
 
 export type SocketData = {
 	requestId: string;
+	userId: string;
+	sessionId: string;
+	workspace: { id: string; name: string };
+	role: "owner" | "editor" | "viewer";
 };
 
 type ServerWebSocket = Bun.ServerWebSocket<SocketData>;
@@ -79,7 +84,16 @@ export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 			const request = result.data;
 			void (async () => {
 				try {
-					const payload = await dispatch(request.action, request.payload);
+					const payload = await dispatch(
+						{
+							userId: ws.data.userId,
+							sessionId: ws.data.sessionId,
+							workspace: ws.data.workspace,
+							role: ws.data.role,
+						},
+						request.action,
+						request.payload,
+					);
 					respond(ws, {
 						version: 1,
 						kind: "response",
@@ -108,6 +122,8 @@ export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 							ErrorCodes.BadRequest,
 							error.message,
 						);
+					} else if (error instanceof SsrfBlockedError) {
+						failure(ws, request.requestId, error.code, error.message);
 					} else {
 						log.error("action failed", {
 							requestId: ws.data.requestId,

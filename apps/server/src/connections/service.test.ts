@@ -93,8 +93,8 @@ beforeAll(async () => {
 		appDb,
 		keyring: createKeyring(new Map([[1, "service-test-key-0123456789abcdef"]])),
 		adapter,
-		workspace,
 		predefined: new Map([[PREDEFINED.definition.id, PREDEFINED]]),
+		ssrf: { assertHostAllowed: async () => {} },
 	});
 });
 
@@ -118,7 +118,7 @@ const CREATE_REQUEST = {
 
 describe("connections service", () => {
 	pgTest("create stores ciphertext, returns safe metadata", async () => {
-		const created = await service.createConnection(CREATE_REQUEST);
+		const created = await service.createConnection(workspace, CREATE_REQUEST);
 		expect(created).toMatchObject({
 			name: "Test PG",
 			source: "managed",
@@ -138,7 +138,7 @@ describe("connections service", () => {
 	});
 
 	pgTest("list returns managed and predefined, never secrets", async () => {
-		const list = await service.listConnections();
+		const list = await service.listConnections(workspace);
 		expect(list.length).toBeGreaterThanOrEqual(2);
 		const predefined = list.find((c) => c.id === "local-dev");
 		expect(predefined).toMatchObject({ source: "predefined" });
@@ -149,8 +149,8 @@ describe("connections service", () => {
 	});
 
 	pgTest("update changes fields and re-encrypts a new password", async () => {
-		const [before] = await service.listConnections();
-		const managed = await service.listConnections();
+		const [before] = await service.listConnections(workspace);
+		const managed = await service.listConnections(workspace);
 		const target = managed.find((c) => c.source === "managed");
 		expect(target).toBeDefined();
 		if (target === undefined) {
@@ -160,7 +160,7 @@ describe("connections service", () => {
 			SELECT ciphertext FROM connection_secrets WHERE connection_id = ${target.id}
 		`;
 
-		const updated = await service.updateConnection({
+		const updated = await service.updateConnection(workspace, {
 			id: target.id,
 			name: "Renamed PG",
 			password: "new-secret-pw-2",
@@ -181,13 +181,15 @@ describe("connections service", () => {
 
 	pgTest("predefined connections reject mutations", async () => {
 		await expect(
-			service.updateConnection({
+			service.updateConnection(workspace, {
 				id: "local-dev",
 				name: "Hacked",
 				idempotencyKey: "test-key-0003",
 			}),
 		).rejects.toMatchObject({ code: "CONNECTION_READ_ONLY" });
-		await expect(service.deleteConnection("local-dev")).rejects.toMatchObject({
+		await expect(
+			service.deleteConnection(workspace, "local-dev"),
+		).rejects.toMatchObject({
 			code: "CONNECTION_READ_ONLY",
 		});
 	});
@@ -195,7 +197,7 @@ describe("connections service", () => {
 	pgTest(
 		"testConnection works for drafts, managed, and predefined",
 		async () => {
-			const draft = await service.testConnection({
+			const draft = await service.testConnection(workspace, {
 				draft: {
 					name: "Draft",
 					adapter: "postgres",
@@ -210,17 +212,17 @@ describe("connections service", () => {
 			});
 			expect(draft.ok).toBe(true);
 
-			const managed = (await service.listConnections()).find(
+			const managed = (await service.listConnections(workspace)).find(
 				(c) => c.source === "managed",
 			);
 			if (managed !== undefined) {
-				const byId = await service.testConnection({
+				const byId = await service.testConnection(workspace, {
 					connectionId: managed.id,
 				});
 				expect(byId.ok).toBe(true);
 			}
 
-			const predefined = await service.testConnection({
+			const predefined = await service.testConnection(workspace, {
 				connectionId: "local-dev",
 			});
 			expect(predefined.ok).toBe(true);
@@ -228,26 +230,41 @@ describe("connections service", () => {
 	);
 
 	pgTest("schema.children introspects and caches", async () => {
-		const nodes = await service.schemaChildren("local-dev", [], false);
+		const nodes = await service.schemaChildren(
+			workspace,
+			"local-dev",
+			[],
+			false,
+		);
 		expect(nodes.some((node) => node.kind === "schema")).toBe(true);
 
-		const cached = await service.schemaChildren("local-dev", [], false);
+		const cached = await service.schemaChildren(
+			workspace,
+			"local-dev",
+			[],
+			false,
+		);
 		expect(cached).toBe(nodes);
 
-		const refreshed = await service.schemaChildren("local-dev", [], true);
+		const refreshed = await service.schemaChildren(
+			workspace,
+			"local-dev",
+			[],
+			true,
+		);
 		expect(refreshed).not.toBe(nodes);
 		expect(refreshed).toEqual(nodes);
 	});
 
 	pgTest("delete removes connection and secret", async () => {
-		const managed = (await service.listConnections()).find(
+		const managed = (await service.listConnections(workspace)).find(
 			(c) => c.source === "managed",
 		);
 		expect(managed).toBeDefined();
 		if (managed === undefined) {
 			return;
 		}
-		await service.deleteConnection(managed.id);
+		await service.deleteConnection(workspace, managed.id);
 		const connections = await appDb`
 			SELECT id FROM connections WHERE id = ${managed.id}
 		`;

@@ -17,10 +17,21 @@ export class SocketHub {
 		this.sockets.delete(ws);
 	}
 
-	broadcast(event: ServerEvent): void {
+	broadcast(userId: string, event: ServerEvent): void {
 		const text = JSON.stringify(event);
 		for (const ws of this.sockets) {
-			ws.send(text);
+			if (ws.data.userId === userId) {
+				ws.send(text);
+			}
+		}
+	}
+
+	/** Close every socket bound to a revoked/expired session. */
+	closeForSession(sessionId: string): void {
+		for (const ws of this.sockets) {
+			if (ws.data.sessionId === sessionId) {
+				ws.close(1000, "session ended");
+			}
 		}
 	}
 

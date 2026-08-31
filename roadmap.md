@@ -46,14 +46,14 @@ Exit: a user can save a connection and browse schemas/tables/columns without see
 
 Exit: queries run, stream bounded results, cancel reliably, and produce an auditable terminal state.
 
-## Phase 4 — Product hardening
+## Phase 4 — Product hardening · shipped 2026-08-31
 
-- [ ] Authentication provider + cookie sessions, CSRF, origin validation
-- [ ] Workspace RBAC via `workspace_members`
-- [ ] SSRF controls and deployment allowlists
-- [ ] Rate and concurrency limits
-- [ ] CSV/JSON export, keyboard-accessibility pass
-- [ ] Observability, backup/restore practice, load tests
+- [x] Authentication provider + cookie sessions, CSRF, origin validation
+- [x] Workspace RBAC via `workspace_members`
+- [x] SSRF controls and deployment allowlists
+- [x] Rate and concurrency limits
+- [x] CSV/JSON export, keyboard-accessibility pass
+- [x] Observability, backup/restore practice, load tests
 
 Exit: production-readiness review passes for the intended deployment model.
 

@@ -11,6 +11,9 @@ export const WS_PROTOCOL_VERSION = 1;
 
 export const clientActionSchema = z.enum([
 	"workspace.open",
+	"workspace.members",
+	"workspace.member.add",
+	"workspace.member.remove",
 	"layout.save",
 	"document.get",
 	"document.create",

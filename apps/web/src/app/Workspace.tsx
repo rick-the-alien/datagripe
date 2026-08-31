@@ -10,6 +10,7 @@ import { ConnectionDialog } from "../components/ConnectionDialog";
 import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
+import { MembersDialog } from "../components/MembersDialog";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
@@ -22,6 +23,7 @@ import {
 	useExecutionsStore,
 	useExplorerStore,
 } from "../stores/runtime";
+import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
 import {
 	closeEditorPanels,
@@ -86,6 +88,12 @@ function saveActiveDocument(): void {
 
 export function Workspace() {
 	const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
+	const [showMembers, setShowMembers] = useState(false);
+	const sessionUser = useSessionStore((state) => state.bootstrap?.user);
+	const sessionWorkspace = useSessionStore(
+		(state) => state.bootstrap?.workspace,
+	);
+	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
 	const activeDocumentId = useViewsStore((state) =>
 		state.activeViewId !== null
@@ -231,6 +239,19 @@ export function Workspace() {
 				>
 					Save
 				</button>
+				<span className="dg-modal-actions-spacer" />
+				{sessionWorkspace !== null && sessionWorkspace !== undefined && (
+					<span className="dg-header-meta">
+						{sessionWorkspace.name} · {sessionWorkspace.role}
+					</span>
+				)}
+				<button type="button" onClick={() => setShowMembers(true)}>
+					Members
+				</button>
+				<span className="dg-header-meta">{sessionUser?.email}</span>
+				<button type="button" onClick={() => void logout()}>
+					Logout
+				</button>
 			</header>
 			<div className="dg-body">
 				<aside className="dg-sidebar">
@@ -265,6 +286,7 @@ export function Workspace() {
 				</div>
 			</div>
 			<ConnectionDialog />
+			{showMembers && <MembersDialog onClose={() => setShowMembers(false)} />}
 		</div>
 	);
 }

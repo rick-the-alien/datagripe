@@ -14,6 +14,8 @@ import type {
 } from "@datagripe/database-adapters";
 import type { SecretKeyring } from "../crypto/keyring";
 import type { AppDb } from "../db/app/pool";
+import { log } from "../log";
+import type { SsrfPolicy } from "../security/ssrf";
 import type { PredefinedEntry } from "./predefined";
 
 /** Domain error with a protocol error code. */
@@ -46,29 +48,38 @@ type ConnectionRow = {
 	updated_at: string;
 };
 
+export interface WorkspaceRef {
+	id: string;
+	name: string;
+}
+
 export interface ConnectionsServiceDeps {
 	appDb: AppDb;
 	keyring: SecretKeyring;
 	adapter: DatabaseAdapter;
-	workspace: { id: string; name: string };
 	predefined: ReadonlyMap<string, PredefinedEntry>;
+	ssrf: SsrfPolicy;
 	/** Introspection cache TTL in ms (default 30s). */
 	introspectionCacheTtlMs?: number;
 }
 
 export interface ConnectionsService {
-	listConnections: () => Promise<ConnectionMetadata[]>;
+	listConnections: (workspace: WorkspaceRef) => Promise<ConnectionMetadata[]>;
 	createConnection: (
+		workspace: WorkspaceRef,
 		request: ConnectionCreateRequest,
 	) => Promise<ConnectionMetadata>;
 	updateConnection: (
+		workspace: WorkspaceRef,
 		request: ConnectionUpdateRequest,
 	) => Promise<ConnectionMetadata>;
-	deleteConnection: (id: string) => Promise<void>;
+	deleteConnection: (workspace: WorkspaceRef, id: string) => Promise<void>;
 	testConnection: (
+		workspace: WorkspaceRef,
 		request: ConnectionTestRequest,
 	) => Promise<ConnectionTestResult>;
 	schemaChildren: (
+		workspace: WorkspaceRef,
 		connectionId: string,
 		path: SchemaPathSegment[],
 		refresh: boolean,
@@ -76,6 +87,7 @@ export interface ConnectionsService {
 	/** Resolve a connection with its secret for server-side execution.
 	 * Never exposed over the wire. */
 	resolveForExecution: (
+		workspace: WorkspaceRef,
 		connectionId: string,
 	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
 	/** Display name of a predefined connection, for history rendering. */
@@ -103,14 +115,17 @@ function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
 export function createConnectionsService(
 	deps: ConnectionsServiceDeps,
 ): ConnectionsService {
-	const { appDb, keyring, adapter, workspace, predefined } = deps;
+	const { appDb, keyring, adapter, predefined, ssrf } = deps;
 	const cacheTtl = deps.introspectionCacheTtlMs ?? 30_000;
 	const introspectionCache = new Map<
 		string,
 		{ expiresAt: number; nodes: SchemaNode[] }
 	>();
 
-	function predefinedMetadata(entry: PredefinedEntry): ConnectionMetadata {
+	function predefinedMetadata(
+		workspace: WorkspaceRef,
+		entry: PredefinedEntry,
+	): ConnectionMetadata {
 		const { definition } = entry;
 		return {
 			id: definition.id,
@@ -129,7 +144,7 @@ export function createConnectionsService(
 		};
 	}
 
-	function visiblePredefined(): PredefinedEntry[] {
+	function visiblePredefined(workspace: WorkspaceRef): PredefinedEntry[] {
 		return [...predefined.values()].filter(
 			(entry) =>
 				entry.definition.workspaces.includes("*") ||
@@ -146,9 +161,25 @@ export function createConnectionsService(
 		}
 	}
 
-	async function resolveConnection(id: string): Promise<ResolvedConnection> {
+	async function guardHost(host: string): Promise<void> {
+		try {
+			await ssrf.assertHostAllowed(host);
+		} catch (error) {
+			log.audit("ssrf.blocked", {
+				host,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			throw error;
+		}
+	}
+
+	async function resolveConnection(
+		workspace: WorkspaceRef,
+		id: string,
+	): Promise<ResolvedConnection> {
 		const entry = predefined.get(id);
 		if (entry !== undefined) {
+			await guardHost(entry.resolved.host);
 			return entry.resolved;
 		}
 		const rows = await appDb<
@@ -166,6 +197,7 @@ export function createConnectionsService(
 				`Connection '${id}' not found`,
 			);
 		}
+		await guardHost(row.host);
 		return {
 			adapter: row.adapter,
 			host: row.host,
@@ -179,19 +211,22 @@ export function createConnectionsService(
 	}
 
 	return {
-		async listConnections() {
+		async listConnections(workspace) {
 			const rows = await appDb<ConnectionRow[]>`
 				SELECT * FROM connections
 				WHERE workspace_id = ${workspace.id}
 				ORDER BY name
 			`;
 			return [
-				...visiblePredefined().map(predefinedMetadata),
+				...visiblePredefined(workspace).map((entry) =>
+					predefinedMetadata(workspace, entry),
+				),
 				...rows.map(rowToMetadata),
 			].sort((a, b) => a.name.localeCompare(b.name));
 		},
 
-		async createConnection(request) {
+		async createConnection(workspace, request) {
+			await guardHost(request.host);
 			const secret = keyring.encrypt(request.password);
 			const rows = await appDb.begin(async (tx) => {
 				const inserted = await tx<ConnectionRow[]>`
@@ -219,11 +254,18 @@ export function createConnectionsService(
 			if (row === undefined) {
 				throw new ServiceError(ErrorCodes.Internal, "Insert returned no row");
 			}
+			log.audit("connection.create", {
+				workspaceId: workspace.id,
+				connectionId: row.id,
+			});
 			return rowToMetadata(row);
 		},
 
-		async updateConnection(request) {
+		async updateConnection(workspace, request) {
 			requireManagedId(request.id);
+			if (request.host !== undefined) {
+				await guardHost(request.host);
+			}
 			const existing = await appDb<ConnectionRow[]>`
 				SELECT * FROM connections
 				WHERE id = ${request.id} AND workspace_id = ${workspace.id}
@@ -273,10 +315,14 @@ export function createConnectionsService(
 			if (row === undefined) {
 				throw new ServiceError(ErrorCodes.Internal, "Update returned no row");
 			}
+			log.audit("connection.update", {
+				workspaceId: workspace.id,
+				connectionId: row.id,
+			});
 			return rowToMetadata(row);
 		},
 
-		async deleteConnection(id) {
+		async deleteConnection(workspace, id) {
 			requireManagedId(id);
 			const rows = await appDb<{ id: string }[]>`
 				DELETE FROM connections
@@ -289,13 +335,18 @@ export function createConnectionsService(
 					`Connection '${id}' not found`,
 				);
 			}
+			log.audit("connection.delete", {
+				workspaceId: workspace.id,
+				connectionId: id,
+			});
 		},
 
-		async testConnection(request) {
+		async testConnection(workspace, request) {
 			let resolved: ResolvedConnection;
 			if ("connectionId" in request) {
-				resolved = await resolveConnection(request.connectionId);
+				resolved = await resolveConnection(workspace, request.connectionId);
 			} else {
+				await guardHost(request.draft.host);
 				resolved = {
 					adapter: request.draft.adapter,
 					host: request.draft.host,
@@ -310,8 +361,8 @@ export function createConnectionsService(
 			return adapter.testConnection(resolved);
 		},
 
-		async resolveForExecution(connectionId) {
-			const resolved = await resolveConnection(connectionId);
+		async resolveForExecution(workspace, connectionId) {
+			const resolved = await resolveConnection(workspace, connectionId);
 			return {
 				...resolved,
 				source: predefined.has(connectionId) ? "predefined" : "managed",
@@ -322,13 +373,13 @@ export function createConnectionsService(
 			return predefined.get(connectionId)?.definition.name;
 		},
 
-		async schemaChildren(connectionId, path, refresh) {
-			const cacheKey = `${connectionId}:${JSON.stringify(path)}`;
+		async schemaChildren(workspace, connectionId, path, refresh) {
+			const cacheKey = `${workspace.id}:${connectionId}:${JSON.stringify(path)}`;
 			const cached = introspectionCache.get(cacheKey);
 			if (!refresh && cached !== undefined && cached.expiresAt > Date.now()) {
 				return cached.nodes;
 			}
-			const resolved = await resolveConnection(connectionId);
+			const resolved = await resolveConnection(workspace, connectionId);
 			const nodes = await adapter.introspectChildren(resolved, path);
 			introspectionCache.set(cacheKey, {
 				expiresAt: Date.now() + cacheTtl,

@@ -1,9 +1,19 @@
 import type { HistoryEntry, HistoryListResult } from "@datagripe/contracts";
 import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
-import { useDocumentsStore } from "../stores/documents";
+import { type DocumentsState, useDocumentsStore } from "../stores/documents";
 import { useConnectionsStore, useExecutionsStore } from "../stores/runtime";
 import { useViewsStore } from "../stores/views";
+import { downloadText, toCsv, toJson } from "../utils/export";
+
+function documentsTitle(
+	state: DocumentsState,
+	documentId: string | undefined,
+): string | undefined {
+	return documentId === undefined
+		? undefined
+		: state.documents[documentId]?.title.replace(/\.sql$/, "");
+}
 
 /**
  * Results panel (docs/spec/query-execution.md): follows the active
@@ -173,6 +183,42 @@ export function ResultsPanel() {
 						`Cancelled after ${execution.elapsedMs ?? "?"} ms`}
 				</span>
 				<span className="dg-modal-actions-spacer" />
+				{resultSet !== undefined && resultSet.columns.length > 0 && (
+					<>
+						<button
+							type="button"
+							title="Download result set as CSV"
+							onClick={() => {
+								const title =
+									documentsTitle(useDocumentsStore.getState(), documentId) ??
+									"result";
+								downloadText(
+									`${title}.csv`,
+									toCsv(resultSet.columns, resultSet.rows),
+									"text/csv",
+								);
+							}}
+						>
+							CSV
+						</button>
+						<button
+							type="button"
+							title="Download result set as JSON"
+							onClick={() => {
+								const title =
+									documentsTitle(useDocumentsStore.getState(), documentId) ??
+									"result";
+								downloadText(
+									`${title}.json`,
+									toJson(resultSet.columns, resultSet.rows),
+									"application/json",
+								);
+							}}
+						>
+							JSON
+						</button>
+					</>
+				)}
 				<button
 					type="button"
 					onClick={() => setShowHistory((current) => !current)}

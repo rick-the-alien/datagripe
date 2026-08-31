@@ -1,3 +1,4 @@
+export * from "./auth";
 export * from "./connections";
 export * from "./documents";
 export * from "./errors";

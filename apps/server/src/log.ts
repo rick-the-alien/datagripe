@@ -25,4 +25,13 @@ export const log = {
 	warn: (message: string, fields?: LogFields) => write("warn", message, fields),
 	error: (message: string, fields?: LogFields) =>
 		write("error", message, fields),
+	/** Security-relevant events (auth, mutations, policy blocks). Never
+	 * passwords, secrets, or result values. */
+	audit: (event: string, fields?: LogFields) =>
+		write("info", "audit", { event, ...fields }),
+	debug: (message: string, fields?: LogFields) => {
+		if (process.env.NODE_ENV !== "production") {
+			write("info", message, fields);
+		}
+	},
 };

@@ -48,6 +48,16 @@ export function ConnectionDialog() {
 		}
 	}, [dialog]);
 
+	useEffect(() => {
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				store.closeDialog();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [store]);
+
 	if (dialog.mode === "closed") {
 		return null;
 	}
@@ -82,6 +92,11 @@ export function ConnectionDialog() {
 					<input
 						value={draft.name}
 						disabled={readOnly}
+						ref={(input) => {
+							if (!readOnly) {
+								input?.focus();
+							}
+						}}
 						onChange={(event) => patch({ name: event.target.value })}
 					/>
 				</label>

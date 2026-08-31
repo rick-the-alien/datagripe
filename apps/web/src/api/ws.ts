@@ -45,6 +45,13 @@ export class WsClient {
 		this.open();
 	}
 
+	/** Stop reconnecting and close the socket (logout, session expiry). */
+	disconnect(): void {
+		this.started = false;
+		this.socket?.close();
+		this.socket = null;
+	}
+
 	/** Called on every (re)open — re-run bootstrap loads here. */
 	onOpen(listener: () => void): () => void {
 		this.openListeners.add(listener);

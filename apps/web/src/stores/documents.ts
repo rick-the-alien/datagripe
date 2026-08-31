@@ -1,4 +1,6 @@
+import type { Document, DocumentListEntry } from "@datagripe/contracts";
 import { create } from "zustand";
+import { WsError, type WsRequestFn, wsClient } from "../api/ws";
 import { db } from "../persistence/db";
 import { createDebouncer, type Debouncer } from "../persistence/debounce";
 import { mergeDrafts, type RecoveredDocument } from "../persistence/drafts";
@@ -16,7 +18,16 @@ export type DocumentsStoreDeps = {
 	debouncer: Debouncer;
 	now: () => string;
 	newId: () => string;
+	/** Server sync channel; absent in tests → local-only behavior. */
+	ws?: { request: WsRequestFn; isOpen: () => boolean };
 };
+
+/** A save conflict: the server moved since our base revision. */
+export interface DocumentConflict {
+	revision: number;
+	content: string;
+	updatedAt: string;
+}
 
 export type DocumentsState = {
 	documents: Record<string, EditorDocument>;
@@ -25,11 +36,19 @@ export type DocumentsState = {
 	/** Per-document preferences (default connection) from documentPrefs. */
 	prefs: Record<string, { defaultConnectionId?: string | undefined }>;
 	hydrated: boolean;
+	/** Last server state seen via workspace.open (6a shared files). */
+	serverDocs: Record<string, DocumentListEntry>;
+	/** Documents with an unresolved save conflict (409). */
+	conflicts: Record<string, DocumentConflict>;
+	/** Permission/validation save failures (per document). */
+	saveErrors: Record<string, string>;
 	hydrate: () => Promise<void>;
+	syncFromServer: (serverDocs: DocumentListEntry[]) => Promise<void>;
 	createDocument: (title?: string) => EditorDocument;
 	renameDocument: (id: string, title: string) => void;
 	updateContent: (id: string, content: string) => void;
 	saveDocument: (id: string) => Promise<void>;
+	resolveConflict: (id: string, choice: "reload" | "keep") => Promise<void>;
 	discardDocument: (id: string) => Promise<void>;
 	setDefaultConnection: (id: string, connectionId: string) => void;
 };
@@ -62,114 +81,132 @@ export function nextUntitledIndex(titles: Iterable<string>): number {
 }
 
 export function createDocumentsStore(deps: DocumentsStoreDeps) {
-	const { debouncer, now, newId } = deps;
+	const { debouncer, now, newId, ws } = deps;
 
-	return create<DocumentsState>()((set, get) => ({
-		documents: {},
-		order: [],
-		prefs: {},
-		hydrated: false,
-
-		async hydrate() {
-			const [documents, drafts, prefs] = await Promise.all([
-				db.documents.toArray(),
-				db.drafts.toArray(),
-				db.documentPrefs.toArray(),
-			]);
-			const recovered = mergeDrafts(documents, drafts);
-			set({
-				documents: Object.fromEntries(recovered.map((doc) => [doc.id, doc])),
-				order: recovered
-					.slice()
-					.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-					.map((doc) => doc.id),
-				prefs: Object.fromEntries(
-					prefs.map((pref) => [
-						pref.id,
-						{ defaultConnectionId: pref.defaultConnectionId },
-					]),
-				),
-				hydrated: true,
-			});
-		},
-
-		createDocument(title) {
-			const state = get();
-			const resolvedTitle =
-				title ??
-				`query-${nextUntitledIndex(
-					state.order.map((id) => state.documents[id]?.title ?? ""),
-				)}.sql`;
-			const timestamp = now();
-			const doc: EditorDocument = {
-				id: newId(),
-				title: resolvedTitle,
-				language: "sql",
-				savedContent: "",
-				currentContent: "",
-				revision: 0,
-				dirty: false,
-				createdAt: timestamp,
-				updatedAt: timestamp,
-			};
-			set({
-				documents: { ...state.documents, [doc.id]: doc },
-				order: [...state.order, doc.id],
-			});
-			// Persist immediately so the document survives reload even before
-			// the first keystroke.
-			void db.documents.put({
-				id: doc.id,
-				title: doc.title,
-				content: "",
-				revision: 0,
-				createdAt: doc.createdAt,
-				updatedAt: doc.updatedAt,
-			});
-			return doc;
-		},
-
-		renameDocument(id, title) {
-			const doc = get().documents[id];
-			if (doc === undefined || title.length === 0) {
-				return;
-			}
-			const renamed = { ...doc, title, updatedAt: now() };
-			set({ documents: { ...get().documents, [id]: renamed } });
-			void db.documents.update(id, { title, updatedAt: renamed.updatedAt });
-		},
-
-		updateContent(id, content) {
-			const doc = get().documents[id];
-			if (doc === undefined || doc.currentContent === content) {
-				return;
-			}
-			const updated: EditorDocument = {
-				...doc,
-				currentContent: content,
-				dirty: content !== doc.savedContent,
-				updatedAt: now(),
-			};
-			set({ documents: { ...get().documents, [id]: updated } });
-			debouncer.schedule(
+	/** Fetch full server document content. */
+	async function fetchServerDocument(
+		id: string,
+	): Promise<Document | undefined> {
+		if (ws === undefined || !ws.isOpen()) {
+			return undefined;
+		}
+		try {
+			const result = await ws.request<{ document: Document }>("document.get", {
 				id,
-				() => checkpointDraft(updated),
-				DRAFT_CHECKPOINT_DELAY_MS,
-			);
-		},
+			});
+			return result.document;
+		} catch {
+			return undefined;
+		}
+	}
 
-		async saveDocument(id) {
-			const doc = get().documents[id];
-			if (doc === undefined) {
-				return;
-			}
+	return create<DocumentsState>()((set, get) => {
+		/**
+		 * Save against the server when connected, else local-only (pushed on
+		 * the next sync). `baseRevision` is the revision the save guards on
+		 * (force saves guard on the conflict's server revision). A CONFLICT
+		 * response flags the document for the banner; transport failures fall
+		 * back to the local save.
+		 */
+		async function saveInternal(
+			doc: EditorDocument,
+			baseRevision: number,
+			force: boolean,
+		): Promise<void> {
 			// Cancel the pending checkpoint so it cannot rewrite the drafts
 			// row after save deletes it.
-			debouncer.cancel(id);
+			debouncer.cancel(doc.id);
+			const onServer =
+				get().serverDocs[doc.id] !== undefined || baseRevision > 0;
+			let revision = baseRevision + 1;
+
+			if (ws?.isOpen()) {
+				try {
+					if (onServer) {
+						const result = await ws.request<{ document: Document }>(
+							"document.save",
+							{
+								id: doc.id,
+								content: doc.currentContent,
+								revision: baseRevision,
+								...(force ? { force: true } : {}),
+								...(doc.title !== get().serverDocs[doc.id]?.title
+									? { title: doc.title }
+									: {}),
+								idempotencyKey: crypto.randomUUID(),
+							},
+						);
+						revision = result.document.revision;
+						set({
+							serverDocs: {
+								...get().serverDocs,
+								[doc.id]: {
+									id: doc.id,
+									title: result.document.title,
+									revision,
+									updatedAt: result.document.updatedAt,
+								},
+							},
+						});
+					} else {
+						await ws.request("document.create", {
+							id: doc.id,
+							title: doc.title,
+							content: doc.currentContent,
+							idempotencyKey: crypto.randomUUID(),
+						});
+						revision = 0;
+						set({
+							serverDocs: {
+								...get().serverDocs,
+								[doc.id]: {
+									id: doc.id,
+									title: doc.title,
+									revision: 0,
+									updatedAt: now(),
+								},
+							},
+						});
+					}
+				} catch (error) {
+					if (error instanceof WsError) {
+						if (error.code === "CONFLICT") {
+							const details = error.details as
+								| { document?: Document }
+								| undefined;
+							if (details?.document !== undefined) {
+								set({
+									conflicts: {
+										...get().conflicts,
+										[doc.id]: {
+											revision: details.document.revision,
+											content: details.document.content,
+											updatedAt: details.document.updatedAt,
+										},
+									},
+								});
+								return;
+							}
+						}
+						// Permission/validation errors are not retried silently —
+						// surface them; the draft stays dirty either way.
+						set({
+							saveErrors: {
+								...get().saveErrors,
+								[doc.id]: error.message,
+							},
+						});
+						return;
+					}
+					// Transport failure (socket down) → fall through to the local
+					// save; the next sync pushes it (server revision stays behind).
+				}
+			}
+
 			const saved: EditorDocument = {
 				...doc,
 				savedContent: doc.currentContent,
-				revision: doc.revision + 1,
+				revision,
 				dirty: false,
 				updatedAt: now(),
 			};
@@ -183,37 +220,340 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 				createdAt: saved.createdAt,
 				updatedAt: saved.updatedAt,
 			});
-			await db.drafts.delete(id);
-			set({ documents: { ...get().documents, [id]: saved } });
-		},
+			await db.drafts.delete(doc.id);
+			set({ documents: { ...get().documents, [doc.id]: saved } });
+		}
 
-		async discardDocument(id) {
-			debouncer.cancel(id);
-			await Promise.all([
-				db.documents.delete(id),
-				db.drafts.delete(id),
-				db.viewStates.where("documentId").equals(id).delete(),
-				db.documentPrefs.delete(id),
-			]);
-			const { [id]: _removed, ...documents } = get().documents;
-			const { [id]: _removedPrefs, ...prefs } = get().prefs;
-			set({
-				documents,
-				prefs,
-				order: get().order.filter((existing) => existing !== id),
-			});
-		},
+		return {
+			documents: {},
+			order: [],
+			prefs: {},
+			hydrated: false,
+			serverDocs: {},
+			conflicts: {},
+			saveErrors: {},
 
-		setDefaultConnection(id, connectionId) {
-			set({
-				prefs: {
-					...get().prefs,
-					[id]: { defaultConnectionId: connectionId },
-				},
-			});
-			void db.documentPrefs.put({ id, defaultConnectionId: connectionId });
-		},
-	}));
+			async hydrate() {
+				const [documents, drafts, prefs] = await Promise.all([
+					db.documents.toArray(),
+					db.drafts.toArray(),
+					db.documentPrefs.toArray(),
+				]);
+				const recovered = mergeDrafts(documents, drafts);
+				set({
+					documents: Object.fromEntries(recovered.map((doc) => [doc.id, doc])),
+					order: recovered
+						.slice()
+						.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+						.map((doc) => doc.id),
+					prefs: Object.fromEntries(
+						prefs.map((pref) => [
+							pref.id,
+							{ defaultConnectionId: pref.defaultConnectionId },
+						]),
+					),
+					hydrated: true,
+				});
+			},
+
+			/**
+			 * Boot/reconnect merge with the shared workspace (6a). Rules:
+			 * - server doc unknown locally → fetch content, add clean;
+			 * - clean local doc behind server → adopt server content;
+			 * - dirty local doc behind server → keep the draft, flag conflict;
+			 * - local doc missing on server (rev 0) → create it server-side;
+			 * - local doc ahead of server (saved offline) → push on reconnect.
+			 * A dirty draft is never silently overwritten.
+			 */
+			async syncFromServer(serverDocs) {
+				const serverById = new Map(serverDocs.map((doc) => [doc.id, doc]));
+				const previousServer = get().serverDocs;
+				set({
+					serverDocs: Object.fromEntries(
+						serverDocs.map((doc) => [doc.id, doc]),
+					),
+				});
+
+				for (const serverDoc of serverDocs) {
+					const local = get().documents[serverDoc.id];
+					if (local === undefined) {
+						const fetched = await fetchServerDocument(serverDoc.id);
+						if (fetched === undefined) {
+							continue;
+						}
+						const timestamp = now();
+						const doc: EditorDocument = {
+							id: fetched.id,
+							title: fetched.title,
+							language: "sql",
+							savedContent: fetched.content,
+							currentContent: fetched.content,
+							revision: fetched.revision,
+							dirty: false,
+							createdAt: timestamp,
+							updatedAt: fetched.updatedAt,
+						};
+						set({
+							documents: { ...get().documents, [doc.id]: doc },
+							order: get().order.includes(doc.id)
+								? get().order
+								: [...get().order, doc.id],
+						});
+						void db.documents.put({
+							id: doc.id,
+							title: doc.title,
+							content: doc.savedContent,
+							revision: doc.revision,
+							createdAt: doc.createdAt,
+							updatedAt: doc.updatedAt,
+						});
+						continue;
+					}
+
+					if (serverDoc.revision > local.revision) {
+						const fetched = await fetchServerDocument(serverDoc.id);
+						if (fetched === undefined) {
+							continue;
+						}
+						if (!local.dirty) {
+							// Clean → adopt server content wholesale.
+							const adopted: EditorDocument = {
+								...local,
+								title: fetched.title,
+								savedContent: fetched.content,
+								currentContent: fetched.content,
+								revision: fetched.revision,
+								dirty: false,
+								updatedAt: fetched.updatedAt,
+							};
+							set({
+								documents: {
+									...get().documents,
+									[local.id]: adopted,
+								},
+							});
+							debouncer.cancel(local.id);
+							void db.drafts.delete(local.id);
+							void db.documents.put({
+								id: adopted.id,
+								title: adopted.title,
+								content: adopted.savedContent,
+								revision: adopted.revision,
+								createdAt: adopted.createdAt,
+								updatedAt: adopted.updatedAt,
+							});
+						} else {
+							// Dirty → keep the draft, flag the conflict.
+							set({
+								documents: {
+									...get().documents,
+									[local.id]: {
+										...local,
+										savedContent: fetched.content,
+										revision: fetched.revision,
+									},
+								},
+								conflicts: {
+									...get().conflicts,
+									[local.id]: {
+										revision: fetched.revision,
+										content: fetched.content,
+										updatedAt: fetched.updatedAt,
+									},
+								},
+							});
+						}
+						continue;
+					}
+
+					// Local is ahead (saved while offline) → push.
+					if (
+						local.revision > serverDoc.revision &&
+						!local.dirty &&
+						previousServer[serverDoc.id] !== undefined
+					) {
+						await get().saveDocument(serverDoc.id);
+					}
+				}
+
+				// Local documents unknown to the server → create them.
+				for (const id of get().order) {
+					const local = get().documents[id];
+					if (local === undefined || serverById.has(id) || local.revision > 0) {
+						continue;
+					}
+					if (ws === undefined || !ws.isOpen()) {
+						continue;
+					}
+					try {
+						await ws.request("document.create", {
+							id: local.id,
+							title: local.title,
+							content: local.savedContent,
+							idempotencyKey: crypto.randomUUID(),
+						});
+						set({
+							serverDocs: {
+								...get().serverDocs,
+								[local.id]: {
+									id: local.id,
+									title: local.title,
+									revision: 0,
+									updatedAt: local.updatedAt,
+								},
+							},
+						});
+					} catch {
+						// Offline or rejected — next sync retries.
+					}
+				}
+			},
+
+			async resolveConflict(id, choice) {
+				const conflict = get().conflicts[id];
+				const local = get().documents[id];
+				if (conflict === undefined || local === undefined) {
+					return;
+				}
+				const { [id]: _cleared, ...conflicts } = get().conflicts;
+				set({ conflicts });
+				if (choice === "reload") {
+					const adopted: EditorDocument = {
+						...local,
+						savedContent: conflict.content,
+						currentContent: conflict.content,
+						revision: conflict.revision,
+						dirty: false,
+						updatedAt: conflict.updatedAt,
+					};
+					set({ documents: { ...get().documents, [id]: adopted } });
+					debouncer.cancel(id);
+					await db.drafts.delete(id);
+					await db.documents.put({
+						id,
+						title: adopted.title,
+						content: adopted.savedContent,
+						revision: adopted.revision,
+						createdAt: adopted.createdAt,
+						updatedAt: adopted.updatedAt,
+					});
+				} else {
+					// Keep mine: force-save over the server revision.
+					await saveInternal(local, conflict.revision, true);
+				}
+			},
+
+			createDocument(title) {
+				const state = get();
+				const resolvedTitle =
+					title ??
+					`query-${nextUntitledIndex(
+						state.order.map((id) => state.documents[id]?.title ?? ""),
+					)}.sql`;
+				const timestamp = now();
+				const doc: EditorDocument = {
+					id: newId(),
+					title: resolvedTitle,
+					language: "sql",
+					savedContent: "",
+					currentContent: "",
+					revision: 0,
+					dirty: false,
+					createdAt: timestamp,
+					updatedAt: timestamp,
+				};
+				set({
+					documents: { ...state.documents, [doc.id]: doc },
+					order: [...state.order, doc.id],
+				});
+				// Persist immediately so the document survives reload even before
+				// the first keystroke.
+				void db.documents.put({
+					id: doc.id,
+					title: doc.title,
+					content: "",
+					revision: 0,
+					createdAt: doc.createdAt,
+					updatedAt: doc.updatedAt,
+				});
+				return doc;
+			},
+
+			renameDocument(id, title) {
+				const doc = get().documents[id];
+				if (doc === undefined || title.length === 0) {
+					return;
+				}
+				const renamed = { ...doc, title, updatedAt: now() };
+				set({ documents: { ...get().documents, [id]: renamed } });
+				void db.documents.update(id, { title, updatedAt: renamed.updatedAt });
+			},
+
+			updateContent(id, content) {
+				const doc = get().documents[id];
+				if (doc === undefined || doc.currentContent === content) {
+					return;
+				}
+				const updated: EditorDocument = {
+					...doc,
+					currentContent: content,
+					dirty: content !== doc.savedContent,
+					updatedAt: now(),
+				};
+				set({ documents: { ...get().documents, [id]: updated } });
+				debouncer.schedule(
+					id,
+					() => checkpointDraft(updated),
+					DRAFT_CHECKPOINT_DELAY_MS,
+				);
+			},
+
+			async saveDocument(id) {
+				const doc = get().documents[id];
+				if (doc === undefined) {
+					return;
+				}
+				await saveInternal(doc, doc.revision, false);
+			},
+
+			async discardDocument(id) {
+				debouncer.cancel(id);
+				if (ws?.isOpen() && get().serverDocs[id] !== undefined) {
+					await ws
+						.request("document.archive", {
+							id,
+							idempotencyKey: crypto.randomUUID(),
+						})
+						.catch(() => {});
+					const { [id]: _gone, ...serverDocs } = get().serverDocs;
+					set({ serverDocs });
+				}
+				await Promise.all([
+					db.documents.delete(id),
+					db.drafts.delete(id),
+					db.viewStates.where("documentId").equals(id).delete(),
+					db.documentPrefs.delete(id),
+				]);
+				const { [id]: _removed, ...documents } = get().documents;
+				const { [id]: _removedPrefs, ...prefs } = get().prefs;
+				set({
+					documents,
+					prefs,
+					order: get().order.filter((existing) => existing !== id),
+				});
+			},
+
+			setDefaultConnection(id, connectionId) {
+				set({
+					prefs: {
+						...get().prefs,
+						[id]: { defaultConnectionId: connectionId },
+					},
+				});
+				void db.documentPrefs.put({ id, defaultConnectionId: connectionId });
+			},
+		};
+	});
 }
 
 export type DocumentsStore = ReturnType<typeof createDocumentsStore>;
@@ -224,4 +564,5 @@ export const useDocumentsStore = createDocumentsStore({
 	debouncer: draftDebouncer,
 	now: () => new Date().toISOString(),
 	newId: () => crypto.randomUUID(),
+	ws: { request: wsClient.request, isOpen: () => wsClient.isOpen },
 });

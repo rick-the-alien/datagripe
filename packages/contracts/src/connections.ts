@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { adapterInfoSchema, connectionAdapterSchema } from "./adapters";
+import { documentListEntrySchema } from "./multiplayer";
 
 /** Connection contracts. Secrets are write-only; never serialized back to clients. */
 
@@ -136,6 +137,8 @@ export const workspaceOpenResultSchema = z.object({
 	connections: z.array(connectionMetadataSchema),
 	/** Capability descriptors for every registered adapter. */
 	adapters: z.array(adapterInfoSchema),
+	/** Shared workspace documents (metadata only; content via document.get). */
+	documents: z.array(documentListEntrySchema),
 });
 
 export type WorkspaceOpenResult = z.infer<typeof workspaceOpenResultSchema>;

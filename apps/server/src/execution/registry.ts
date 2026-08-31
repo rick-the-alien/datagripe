@@ -39,6 +39,7 @@ export interface BufferedEvent {
 interface ExecutionRecord {
 	id: string;
 	userId: string;
+	workspaceId: string;
 	connectionId: string;
 	documentId?: string;
 	status: ExecutionStatus;
@@ -60,7 +61,7 @@ export interface ExecutionRegistryDeps {
 	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
 	/** Broadcast a sequenced event for an execution. */
 	emit: (
-		userId: string,
+		target: { userId: string; workspaceId: string },
 		executionId: string,
 		topic: string,
 		sequence: number,
@@ -76,10 +77,11 @@ export interface ExecutionRegistry {
 	) => Promise<ExecutionStartResult>;
 	cancel: (
 		userId: string,
+		role: "owner" | "editor" | "viewer",
 		executionId: string,
 	) => Promise<ExecutionCancelResult>;
 	replay: (
-		userId: string,
+		workspaceId: string,
 		executionId: string,
 		afterSequence: number,
 	) => BufferedEvent[];
@@ -123,7 +125,13 @@ export function createExecutionRegistry(
 				(event) => !drop.has(event.sequence),
 			);
 		}
-		deps.emit(record.userId, record.id, topic, sequence, payload);
+		deps.emit(
+			{ userId: record.userId, workspaceId: record.workspaceId },
+			record.id,
+			topic,
+			sequence,
+			payload,
+		);
 	}
 
 	function finish(
@@ -164,6 +172,7 @@ export function createExecutionRegistry(
 		bufferEvent(record, "execution.started", {
 			startedAt,
 			statements: record.statements.length,
+			userId: record.userId,
 		});
 
 		let session: ExecutionSession | undefined;
@@ -301,6 +310,7 @@ export function createExecutionRegistry(
 			const record: ExecutionRecord = {
 				id,
 				userId,
+				workspaceId: workspace.id,
 				connectionId: request.connectionId,
 				...(request.documentId !== undefined
 					? { documentId: request.documentId }
@@ -321,13 +331,19 @@ export function createExecutionRegistry(
 			return { executionId: id };
 		},
 
-		async cancel(userId, executionId) {
+		async cancel(userId, role, executionId) {
 			const record = records.get(executionId);
-			// Same response for missing and foreign executions — no existence leak.
-			if (record === undefined || record.userId !== userId) {
+			if (record === undefined) {
 				throw new ServiceError(
 					ErrorCodes.NotFound,
 					`Execution '${executionId}' not found`,
+				);
+			}
+			// Executors cancel their own; cancelling someone else's needs owner.
+			if (record.userId !== userId && role !== "owner") {
+				throw new ServiceError(
+					ErrorCodes.Forbidden,
+					"Only the executor or an owner can cancel an execution",
 				);
 			}
 			if (
@@ -339,14 +355,19 @@ export function createExecutionRegistry(
 				return { executionId, status: record.status };
 			}
 			record.cancelRequested = true;
-			log.audit("execution.cancel", { userId, executionId });
+			log.audit("execution.cancel", {
+				userId,
+				executionId,
+				executorUserId: record.userId,
+			});
 			await record.session?.cancel();
 			return { executionId, status: record.status };
 		},
 
-		replay(userId, executionId, afterSequence) {
+		replay(workspaceId, executionId, afterSequence) {
 			const record = records.get(executionId);
-			if (record === undefined || record.userId !== userId) {
+			// Any workspace member may subscribe (docs/spec/multiplayer.md 6d).
+			if (record === undefined || record.workspaceId !== workspaceId) {
 				throw new ServiceError(
 					ErrorCodes.NotFound,
 					`Execution '${executionId}' not found`,

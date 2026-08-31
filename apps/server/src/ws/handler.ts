@@ -6,7 +6,9 @@ import {
 import { InvalidIntrospectionPathError } from "@datagripe/database-adapters";
 import { ZodError } from "zod";
 import { ServiceError } from "../connections/service";
+import { DocumentConflictError } from "../documents/service";
 import { log } from "../log";
+import type { PresenceTracker } from "../multiplayer/presence";
 import { SsrfBlockedError } from "../security/ssrf";
 import type { Dispatch } from "./dispatch";
 import type { SocketHub } from "./hub";
@@ -14,6 +16,7 @@ import type { SocketHub } from "./hub";
 export type SocketData = {
 	requestId: string;
 	userId: string;
+	email: string;
 	sessionId: string;
 	workspace: { id: string; name: string };
 	role: "owner" | "editor" | "viewer";
@@ -51,10 +54,32 @@ function failure(
  * action. Auth binding and per-object authorization land in Phase 4 with
  * the workspace session.
  */
-export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
+export function createWebsocketHandler(
+	dispatch: Dispatch,
+	hub: SocketHub,
+	presence: PresenceTracker,
+) {
+	function broadcastPresence(workspaceId: string): void {
+		hub.broadcastToWorkspace(workspaceId, {
+			version: 1,
+			kind: "event",
+			eventId: crypto.randomUUID(),
+			topic: "presence.update",
+			occurredAt: new Date().toISOString(),
+			payload: { users: presence.list(workspaceId) },
+		});
+	}
+
 	return {
 		open(ws: ServerWebSocket) {
 			hub.add(ws);
+			const changed = presence.join(ws.data.workspace.id, {
+				userId: ws.data.userId,
+				email: ws.data.email,
+			});
+			if (changed !== null) {
+				broadcastPresence(ws.data.workspace.id);
+			}
 			log.info("websocket connected", { requestId: ws.data.requestId });
 		},
 
@@ -94,6 +119,22 @@ export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 						request.action,
 						request.payload,
 					);
+					// Row payloads flow only to subscribed sockets (6d).
+					if (request.action === "execution.start") {
+						const executionId = (payload as { executionId?: string })
+							?.executionId;
+						if (typeof executionId === "string") {
+							hub.subscribeToExecution(executionId, ws);
+						}
+					}
+					if (request.action === "execution.subscribe") {
+						const subscribePayload = request.payload as {
+							executionId?: string;
+						};
+						if (typeof subscribePayload.executionId === "string") {
+							hub.subscribeToExecution(subscribePayload.executionId, ws);
+						}
+					}
 					respond(ws, {
 						version: 1,
 						kind: "response",
@@ -102,7 +143,11 @@ export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 						payload,
 					});
 				} catch (error) {
-					if (error instanceof ServiceError) {
+					if (error instanceof DocumentConflictError) {
+						failure(ws, request.requestId, error.code, error.message, {
+							document: error.current,
+						});
+					} else if (error instanceof ServiceError) {
 						failure(ws, request.requestId, error.code, error.message);
 					} else if (error instanceof ZodError) {
 						failure(
@@ -143,6 +188,10 @@ export function createWebsocketHandler(dispatch: Dispatch, hub: SocketHub) {
 
 		close(ws: ServerWebSocket) {
 			hub.remove(ws);
+			const changed = presence.leave(ws.data.workspace.id, ws.data.userId);
+			if (changed !== null) {
+				broadcastPresence(ws.data.workspace.id);
+			}
 			log.info("websocket disconnected", { requestId: ws.data.requestId });
 		},
 	};

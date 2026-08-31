@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
 import { type DocumentsState, useDocumentsStore } from "../stores/documents";
 import { useConnectionsStore, useExecutionsStore } from "../stores/runtime";
+import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
 import { downloadText, toCsv, toJson } from "../utils/export";
 
@@ -36,51 +37,79 @@ function cellText(value: unknown): { text: string; isNull: boolean } {
 
 function HistoryView() {
 	const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+	const [scope, setScope] = useState<"mine" | "workspace">("mine");
 	useEffect(() => {
+		setEntries(null);
 		void wsClient
-			.request<HistoryListResult>("history.list", { limit: 20, offset: 0 })
+			.request<HistoryListResult>("history.list", {
+				limit: 20,
+				offset: 0,
+				scope,
+			})
 			.then((result) => setEntries(result.entries))
 			.catch(() => setEntries([]));
-	}, []);
+	}, [scope]);
 
 	if (entries === null) {
 		return <div className="dg-tree-note">Loading history…</div>;
 	}
-	if (entries.length === 0) {
-		return <div className="dg-tree-note">No executions yet.</div>;
-	}
 	return (
-		<table className="dg-grid">
-			<thead>
-				<tr>
-					<th>Time</th>
-					<th>Status</th>
-					<th>Connection</th>
-					<th>Rows</th>
-					<th>Query</th>
-				</tr>
-			</thead>
-			<tbody>
-				{entries.map((entry) => (
-					<tr key={entry.id}>
-						<td>
-							{entry.startedAt === null
-								? "—"
-								: new Date(entry.startedAt).toLocaleTimeString()}
-						</td>
-						<td>{entry.status}</td>
-						<td>{entry.connectionName}</td>
-						<td>
-							{entry.rowCount ?? "—"}
-							{entry.truncated === true ? "+" : ""}
-						</td>
-						<td className="dg-grid-clip" title={entry.preview}>
-							{entry.preview}
-						</td>
-					</tr>
-				))}
-			</tbody>
-		</table>
+		<>
+			<fieldset className="dg-history-scope">
+				<legend className="dg-visually-hidden">History scope</legend>
+				<button
+					type="button"
+					aria-pressed={scope === "mine"}
+					onClick={() => setScope("mine")}
+				>
+					Mine
+				</button>
+				<button
+					type="button"
+					aria-pressed={scope === "workspace"}
+					onClick={() => setScope("workspace")}
+				>
+					Everyone
+				</button>
+			</fieldset>
+			{entries.length === 0 ? (
+				<div className="dg-tree-note">No executions yet.</div>
+			) : (
+				<table className="dg-grid">
+					<thead>
+						<tr>
+							<th>Time</th>
+							<th>Status</th>
+							<th>Connection</th>
+							{scope === "workspace" && <th>Actor</th>}
+							<th>Rows</th>
+							<th>Query</th>
+						</tr>
+					</thead>
+					<tbody>
+						{entries.map((entry) => (
+							<tr key={entry.id}>
+								<td>
+									{entry.startedAt === null
+										? "—"
+										: new Date(entry.startedAt).toLocaleTimeString()}
+								</td>
+								<td>{entry.status}</td>
+								<td>{entry.connectionName}</td>
+								{scope === "workspace" && <td>{entry.actorEmail}</td>}
+								<td>
+									{entry.rowCount ?? "—"}
+									{entry.truncated === true ? "+" : ""}
+								</td>
+								<td className="dg-grid-clip" title={entry.preview}>
+									{entry.preview}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			)}
+		</>
 	);
 }
 
@@ -117,7 +146,14 @@ export function ResultsPanel() {
 			? undefined
 			: ADAPTER_CAPABILITIES[connection.adapter];
 	const canExecute = capabilities?.execution != null;
-	const canCancel = capabilities?.cancellation === true;
+	const myUserId = useSessionStore((state) => state.bootstrap?.user?.id);
+	const myRole = useSessionStore((state) => state.bootstrap?.workspace?.role);
+	const canCancel =
+		capabilities?.cancellation === true &&
+		execution !== undefined &&
+		(execution.executorUserId === undefined ||
+			execution.executorUserId === myUserId ||
+			myRole === "owner");
 
 	const resultSet =
 		execution !== undefined && execution.resultSets.length > 0

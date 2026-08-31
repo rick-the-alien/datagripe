@@ -12,10 +12,13 @@ import { loadPredefinedConnections } from "./connections/predefined";
 import { createConnectionsService } from "./connections/service";
 import { createKeyring } from "./crypto/keyring";
 import { createAppDb } from "./db/app/pool";
+import { createDocumentsService } from "./documents/service";
 import { createExecutionRegistry } from "./execution/registry";
 import { createAuthRoutes, sessionFromRequest } from "./http/auth";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
+import { PresenceTracker } from "./multiplayer/presence";
+import { ViewBroadcastThrottle } from "./multiplayer/views";
 import { createRateLimiter } from "./security/rateLimit";
 import { createSsrfPolicy } from "./security/ssrf";
 import { createDispatcher } from "./ws/dispatch";
@@ -33,6 +36,8 @@ const adapters = {
 	redis: new RedisAdapter(),
 };
 const hub = new SocketHub();
+const presence = new PresenceTracker();
+const viewThrottle = new ViewBroadcastThrottle();
 const sessions = createSessionStore(appDb);
 const rateLimiter = createRateLimiter({
 	"auth.login.ip": { capacity: 30, refillPerMinute: 30 },
@@ -60,8 +65,8 @@ const executions = createExecutionRegistry({
 	},
 	resolveConnection: (workspace, id) =>
 		connections.resolveForExecution(workspace, id),
-	emit: (userId, executionId, topic, sequence, payload) => {
-		hub.broadcast(userId, {
+	emit: (target, executionId, topic, sequence, payload) => {
+		hub.broadcastExecution(target.workspaceId, {
 			version: 1,
 			kind: "event",
 			eventId: crypto.randomUUID(),
@@ -73,10 +78,15 @@ const executions = createExecutionRegistry({
 		});
 	},
 });
+const documents = createDocumentsService(appDb);
 const dispatch = createDispatcher({
 	appDb,
 	connections,
+	documents,
 	executions,
+	presence,
+	viewThrottle,
+	hub,
 	rateLimiter,
 });
 const auth = createAuthRoutes({
@@ -143,12 +153,16 @@ const server = serve<SocketData>({
 					requestId,
 				);
 			}
+			const userRow = await appDb<{ email: string }[]>`
+				SELECT email FROM users WHERE id = ${session.userId}
+			`;
 
 			if (
 				server.upgrade(req, {
 					data: {
 						requestId,
 						userId: session.userId,
+						email: userRow[0]?.email ?? "",
 						sessionId: session.id,
 						workspace: { id: workspace.id, name: workspace.name },
 						role: workspace.role,
@@ -168,7 +182,7 @@ const server = serve<SocketData>({
 		return errorResponse(404, "NOT_FOUND", "Not found", requestId);
 	},
 
-	websocket: createWebsocketHandler(dispatch, hub),
+	websocket: createWebsocketHandler(dispatch, hub, presence),
 });
 
 async function shutdown() {

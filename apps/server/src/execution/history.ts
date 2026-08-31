@@ -5,8 +5,10 @@ import type { AppDb } from "../db/app/pool";
 export async function listHistory(
 	appDb: AppDb,
 	userId: string,
+	workspaceId: string,
 	limit: number,
 	offset: number,
+	scope: "mine" | "workspace",
 	predefinedName: (id: string) => string | undefined = () => undefined,
 ): Promise<HistoryListResult> {
 	type Row = {
@@ -14,6 +16,7 @@ export async function listHistory(
 		connection_id: string | null;
 		connection_ref: string | null;
 		connection_name: string | null;
+		actor_email: string | null;
 		document_id: string | null;
 		status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
 		preview: string;
@@ -23,20 +26,29 @@ export async function listHistory(
 		truncated: boolean | null;
 		error_code: string | null;
 	};
+	const scopeFilter =
+		scope === "mine"
+			? appDb`WHERE q.user_id = ${userId}`
+			: appDb`WHERE q.user_id IN (
+				SELECT user_id FROM workspace_members WHERE workspace_id = ${workspaceId}
+			)`;
 	const rows = await appDb<Row[]>`
 		SELECT
 			q.id, q.connection_id, q.connection_ref,
 			coalesce(c.name, q.connection_ref, 'unknown') AS connection_name,
+			u.email AS actor_email,
 			q.document_id, q.status, q.preview,
 			q.started_at, q.finished_at, q.row_count, q.truncated, q.error_code
 		FROM query_executions q
 		LEFT JOIN connections c ON c.id = q.connection_id
-		WHERE q.user_id = ${userId}
+		LEFT JOIN users u ON u.id = q.user_id
+		${scopeFilter}
 		ORDER BY q.created_at DESC
 		LIMIT ${limit} OFFSET ${offset}
 	`;
 	const totals = await appDb<{ total: string | number }[]>`
-		SELECT count(*) AS total FROM query_executions WHERE user_id = ${userId}
+		SELECT count(*) AS total FROM query_executions q
+		${scopeFilter}
 	`;
 	return {
 		entries: rows.map((row) => {
@@ -48,6 +60,7 @@ export async function listHistory(
 				id: row.id,
 				connectionId: row.connection_id ?? row.connection_ref ?? "unknown",
 				connectionName: predefinedDisplay ?? row.connection_name ?? "unknown",
+				actorEmail: row.actor_email ?? "unknown",
 				documentId: row.document_id,
 				status: row.status,
 				preview: row.preview,

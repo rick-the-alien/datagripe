@@ -65,15 +65,15 @@ Exit: production-readiness review passes for the intended deployment model.
 
 Exit: adapters expose honest capability flags; no dialect leaks into generic UI state.
 
-## Phase 6 — Multiplayer (staged)
+## Phase 6 — Multiplayer · shipped 2026-08-31
 
-Tracked in `docs/spec/multiplayer.md`. Explicitly post-MVP.
+Tracked in `docs/spec/multiplayer.md`.
 
-- [ ] 6a: workspace-scoped shared documents (any member can open/edit/save)
-- [ ] 6b: presence — who is online, which document they have open
-- [ ] 6c: shared views — opt-in follow mode showing another member's cursor/selection
-- [ ] 6d: shared execution visibility — see what others ran and its results; run queries on shared connections under your own identity
-- [ ] 6e: audit trail for cross-user execution
+- [x] 6a: workspace-scoped shared documents (any member can open/edit/save)
+- [x] 6b: presence — who is online, which document they have open
+- [x] 6c: shared views — opt-in follow mode showing another member's cursor/selection
+- [x] 6d: shared execution visibility — see what others ran and its results; run queries on shared connections under your own identity
+- [x] 6e: audit trail for cross-user execution
 
 ## Unscheduled / parking lot
 

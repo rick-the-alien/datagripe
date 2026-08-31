@@ -36,6 +36,10 @@ function createTestDispatcher() {
 	const dispatch = createDispatcher({
 		appDb,
 		connections,
+		documents: {} as never,
+		presence: {} as never,
+		viewThrottle: {} as never,
+		hub: {} as never,
 		executions: {
 			start: async () => {
 				calls.push({ action: "execution.start" });
@@ -111,7 +115,7 @@ describe("dispatcher authorization", () => {
 	test("unknown actions are rejected as not implemented", async () => {
 		const { dispatch } = createTestDispatcher();
 		await expect(
-			dispatch(ctx("owner"), "document.get" as ClientAction, {}),
+			dispatch(ctx("owner"), "layout.save" as ClientAction, {}),
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 	});
 });

@@ -3,6 +3,11 @@ import {
 	connectionDeleteRequestSchema,
 	connectionTestRequestSchema,
 	connectionUpdateRequestSchema,
+	documentArchiveRequestSchema,
+	documentCreateRequestSchema,
+	documentFocusRequestSchema,
+	documentGetRequestSchema,
+	documentSaveRequestSchema,
 	executionCancelRequestSchema,
 	executionStartRequestSchema,
 	executionSubscribeRequestSchema,
@@ -11,6 +16,8 @@ import {
 	memberRemoveRequestSchema,
 	redisGetRequestSchema,
 	schemaChildrenRequestSchema,
+	viewBroadcastRequestSchema,
+	viewFollowRequestSchema,
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type { ClientAction } from "@datagripe/contracts/ws";
@@ -18,11 +25,15 @@ import type { ConnectionsService } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import { withIdempotency } from "../db/app/idempotency";
 import type { AppDb } from "../db/app/pool";
+import type { DocumentsService } from "../documents/service";
 import { listHistory } from "../execution/history";
 import type { ExecutionRegistry } from "../execution/registry";
 import { log } from "../log";
+import type { PresenceTracker } from "../multiplayer/presence";
+import type { ViewBroadcastThrottle } from "../multiplayer/views";
 import type { RateLimiter } from "../security/rateLimit";
 import { addMember, listMembers, removeMember } from "../workspaces/members";
+import type { SocketHub } from "./hub";
 
 /**
  * Action dispatcher (docs/spec/auth-and-hardening.md): every message is
@@ -46,7 +57,11 @@ export type Dispatch = (
 export interface DispatcherDeps {
 	appDb: AppDb;
 	connections: ConnectionsService;
+	documents: DocumentsService;
 	executions: ExecutionRegistry;
+	presence: PresenceTracker;
+	viewThrottle: ViewBroadcastThrottle;
+	hub: SocketHub;
 	rateLimiter: RateLimiter;
 }
 
@@ -59,6 +74,9 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"connection.update": "editor",
 	"connection.delete": "editor",
 	"connection.test": "editor",
+	"document.create": "editor",
+	"document.save": "editor",
+	"document.archive": "editor",
 	"execution.start": "editor",
 	"execution.cancel": "editor",
 	"workspace.member.add": "owner",
@@ -83,7 +101,16 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
-	const { appDb, connections, executions, rateLimiter } = deps;
+	const {
+		appDb,
+		connections,
+		documents,
+		executions,
+		presence,
+		viewThrottle,
+		hub,
+		rateLimiter,
+	} = deps;
 
 	return async (ctx, action, payload) => {
 		requireRole(ctx, action);
@@ -126,7 +153,100 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					workspace,
 					connections: await connections.listConnections(workspace),
 					adapters: connections.adapterInfos(),
+					documents: await documents.listDocuments(workspace.id),
 				};
+
+			case "document.get": {
+				const request = documentGetRequestSchema.parse(payload);
+				return {
+					document: await documents.getDocument(workspace.id, request.id),
+				};
+			}
+
+			case "document.create": {
+				const request = documentCreateRequestSchema.parse(payload);
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					async () => ({
+						document: await documents.createDocument(workspace.id, request),
+					}),
+				);
+			}
+
+			case "document.save": {
+				const request = documentSaveRequestSchema.parse(payload);
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					async () => ({
+						document: await documents.saveDocument(workspace.id, request),
+					}),
+				);
+			}
+
+			case "document.archive": {
+				const request = documentArchiveRequestSchema.parse(payload);
+				await documents.archiveDocument(workspace.id, request.id);
+				return {};
+			}
+
+			case "document.focus": {
+				const request = documentFocusRequestSchema.parse(payload);
+				const users = presence.focus(
+					workspace.id,
+					ctx.userId,
+					request.documentId,
+				);
+				if (users !== null) {
+					hub.broadcastToWorkspace(workspace.id, {
+						version: 1,
+						kind: "event",
+						eventId: crypto.randomUUID(),
+						topic: "presence.update",
+						occurredAt: new Date().toISOString(),
+						payload: { users },
+					});
+				}
+				return {};
+			}
+
+			case "view.broadcast": {
+				const request = viewBroadcastRequestSchema.parse(payload);
+				if (!viewThrottle.allow(ctx.userId)) {
+					return { dropped: true };
+				}
+				hub.broadcastToWorkspace(workspace.id, {
+					version: 1,
+					kind: "event",
+					eventId: crypto.randomUUID(),
+					topic: "view.state",
+					occurredAt: new Date().toISOString(),
+					payload: { userId: ctx.userId, ...request },
+				});
+				return {};
+			}
+
+			case "view.follow":
+			case "view.unfollow": {
+				const request = viewFollowRequestSchema.parse(payload);
+				hub.broadcastToUser(request.userId, {
+					version: 1,
+					kind: "event",
+					eventId: crypto.randomUUID(),
+					topic: "view.followed",
+					occurredAt: new Date().toISOString(),
+					payload: {
+						followerUserId: ctx.userId,
+						following: action === "view.follow",
+					},
+				});
+				return {};
+			}
 
 			case "redis.get": {
 				const request = redisGetRequestSchema.parse(payload);
@@ -214,14 +334,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 
 			case "execution.cancel": {
 				const request = executionCancelRequestSchema.parse(payload);
-				return executions.cancel(ctx.userId, request.executionId);
+				return executions.cancel(ctx.userId, ctx.role, request.executionId);
 			}
 
 			case "execution.subscribe": {
 				const request = executionSubscribeRequestSchema.parse(payload);
 				return {
 					events: executions.replay(
-						ctx.userId,
+						workspace.id,
 						request.executionId,
 						request.afterSequence,
 					),
@@ -233,8 +353,10 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				return listHistory(
 					appDb,
 					ctx.userId,
+					workspace.id,
 					request.limit,
 					request.offset,
+					request.scope,
 					(id) => connections.predefinedName(id),
 				);
 			}

@@ -76,6 +76,8 @@ export type ColumnDescriptor = z.infer<typeof columnDescriptorSchema>;
 export const executionStartedPayloadSchema = z.object({
 	startedAt: z.iso.datetime(),
 	statements: z.number().int().positive(),
+	/** Executor identity — cancel permission + attribution (6d/6e). */
+	userId: z.uuid(),
 });
 
 export const executionColumnsPayloadSchema = z.object({
@@ -120,6 +122,8 @@ export const historyEntrySchema = z.object({
 	id: z.uuid(),
 	connectionId: z.string().min(1).max(255),
 	connectionName: z.string().min(1).max(255),
+	/** Executor identity (multiplayer 6d/6e attribution). */
+	actorEmail: z.string(),
 	documentId: z.uuid().nullable(),
 	status: executionStatusSchema,
 	preview: z.string(),
@@ -135,6 +139,8 @@ export type HistoryEntry = z.infer<typeof historyEntrySchema>;
 export const historyListRequestSchema = z.object({
 	limit: z.number().int().min(1).max(100).default(50),
 	offset: z.number().int().nonnegative().default(0),
+	/** "mine" = own executions; "workspace" = every member's (6d). */
+	scope: z.enum(["mine", "workspace"]).default("mine"),
 });
 
 export type HistoryListRequest = z.infer<typeof historyListRequestSchema>;

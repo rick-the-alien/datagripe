@@ -1,7 +1,7 @@
 # Spec — Multiplayer
 
-**Status:** draft
-**Phase:** 6 (post-MVP; 6a may land earlier if trivial)
+**Status:** current (6a–6e shipped 2026-08-31)
+**Phase:** 6 (post-MVP)
 **Supersedes:** nothing (extends `docs/initial_idea.md` §10 presence note)
 
 ## Goal

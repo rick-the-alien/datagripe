@@ -1,14 +1,62 @@
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useRef } from "react";
+import { wsClient } from "../api/ws";
 import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "../stores/documents";
+import { usePresenceStore } from "../stores/presence";
 import { useViewsStore } from "../stores/views";
 import { registerEditorHandle, unregisterEditorHandle } from "./handles";
 import { monaco } from "./monacoSetup";
 import { modelRegistry } from "./registry";
+import { remoteViewDecorations } from "./remoteCursors";
 
 const VIEW_STATE_DELAY_MS = 500;
+const BROADCAST_DELAY_MS = 250;
+
+/** Live editor instances and their decoration collections by view id. */
+const editorInstances = new Map<string, monaco.editor.IStandaloneCodeEditor>();
+const editorDecorations = new Map<
+	string,
+	monaco.editor.IEditorDecorationsCollection
+>();
+
+const broadcastDebouncer = createDebouncer();
+
+/** Publish cursor/selection/scroll to the workspace (throttled; the
+ * server throttles again at 4 Hz). */
+function broadcastViewState(
+	editor: monaco.editor.IStandaloneCodeEditor,
+	documentId: string,
+): void {
+	broadcastDebouncer.schedule(
+		documentId,
+		() => {
+			const position = editor.getPosition();
+			if (position === null) {
+				return;
+			}
+			const selection = editor.getSelection();
+			void wsClient
+				.request("view.broadcast", {
+					documentId,
+					cursor: { line: position.lineNumber, column: position.column },
+					selection:
+						selection !== null && !selection.isEmpty()
+							? {
+									startLine: selection.startLineNumber,
+									startColumn: selection.startColumn,
+									endLine: selection.endLineNumber,
+									endColumn: selection.endColumn,
+								}
+							: null,
+					scrollTop: editor.getScrollTop(),
+				})
+				.catch(() => {});
+		},
+		BROADCAST_DELAY_MS,
+	);
+}
 
 /**
  * One Dockview panel = one Monaco editor view on a document's shared
@@ -76,6 +124,9 @@ export function EditorView(props: IDockviewPanelProps) {
 
 		let disposed = false;
 		const viewStateDebouncer = createDebouncer();
+		const decorations = editor.createDecorationsCollection();
+		editorDecorations.set(viewId, decorations);
+		editorInstances.set(viewId, editor);
 		const persistViewState = () => {
 			const state = editor.saveViewState();
 			if (state !== null) {
@@ -118,6 +169,7 @@ export function EditorView(props: IDockviewPanelProps) {
 					persistViewState,
 					VIEW_STATE_DELAY_MS,
 				);
+				broadcastViewState(editor, documentId);
 			}),
 			editor.onDidScrollChange(() => {
 				viewStateDebouncer.schedule(
@@ -125,6 +177,7 @@ export function EditorView(props: IDockviewPanelProps) {
 					persistViewState,
 					VIEW_STATE_DELAY_MS,
 				);
+				broadcastViewState(editor, documentId);
 			}),
 		];
 
@@ -135,11 +188,60 @@ export function EditorView(props: IDockviewPanelProps) {
 			for (const subscription of subscriptions) {
 				subscription.dispose();
 			}
+			editorDecorations.delete(viewId);
+			editorInstances.delete(viewId);
 			unregisterEditorHandle(viewId);
 			editor.dispose();
 			modelRegistry.release(documentId);
 		};
 	}, [documentId, props.api]);
+
+	// Remote view of the followed member, only when it targets this doc.
+	const remoteView = usePresenceStore((state) => {
+		if (state.followingUserId === null || documentId === undefined) {
+			return undefined;
+		}
+		const view = state.remoteViews[state.followingUserId];
+		return view?.documentId === documentId ? view : undefined;
+	});
+	const conflict = useDocumentsStore((state) =>
+		documentId === undefined ? undefined : state.conflicts[documentId],
+	);
+	const saveError = useDocumentsStore((state) =>
+		documentId === undefined ? undefined : state.saveErrors[documentId],
+	);
+
+	useEffect(() => {
+		const decorations = editorDecorations.get(props.api.id);
+		if (decorations === undefined) {
+			return;
+		}
+		if (remoteView === undefined) {
+			decorations.clear();
+			return;
+		}
+		decorations.set(remoteViewDecorations(monaco, remoteView));
+	}, [remoteView, props.api]);
+
+	// External content changes (server sync adoption, conflict reload)
+	// replace the model's content for clean documents. Dirty documents are
+	// never touched — the conflict banner covers them.
+	const syncedContent = useDocumentsStore((state) =>
+		documentId === undefined ? undefined : state.documents[documentId],
+	);
+	useEffect(() => {
+		if (syncedContent === undefined || syncedContent.dirty) {
+			return;
+		}
+		const model = editorInstances.get(props.api.id)?.getModel();
+		if (
+			model !== undefined &&
+			model !== null &&
+			model.getValue() !== syncedContent.currentContent
+		) {
+			model.setValue(syncedContent.currentContent);
+		}
+	}, [syncedContent, props.api]);
 
 	if (documentId === undefined || title === undefined) {
 		return (
@@ -148,5 +250,42 @@ export function EditorView(props: IDockviewPanelProps) {
 			</div>
 		);
 	}
-	return <div ref={containerRef} className="editor-container" />;
+	return (
+		<div className="editor-panel">
+			{saveError !== undefined && conflict === undefined && (
+				<div className="dg-conflict dg-save-error" role="alert">
+					Save failed: {saveError}
+				</div>
+			)}
+			{conflict !== undefined && (
+				<div className="dg-conflict" role="alert">
+					<span>
+						Saved elsewhere (revision {conflict.revision}) — your draft is
+						unsaved.
+					</span>
+					<button
+						type="button"
+						onClick={() =>
+							void useDocumentsStore
+								.getState()
+								.resolveConflict(documentId, "reload")
+						}
+					>
+						Reload server version
+					</button>
+					<button
+						type="button"
+						onClick={() =>
+							void useDocumentsStore
+								.getState()
+								.resolveConflict(documentId, "keep")
+						}
+					>
+						Keep mine
+					</button>
+				</div>
+			)}
+			<div ref={containerRef} className="editor-container" />
+		</div>
+	);
 }

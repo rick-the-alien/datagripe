@@ -5,5 +5,6 @@ export * from "./documents";
 export * from "./errors";
 export * from "./executions";
 export * from "./explorer";
+export * from "./multiplayer";
 export * from "./predefined";
 export * from "./ws";

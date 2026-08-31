@@ -31,6 +31,8 @@ export interface ExecutionViewState {
 	id: string;
 	documentId?: string | undefined;
 	connectionId: string;
+	/** Executor identity from execution.started (cancel permission, 6d). */
+	executorUserId?: string | undefined;
 	status: ExecutionStatus;
 	statements: number;
 	resultSets: ResultSetData[];
@@ -80,11 +82,13 @@ export function createExecutionsStore(request: WsRequestFn) {
 					const payload = event.payload as {
 						startedAt: string;
 						statements: number;
+						userId: string;
 					};
 					patch(id, {
 						status: "running",
 						startedAt: payload.startedAt,
 						statements: payload.statements,
+						executorUserId: payload.userId,
 					});
 					break;
 				}

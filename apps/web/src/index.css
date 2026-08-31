@@ -208,6 +208,35 @@ button:disabled {
 	width: 100%;
 }
 
+.editor-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.editor-panel .editor-container {
+	flex: 1;
+	min-height: 0;
+}
+
+.dg-conflict {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px;
+	background: #3a2f1e;
+	border-bottom: 1px solid #5c4a24;
+	color: #e5c07b;
+	font-size: 12px;
+	flex: none;
+}
+
+.dg-save-error {
+	background: #3a2326;
+	border-bottom-color: #5c2e35;
+	color: #e06c75;
+}
+
 .editor-missing {
 	display: flex;
 	align-items: center;
@@ -620,4 +649,82 @@ button:disabled {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+.dg-presence {
+	border-top: 1px solid #2c2e35;
+	padding-top: 4px;
+}
+
+.dg-presence-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex: none;
+	margin: 0 4px 0 10px;
+}
+
+.dg-presence-name {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	padding: 5px 0;
+}
+
+.dg-presence-doc {
+	color: #8a8d96;
+}
+
+.dg-follow-button {
+	padding: 1px 8px;
+	font-size: 11px;
+	margin-right: 6px;
+	visibility: hidden;
+}
+
+.dg-document-row:hover .dg-follow-button,
+.dg-follow-button[aria-pressed="true"] {
+	visibility: visible;
+}
+
+.dg-follow-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	padding: 2px 8px;
+	border: 1px solid #3d4048;
+	border-radius: 10px;
+	color: #98c379;
+}
+
+.dg-follow-detach {
+	background: none;
+	border: none;
+	padding: 0 2px;
+	color: inherit;
+	line-height: 1;
+}
+
+.dg-history-scope {
+	display: flex;
+	gap: 6px;
+	padding: 6px 10px;
+	border: none;
+	margin: 0;
+}
+
+.dg-history-scope button[aria-pressed="true"] {
+	background: #2b3040;
+	border-color: #4f6b9e;
+}
+
+.dg-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
 }

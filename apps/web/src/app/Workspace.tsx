@@ -1,3 +1,8 @@
+import type {
+	PresenceUser,
+	ViewFollowedPayload,
+	ViewStatePayload,
+} from "@datagripe/contracts";
 import {
 	type DockviewApi,
 	DockviewReact,
@@ -11,6 +16,7 @@ import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
 import { MembersDialog } from "../components/MembersDialog";
+import { PresenceSidebar } from "../components/PresenceSidebar";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
@@ -18,6 +24,7 @@ import { db, LOCAL_LAYOUT_ID } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
+import { usePresenceStore } from "../stores/presence";
 import {
 	useConnectionsStore,
 	useExecutionsStore,
@@ -95,6 +102,12 @@ export function Workspace() {
 	);
 	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
+	const followingUserId = usePresenceStore((state) => state.followingUserId);
+	const followedBy = usePresenceStore((state) => state.followedBy);
+	const presenceUsers = usePresenceStore((state) => state.users);
+	const followingEmail = presenceUsers.find(
+		(u) => u.userId === followingUserId,
+	)?.email;
 	const activeDocumentId = useViewsStore((state) =>
 		state.activeViewId !== null
 			? state.views[state.activeViewId]?.documentId
@@ -111,14 +124,38 @@ export function Workspace() {
 	}, []);
 
 	// Workspace socket: connects once; every (re)open reloads connection
-	// metadata and drops cached explorer trees.
+	// metadata, syncs shared documents, and drops cached explorer trees.
 	useEffect(() => {
 		wsClient.connect();
 		const offOpen = wsClient.onOpen(() => {
 			useExplorerStore.getState().reset();
-			void useConnectionsStore.getState().load();
+			usePresenceStore.getState().reset();
+			void useConnectionsStore
+				.getState()
+				.load()
+				.then((result) =>
+					useDocumentsStore.getState().syncFromServer(result.documents),
+				);
 		});
 		const offEvent = wsClient.onEvent((event) => {
+			if (event.topic === "presence.update") {
+				const payload = event.payload as { users: PresenceUser[] };
+				usePresenceStore.getState().setUsers(payload.users);
+				return;
+			}
+			if (event.topic === "view.state") {
+				usePresenceStore
+					.getState()
+					.setRemoteView(event.payload as ViewStatePayload);
+				return;
+			}
+			if (event.topic === "view.followed") {
+				const payload = event.payload as ViewFollowedPayload;
+				usePresenceStore
+					.getState()
+					.setFollowedBy(payload.followerUserId, payload.following);
+				return;
+			}
 			useExecutionsStore.getState().handleEvent(event);
 		});
 		return () => {
@@ -126,6 +163,20 @@ export function Workspace() {
 			offEvent();
 		};
 	}, []);
+
+	// Publish the focused document for presence (server dedups unchanged).
+	const lastEditorDocumentId = useViewsStore((state) =>
+		state.lastEditorViewId !== null
+			? state.views[state.lastEditorViewId]?.documentId
+			: undefined,
+	);
+	useEffect(() => {
+		wsClient
+			.request("document.focus", {
+				documentId: lastEditorDocumentId ?? null,
+			})
+			.catch(() => {});
+	}, [lastEditorDocumentId]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -240,6 +291,24 @@ export function Workspace() {
 					Save
 				</button>
 				<span className="dg-modal-actions-spacer" />
+				{followingUserId !== null && (
+					<span className="dg-follow-chip">
+						Following {followingEmail ?? followingUserId}
+						<button
+							type="button"
+							className="dg-follow-detach"
+							aria-label="Stop following"
+							onClick={() => usePresenceStore.getState().unfollow()}
+						>
+							×
+						</button>
+					</span>
+				)}
+				{followedBy.length > 0 && (
+					<span className="dg-header-meta">
+						Followed by {followedBy.length}
+					</span>
+				)}
 				{sessionWorkspace !== null && sessionWorkspace !== undefined && (
 					<span className="dg-header-meta">
 						{sessionWorkspace.name} · {sessionWorkspace.role}
@@ -270,6 +339,7 @@ export function Workspace() {
 							void useDocumentsStore.getState().discardDocument(documentId);
 						}}
 					/>
+					<PresenceSidebar />
 				</aside>
 				<div className="dg-dock-container">
 					{hydrated ? (

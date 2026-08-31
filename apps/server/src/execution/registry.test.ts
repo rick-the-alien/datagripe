@@ -250,12 +250,12 @@ describe("execution registry", () => {
 			);
 			await new Promise((resolve) => setTimeout(resolve, 300));
 			const before = Date.now();
-			const ack = await registry.cancel(USER_ID, executionId);
+			const ack = await registry.cancel(USER_ID, "owner", executionId);
 			expect(ack.status).toBe("running");
 			expect(await waitForTerminal(registry, executionId)).toBe("cancelled");
 			expect(Date.now() - before).toBeLessThan(5_000);
 			// Idempotent: cancelling again returns the terminal state.
-			const again = await registry.cancel(USER_ID, executionId);
+			const again = await registry.cancel(USER_ID, "owner", executionId);
 			expect(again.status).toBe("cancelled");
 		},
 	);
@@ -317,8 +317,8 @@ describe("execution registry", () => {
 		).rejects.toMatchObject({
 			code: "RATE_LIMITED",
 		});
-		await registry.cancel(USER_ID, first.executionId);
-		await registry.cancel(USER_ID, second.executionId);
+		await registry.cancel(USER_ID, "owner", first.executionId);
+		await registry.cancel(USER_ID, "owner", second.executionId);
 		await waitForTerminal(registry, first.executionId);
 		await waitForTerminal(registry, second.executionId);
 	});
@@ -330,10 +330,10 @@ describe("execution registry", () => {
 			request("select 1 AS one"),
 		);
 		expect(await waitForTerminal(registry, executionId)).toBe("succeeded");
-		const all = registry.replay(USER_ID, executionId, 0);
+		const all = registry.replay(WORKSPACE.id, executionId, 0);
 		expect(all.length).toBeGreaterThanOrEqual(4);
 		const tail = registry.replay(
-			USER_ID,
+			WORKSPACE.id,
 			executionId,
 			all[all.length - 2]?.sequence ?? 0,
 		);

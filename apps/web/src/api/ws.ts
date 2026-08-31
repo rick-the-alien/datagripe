@@ -28,6 +28,19 @@ type PendingRequest = {
 const REQUEST_TIMEOUT_MS = 15_000;
 const RECONNECT_DELAY_MS = 1_000;
 
+/** WS action failure carrying the protocol error code and details. */
+export class WsError extends Error {
+	readonly code: string;
+	readonly details: unknown;
+
+	constructor(code: string, message: string, details?: unknown) {
+		super(message);
+		this.name = "WsError";
+		this.code = code;
+		this.details = details;
+	}
+}
+
 export class WsClient {
 	private socket: WebSocket | null = null;
 	private started = false;
@@ -147,7 +160,13 @@ export class WsClient {
 			if (response.ok) {
 				entry.resolve(response.payload);
 			} else {
-				entry.reject(new Error(response.error?.message ?? "Request failed"));
+				entry.reject(
+					new WsError(
+						response.error?.code ?? "INTERNAL",
+						response.error?.message ?? "Request failed",
+						response.error?.details,
+					),
+				);
 			}
 		};
 

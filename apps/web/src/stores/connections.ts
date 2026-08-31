@@ -56,7 +56,7 @@ export type ConnectionsState = {
 	saving: boolean;
 	testing: boolean;
 	testResult: ConnectionTestResult | null;
-	load: () => Promise<void>;
+	load: () => Promise<WorkspaceOpenResult>;
 	openCreateDialog: () => void;
 	openEditDialog: (connection: ConnectionMetadata) => void;
 	closeDialog: () => void;
@@ -88,6 +88,7 @@ export function createConnectionsStore(request: WsRequestFn) {
 				workspaceName: result.workspace.name,
 				loaded: true,
 			});
+			return result;
 		},
 
 		openCreateDialog() {

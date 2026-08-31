@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.local
+connections.json
 *.log
 .DS_Store
 coverage/

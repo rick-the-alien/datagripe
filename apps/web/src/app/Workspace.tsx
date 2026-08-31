@@ -5,14 +5,18 @@ import {
 	type SerializedDockview,
 } from "dockview-react";
 import { useEffect, useState } from "react";
+import { wsClient } from "../api/ws";
+import { ConnectionDialog } from "../components/ConnectionDialog";
 import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
+import { Explorer } from "../components/Explorer";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
 import { db, LOCAL_LAYOUT_ID } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
+import { useConnectionsStore, useExplorerStore } from "../stores/runtime";
 import { useViewsStore } from "../stores/views";
 import {
 	closeEditorPanels,
@@ -92,6 +96,16 @@ export function Workspace() {
 		void ensureHydrated();
 	}, []);
 
+	// Workspace socket: connects once; every (re)open reloads connection
+	// metadata and drops cached explorer trees.
+	useEffect(() => {
+		wsClient.connect();
+		return wsClient.onOpen(() => {
+			useExplorerStore.getState().reset();
+			void useConnectionsStore.getState().load();
+		});
+	}, []);
+
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if ((event.ctrlKey || event.metaKey) && event.key === "s") {
@@ -165,20 +179,23 @@ export function Workspace() {
 				</button>
 			</header>
 			<div className="dg-body">
-				<DocumentSidebar
-					onOpen={(documentId) => {
-						const doc = useDocumentsStore.getState().documents[documentId];
-						if (dockApi !== null && doc !== undefined) {
-							openEditorPanel(dockApi, doc);
-						}
-					}}
-					onDiscard={(documentId) => {
-						if (dockApi !== null) {
-							closeEditorPanels(dockApi, documentId);
-						}
-						void useDocumentsStore.getState().discardDocument(documentId);
-					}}
-				/>
+				<aside className="dg-sidebar">
+					<Explorer />
+					<DocumentSidebar
+						onOpen={(documentId) => {
+							const doc = useDocumentsStore.getState().documents[documentId];
+							if (dockApi !== null && doc !== undefined) {
+								openEditorPanel(dockApi, doc);
+							}
+						}}
+						onDiscard={(documentId) => {
+							if (dockApi !== null) {
+								closeEditorPanels(dockApi, documentId);
+							}
+							void useDocumentsStore.getState().discardDocument(documentId);
+						}}
+					/>
+				</aside>
 				<div className="dg-dock-container">
 					{hydrated ? (
 						<DockviewReact
@@ -193,6 +210,7 @@ export function Workspace() {
 					)}
 				</div>
 			</div>
+			<ConnectionDialog />
 		</div>
 	);
 }

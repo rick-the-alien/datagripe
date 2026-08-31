@@ -215,3 +215,197 @@ button:disabled {
 	height: 100%;
 	color: #8a8d96;
 }
+
+.dg-explorer {
+	border-bottom: 1px solid #2c2e35;
+	padding-bottom: 6px;
+}
+
+.dg-heading-action {
+	float: right;
+	padding: 0 6px;
+	line-height: 1.2;
+}
+
+.dg-tree-row {
+	display: flex;
+	align-items: center;
+	padding: 1px 6px 1px 0;
+	white-space: nowrap;
+}
+
+.dg-tree-row:hover {
+	background: #23242b;
+}
+
+.dg-tree-chevron {
+	background: none;
+	border: none;
+	padding: 0 2px 0 6px;
+	width: 20px;
+	color: #8a8d96;
+}
+
+.dg-tree-chevron:hover:not(:disabled) {
+	background: none;
+	color: #d7d7db;
+}
+
+.dg-tree-leaf {
+	display: inline-block;
+}
+
+.dg-tree-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 12px;
+}
+
+.dg-tree-glyph {
+	color: #8a8d96;
+}
+
+.dg-tree-type {
+	color: #8a8d96;
+}
+
+.dg-tree-note {
+	padding: 4px 10px;
+	color: #8a8d96;
+	font-size: 12px;
+}
+
+.dg-tree-error {
+	color: #e06c75;
+}
+
+.dg-tree-actions {
+	margin-left: auto;
+	visibility: hidden;
+}
+
+.dg-tree-row:hover .dg-tree-actions {
+	visibility: visible;
+}
+
+.dg-tree-actions button {
+	background: none;
+	border: none;
+	padding: 0 4px;
+	color: #8a8d96;
+}
+
+.dg-tree-actions button:hover:not(:disabled) {
+	background: none;
+	color: #d7d7db;
+}
+
+.dg-badge {
+	font-size: 10px;
+	padding: 1px 5px;
+	border: 1px solid #3d4048;
+	border-radius: 3px;
+	color: #8a8d96;
+	margin-left: 4px;
+}
+
+.dg-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 100;
+}
+
+.dg-modal {
+	background: #1e1f24;
+	border: 1px solid #3d4048;
+	border-radius: 6px;
+	padding: 16px;
+	width: 420px;
+	max-height: 85vh;
+	overflow-y: auto;
+}
+
+.dg-modal-title {
+	font-weight: 600;
+	margin-bottom: 12px;
+}
+
+.dg-modal-hint {
+	color: #8a8d96;
+	font-size: 12px;
+	margin: 0 0 10px;
+}
+
+.dg-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 10px;
+	flex: 1;
+}
+
+.dg-field span {
+	font-size: 11px;
+	color: #8a8d96;
+}
+
+.dg-field input,
+.dg-field select {
+	background: #17181c;
+	border: 1px solid #3d4048;
+	border-radius: 4px;
+	color: #d7d7db;
+	padding: 5px 8px;
+	font: inherit;
+}
+
+.dg-field input:focus,
+.dg-field select:focus {
+	outline: none;
+	border-color: #4f6b9e;
+}
+
+.dg-field-row {
+	display: flex;
+	gap: 10px;
+	align-items: flex-end;
+}
+
+.dg-field-port {
+	max-width: 90px;
+}
+
+.dg-field-checkbox {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	padding-bottom: 10px;
+}
+
+.dg-test-ok {
+	color: #98c379;
+	font-size: 12px;
+}
+
+.dg-test-failed {
+	color: #e06c75;
+	font-size: 12px;
+}
+
+.dg-modal-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.dg-modal-actions-spacer {
+	flex: 1;
+}

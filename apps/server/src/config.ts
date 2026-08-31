@@ -10,6 +10,8 @@ const envSchema = z.object({
 	APP_DATABASE_URL: z.string().min(1),
 	CONNECTION_ENCRYPTION_KEY: z.string().min(32),
 	SESSION_SECRET: z.string().min(32),
+	/** Predefined connections file; defaults to connections.json at repo root. */
+	CONNECTIONS_FILE: z.string().min(1).optional(),
 	QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 	QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10_000),
 	QUERY_MAX_BYTES: z.coerce.number().int().positive().default(25_000_000),

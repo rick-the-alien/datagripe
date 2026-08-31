@@ -1,6 +1,6 @@
 # Spec — Connection sources
 
-**Status:** draft
+**Status:** current
 **Phase:** 2
 **Supersedes:** nothing (extends `docs/initial_idea.md` §6, §8)
 
@@ -96,6 +96,10 @@ column cannot reference predefined ids; documents opened against a
 predefined connection store that preference client-side (IndexedDB) until a
 nullable `default_connection_ref` column is added in a later migration —
 tracked as an open question.
+
+`ConnectionMetadata.id` is a plain string (UUID for managed, kebab-case
+slug for predefined) with a `source: "managed" | "predefined"` field, so
+clients never branch on id shape.
 
 ### Conflict rules
 

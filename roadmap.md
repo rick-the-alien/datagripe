@@ -25,13 +25,13 @@ Legend: `[ ]` planned · `[~]` in progress · `[x]` shipped
 
 Exit: multiple documents survive tab switching, splitting, and reload without lost changes.
 
-## Phase 2 — PostgreSQL connections and explorer
+## Phase 2 — PostgreSQL connections and explorer · shipped 2026-08-31
 
-- [ ] Encrypted connection CRUD (`connection_secrets`, AES-GCM, versioned keys)
-- [ ] DataGrip-style connection dialog: test, save, organize
-- [ ] Predefined connections from config/env — `docs/spec/connection-sources.md`
-- [ ] PostgreSQL adapter: lazy schema/table/column introspection
-- [ ] Explorer tree with refresh and short-lived introspection cache
+- [x] Encrypted connection CRUD (`connection_secrets`, AES-GCM, versioned keys)
+- [x] DataGrip-style connection dialog: test, save, organize
+- [x] Predefined connections from config/env — `docs/spec/connection-sources.md`
+- [x] PostgreSQL adapter: lazy schema/table/column introspection
+- [x] Explorer tree with refresh and short-lived introspection cache
 
 Exit: a user can save a connection and browse schemas/tables/columns without seeing credentials.
 

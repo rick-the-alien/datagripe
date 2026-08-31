@@ -1,0 +1,141 @@
+import {
+	type ClientAction,
+	serverResponseSchema,
+	WS_PROTOCOL_VERSION,
+} from "@datagripe/contracts/ws";
+
+/**
+ * Multiplexed workspace WebSocket client (docs/initial_idea.md §9–10):
+ * one socket per browser workspace; every request carries a requestId
+ * and is correlated to its response. Sends are queued until the socket
+ * opens; pending requests are rejected on close and the socket
+ * reconnects with a fixed delay.
+ */
+
+export type WsRequestFn = <T>(
+	action: ClientAction,
+	payload: unknown,
+) => Promise<T>;
+
+type PendingRequest = {
+	resolve: (payload: unknown) => void;
+	reject: (error: Error) => void;
+	timer: ReturnType<typeof setTimeout>;
+};
+
+const REQUEST_TIMEOUT_MS = 15_000;
+const RECONNECT_DELAY_MS = 1_000;
+
+export class WsClient {
+	private socket: WebSocket | null = null;
+	private started = false;
+	private readonly pending = new Map<string, PendingRequest>();
+	private readonly queue: Array<() => void> = [];
+	private readonly openListeners = new Set<() => void>();
+
+	/** Connect once; subsequent calls are no-ops. Reconnects automatically. */
+	connect(): void {
+		if (this.started) {
+			return;
+		}
+		this.started = true;
+		this.open();
+	}
+
+	/** Called on every (re)open — re-run bootstrap loads here. */
+	onOpen(listener: () => void): () => void {
+		this.openListeners.add(listener);
+		return () => this.openListeners.delete(listener);
+	}
+
+	get isOpen(): boolean {
+		return this.socket?.readyState === WebSocket.OPEN;
+	}
+
+	request: WsRequestFn = <T>(action: ClientAction, payload: unknown) =>
+		new Promise<T>((resolvePromise, rejectPromise) => {
+			const send = () => {
+				const requestId = crypto.randomUUID();
+				const timer = setTimeout(() => {
+					this.pending.delete(requestId);
+					rejectPromise(new Error(`Request '${action}' timed out`));
+				}, REQUEST_TIMEOUT_MS);
+				this.pending.set(requestId, {
+					resolve: (payload) => resolvePromise(payload as T),
+					reject: rejectPromise,
+					timer,
+				});
+				this.socket?.send(
+					JSON.stringify({
+						version: WS_PROTOCOL_VERSION,
+						kind: "request",
+						requestId,
+						action,
+						payload,
+					}),
+				);
+			};
+			if (this.isOpen) {
+				send();
+			} else {
+				this.queue.push(send);
+			}
+		});
+
+	private open(): void {
+		const protocol = location.protocol === "https:" ? "wss" : "ws";
+		const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+		this.socket = socket;
+
+		socket.onopen = () => {
+			for (const send of this.queue.splice(0)) {
+				send();
+			}
+			for (const listener of this.openListeners) {
+				listener();
+			}
+		};
+
+		socket.onmessage = (event) => {
+			let raw: unknown;
+			try {
+				raw = JSON.parse(String(event.data));
+			} catch {
+				return;
+			}
+			const parsed = serverResponseSchema.safeParse(raw);
+			if (!parsed.success || parsed.data.kind !== "response") {
+				return;
+			}
+			const response = parsed.data;
+			const entry = this.pending.get(response.requestId);
+			if (entry === undefined) {
+				return;
+			}
+			this.pending.delete(response.requestId);
+			clearTimeout(entry.timer);
+			if (response.ok) {
+				entry.resolve(response.payload);
+			} else {
+				entry.reject(new Error(response.error?.message ?? "Request failed"));
+			}
+		};
+
+		socket.onclose = () => {
+			for (const [requestId, entry] of this.pending) {
+				clearTimeout(entry.timer);
+				entry.reject(new Error("WebSocket closed"));
+				this.pending.delete(requestId);
+			}
+			if (this.started) {
+				setTimeout(() => this.open(), RECONNECT_DELAY_MS);
+			}
+		};
+
+		socket.onerror = () => {
+			socket.close();
+		};
+	}
+}
+
+export const wsClient = new WsClient();

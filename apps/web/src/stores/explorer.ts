@@ -1,0 +1,124 @@
+import type { SchemaNode, SchemaPathSegment } from "@datagripe/contracts";
+import { create } from "zustand";
+import type { WsRequestFn } from "../api/ws";
+
+/**
+ * Schema explorer tree state. Deliberately a plain store rather than a
+ * query cache: refresh must propagate `refresh: true` into the request
+ * payload for exactly the expanded paths, which query caches cannot
+ * express. Children stay cached until refresh or socket reconnect.
+ */
+
+export type ChildrenState =
+	| { status: "loading" }
+	| { status: "loaded"; nodes: SchemaNode[] }
+	| { status: "error"; message: string };
+
+export function nodeKey(
+	connectionId: string,
+	path: SchemaPathSegment[],
+): string {
+	const suffix = path
+		.map((segment) => `${segment.kind}:${segment.name}`)
+		.join("/");
+	return `${connectionId}/${suffix}`;
+}
+
+export type ExplorerState = {
+	children: Record<string, ChildrenState>;
+	/** Key → path; presence means expanded. The path travels along so
+	 * refresh can re-request without reverse-parsing the key. */
+	expanded: Record<string, { connectionId: string; path: SchemaPathSegment[] }>;
+	toggle: (connectionId: string, path: SchemaPathSegment[]) => Promise<void>;
+	refresh: (connectionId: string) => Promise<void>;
+	reset: () => void;
+};
+
+export function createExplorerStore(request: WsRequestFn) {
+	return create<ExplorerState>()((set, get) => {
+		async function fetchChildren(
+			connectionId: string,
+			path: SchemaPathSegment[],
+			refresh: boolean,
+		): Promise<void> {
+			const key = nodeKey(connectionId, path);
+			set({
+				children: { ...get().children, [key]: { status: "loading" } },
+			});
+			try {
+				const result = await request<{ nodes: SchemaNode[] }>(
+					"schema.children",
+					{ connectionId, path, refresh },
+				);
+				set({
+					children: {
+						...get().children,
+						[key]: { status: "loaded", nodes: result.nodes },
+					},
+				});
+			} catch (error) {
+				set({
+					children: {
+						...get().children,
+						[key]: {
+							status: "error",
+							message: error instanceof Error ? error.message : "Load failed",
+						},
+					},
+				});
+			}
+		}
+
+		return {
+			children: {},
+			expanded: {},
+
+			async toggle(connectionId, path) {
+				const key = nodeKey(connectionId, path);
+				if (get().expanded[key] !== undefined) {
+					const { [key]: _collapsed, ...expanded } = get().expanded;
+					set({ expanded });
+					return;
+				}
+				set({
+					expanded: {
+						...get().expanded,
+						[key]: { connectionId, path },
+					},
+				});
+				if (get().children[key] === undefined) {
+					await fetchChildren(connectionId, path, false);
+				}
+			},
+
+			async refresh(connectionId) {
+				const targets = new Map<string, SchemaPathSegment[]>();
+				targets.set(nodeKey(connectionId, []), []);
+				for (const entry of Object.values(get().expanded)) {
+					if (entry.connectionId === connectionId) {
+						targets.set(nodeKey(entry.connectionId, entry.path), entry.path);
+					}
+				}
+				// Drop cached children for this connection so re-expanding a
+				// collapsed node also refetches.
+				const children = Object.fromEntries(
+					Object.entries(get().children).filter(
+						([key]) => !key.startsWith(`${connectionId}/`),
+					),
+				);
+				set({ children });
+				await Promise.all(
+					[...targets.values()].map((path) =>
+						fetchChildren(connectionId, path, true),
+					),
+				);
+			},
+
+			reset() {
+				set({ children: {}, expanded: {} });
+			},
+		};
+	});
+}
+
+export type ExplorerStore = ReturnType<typeof createExplorerStore>;

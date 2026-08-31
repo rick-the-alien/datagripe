@@ -3,7 +3,11 @@ import {
 	clientRequestSchema,
 	type ServerResponse,
 } from "@datagripe/contracts/ws";
+import { InvalidIntrospectionPathError } from "@datagripe/database-adapters";
+import { ZodError } from "zod";
+import { ServiceError } from "../connections/service";
 import { log } from "../log";
+import type { Dispatch } from "./dispatch";
 
 export type SocketData = {
 	requestId: string;
@@ -15,68 +19,112 @@ function respond(ws: ServerWebSocket, response: ServerResponse): void {
 	ws.send(JSON.stringify(response));
 }
 
+function failure(
+	ws: ServerWebSocket,
+	requestId: string,
+	code: string,
+	message: string,
+	details?: unknown,
+): void {
+	respond(ws, {
+		version: 1,
+		kind: "response",
+		requestId,
+		ok: false,
+		error: {
+			code,
+			message,
+			requestId: ws.data.requestId,
+			...(details !== undefined ? { details } : {}),
+		},
+	});
+}
+
 /**
- * Phase 0 WebSocket handler: validates the protocol envelope and
- * rejects every action as unimplemented. Auth binding, action dispatch,
- * and authorization land with the workspace session in later phases.
+ * WebSocket handler: validates the protocol envelope, then dispatches the
+ * action. Auth binding and per-object authorization land in Phase 4 with
+ * the workspace session.
  */
-export const websocketHandler = {
-	open(ws: ServerWebSocket) {
-		log.info("websocket connected", { requestId: ws.data.requestId });
-	},
+export function createWebsocketHandler(dispatch: Dispatch) {
+	return {
+		open(ws: ServerWebSocket) {
+			log.info("websocket connected", { requestId: ws.data.requestId });
+		},
 
-	message(ws: ServerWebSocket, message: string | Buffer) {
-		const text =
-			typeof message === "string" ? message : message.toString("utf8");
+		message(ws: ServerWebSocket, message: string | Buffer) {
+			const text =
+				typeof message === "string" ? message : message.toString("utf8");
 
-		let parsed: unknown;
-		try {
-			parsed = JSON.parse(text);
-		} catch {
-			respond(ws, {
-				version: 1,
-				kind: "response",
-				requestId: "unknown",
-				ok: false,
-				error: {
-					code: ErrorCodes.BadRequest,
-					message: "Malformed message",
-					requestId: ws.data.requestId,
-				},
-			});
-			return;
-		}
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(text);
+			} catch {
+				failure(ws, "unknown", ErrorCodes.BadRequest, "Malformed message");
+				return;
+			}
 
-		const result = clientRequestSchema.safeParse(parsed);
-		if (!result.success) {
-			respond(ws, {
-				version: 1,
-				kind: "response",
-				requestId: "unknown",
-				ok: false,
-				error: {
-					code: ErrorCodes.BadRequest,
-					message: "Invalid protocol envelope",
-					requestId: ws.data.requestId,
-				},
-			});
-			return;
-		}
+			const result = clientRequestSchema.safeParse(parsed);
+			if (!result.success) {
+				failure(
+					ws,
+					"unknown",
+					ErrorCodes.BadRequest,
+					"Invalid protocol envelope",
+				);
+				return;
+			}
 
-		respond(ws, {
-			version: 1,
-			kind: "response",
-			requestId: result.data.requestId,
-			ok: false,
-			error: {
-				code: ErrorCodes.NotFound,
-				message: `Action '${result.data.action}' is not implemented yet`,
-				requestId: ws.data.requestId,
-			},
-		});
-	},
+			const request = result.data;
+			void (async () => {
+				try {
+					const payload = await dispatch(request.action, request.payload);
+					respond(ws, {
+						version: 1,
+						kind: "response",
+						requestId: request.requestId,
+						ok: true,
+						payload,
+					});
+				} catch (error) {
+					if (error instanceof ServiceError) {
+						failure(ws, request.requestId, error.code, error.message);
+					} else if (error instanceof ZodError) {
+						failure(
+							ws,
+							request.requestId,
+							ErrorCodes.BadRequest,
+							"Invalid action payload",
+							error.issues.map((issue) => ({
+								path: issue.path.join("."),
+								message: issue.message,
+							})),
+						);
+					} else if (error instanceof InvalidIntrospectionPathError) {
+						failure(
+							ws,
+							request.requestId,
+							ErrorCodes.BadRequest,
+							error.message,
+						);
+					} else {
+						log.error("action failed", {
+							requestId: ws.data.requestId,
+							action: request.action,
+							error: error instanceof Error ? error.message : String(error),
+						});
+						failure(
+							ws,
+							request.requestId,
+							ErrorCodes.Internal,
+							"Internal error",
+						);
+					}
+				}
+			})();
+		},
 
-	close(ws: ServerWebSocket) {
-		log.info("websocket disconnected", { requestId: ws.data.requestId });
-	},
-};
+		close(ws: ServerWebSocket) {
+			log.info("websocket disconnected", { requestId: ws.data.requestId });
+		},
+	};
+}

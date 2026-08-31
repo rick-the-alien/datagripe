@@ -1,10 +1,33 @@
+import { PostgresAdapter } from "@datagripe/database-adapters";
 import { serve } from "bun";
+import { ensureLocalWorkspace } from "./bootstrap";
 import { loadConfig } from "./config";
+import { loadPredefinedConnections } from "./connections/predefined";
+import { createConnectionsService } from "./connections/service";
+import { createKeyring } from "./crypto/keyring";
+import { createAppDb } from "./db/app/pool";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
-import { type SocketData, websocketHandler } from "./ws/handler";
+import { createDispatcher } from "./ws/dispatch";
+import { createWebsocketHandler, type SocketData } from "./ws/handler";
 
 const config = await loadConfig();
+const appDb = createAppDb(config);
+
+// Pre-auth stub (Phase 4): one local user/workspace owns all rows.
+const workspace = await ensureLocalWorkspace(appDb);
+const keyring = createKeyring(new Map([[1, config.CONNECTION_ENCRYPTION_KEY]]));
+const predefined = await loadPredefinedConnections(config);
+const adapter = new PostgresAdapter();
+
+const connections = createConnectionsService({
+	appDb,
+	keyring,
+	adapter,
+	workspace,
+	predefined,
+});
+const dispatch = createDispatcher({ appDb, workspace, connections });
 
 const server = serve<SocketData>({
 	port: config.PORT,
@@ -49,10 +72,21 @@ const server = serve<SocketData>({
 		return errorResponse(404, "NOT_FOUND", "Not found", requestId);
 	},
 
-	websocket: websocketHandler,
+	websocket: createWebsocketHandler(dispatch),
 });
+
+async function shutdown() {
+	log.info("shutting down");
+	server.stop();
+	await adapter.close();
+	await appDb.close();
+	process.exit(0);
+}
+process.on("SIGINT", () => void shutdown());
+process.on("SIGTERM", () => void shutdown());
 
 log.info("server listening", {
 	port: server.port,
 	env: config.NODE_ENV,
+	predefinedConnections: predefined.size,
 });

@@ -23,7 +23,7 @@ export function DocumentSidebar(props: DocumentSidebarProps) {
 	);
 
 	return (
-		<aside className="dg-sidebar">
+		<div className="dg-documents">
 			<div className="dg-sidebar-heading">Documents</div>
 			<ul className="dg-document-list">
 				{order.map((id) => {
@@ -87,6 +87,6 @@ export function DocumentSidebar(props: DocumentSidebarProps) {
 			{order.length === 0 && (
 				<p className="dg-sidebar-empty">No documents yet.</p>
 			)}
-		</aside>
+		</div>
 	);
 }

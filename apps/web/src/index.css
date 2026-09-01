@@ -728,3 +728,11 @@ button:disabled {
 	overflow: hidden;
 	clip: rect(0 0 0 0);
 }
+
+.dg-history-row {
+	cursor: pointer;
+}
+
+.dg-history-row:hover td {
+	background: #23242b;
+}

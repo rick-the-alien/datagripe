@@ -52,8 +52,15 @@ export type ExecutionsState = {
 	/** Events that arrived before their execution.start response (fast
 	 * executions race the response on the wire). Drained on register. */
 	earlyEvents: Record<string, ServerEvent[]>;
+	/** A member's execution opened from history (6d); overrides the
+	 * active document's latest execution in the results panel. */
+	viewingExecutionId: string | null;
 	run: (viewId: string, mode: RunMode) => Promise<void>;
 	cancel: (executionId: string) => Promise<void>;
+	/** Replay another member's execution into the results panel and
+	 * subscribe this socket to its live row batches. */
+	openSharedExecution: (executionId: string) => Promise<void>;
+	clearViewing: () => void;
 	handleEvent: (event: ServerEvent) => void;
 };
 
@@ -171,6 +178,7 @@ export function createExecutionsStore(request: WsRequestFn) {
 			latestByDocument: {},
 			runErrors: {},
 			earlyEvents: {},
+			viewingExecutionId: null,
 
 			async run(viewId, mode) {
 				const view = useViewsStore.getState().views[viewId];
@@ -267,6 +275,74 @@ export function createExecutionsStore(request: WsRequestFn) {
 
 			async cancel(executionId) {
 				await request("execution.cancel", { executionId });
+			},
+
+			async openSharedExecution(executionId) {
+				// Register a placeholder so replayed and live events apply.
+				if (get().executions[executionId] === undefined) {
+					set({
+						executions: {
+							...get().executions,
+							[executionId]: {
+								id: executionId,
+								connectionId: "",
+								status: "queued",
+								statements: 1,
+								resultSets: [],
+								progress: [],
+							},
+						},
+					});
+				}
+				set({ viewingExecutionId: executionId });
+				try {
+					const result = await request<{
+						events: Array<{
+							sequence: number;
+							topic: string;
+							payload: unknown;
+						}>;
+					}>("execution.subscribe", { executionId, afterSequence: 0 });
+					const events = [...result.events].sort(
+						(a, b) => a.sequence - b.sequence,
+					);
+					for (const buffered of events) {
+						applyEvent(executionId, {
+							version: 1,
+							kind: "event",
+							eventId: crypto.randomUUID(),
+							topic: buffered.topic,
+							executionId,
+							sequence: buffered.sequence,
+							occurredAt: "",
+							payload: buffered.payload,
+						} as ServerEvent);
+					}
+					// Events that raced ahead while we were not subscribed.
+					const early = get().earlyEvents[executionId];
+					if (early !== undefined) {
+						const { [executionId]: _drained, ...earlyEvents } =
+							get().earlyEvents;
+						set({ earlyEvents });
+						for (const event of early) {
+							applyEvent(executionId, event);
+						}
+					}
+				} catch (error) {
+					patch(executionId, {
+						status: "failed",
+						error: {
+							message:
+								error instanceof Error
+									? error.message
+									: "Execution is no longer available",
+						},
+					});
+				}
+			},
+
+			clearViewing() {
+				set({ viewingExecutionId: null });
 			},
 
 			handleEvent(event) {

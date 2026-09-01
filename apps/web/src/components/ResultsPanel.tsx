@@ -35,7 +35,9 @@ function cellText(value: unknown): { text: string; isNull: boolean } {
 	return { text: String(value), isNull: false };
 }
 
-function HistoryView() {
+function HistoryView(props: {
+	onOpenExecution: (executionId: string) => void;
+}) {
 	const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
 	const [scope, setScope] = useState<"mine" | "workspace">("mine");
 	useEffect(() => {
@@ -88,13 +90,22 @@ function HistoryView() {
 					</thead>
 					<tbody>
 						{entries.map((entry) => (
-							<tr key={entry.id}>
+							<tr
+								key={entry.id}
+								className="dg-history-row"
+								title="Open this execution's results"
+								onClick={() => props.onOpenExecution(entry.id)}
+							>
 								<td>
 									{entry.startedAt === null
 										? "—"
 										: new Date(entry.startedAt).toLocaleTimeString()}
 								</td>
-								<td>{entry.status}</td>
+								<td>
+									{entry.status}
+									{(entry.status === "running" || entry.status === "queued") &&
+										" ●"}
+								</td>
 								<td>{entry.connectionName}</td>
 								{scope === "workspace" && <td>{entry.actorEmail}</td>}
 								<td>
@@ -123,8 +134,15 @@ export function ResultsPanel() {
 	const latestId = useExecutionsStore((state) =>
 		documentId === undefined ? undefined : state.latestByDocument[documentId],
 	);
+	const viewingExecutionId = useExecutionsStore(
+		(state) => state.viewingExecutionId,
+	);
 	const execution = useExecutionsStore((state) =>
-		latestId === undefined ? undefined : state.executions[latestId],
+		viewingExecutionId !== null
+			? state.executions[viewingExecutionId]
+			: latestId === undefined
+				? undefined
+				: state.executions[latestId],
 	);
 	const runError = useExecutionsStore((state) =>
 		documentId === undefined ? undefined : state.runErrors[documentId],
@@ -227,6 +245,19 @@ export function ResultsPanel() {
 					)}
 				<span className="dg-results-status">
 					{execution === undefined && runError === undefined && "No results"}
+					{viewingExecutionId !== null && (
+						<span className="dg-follow-chip">
+							Shared execution
+							<button
+								type="button"
+								className="dg-follow-detach"
+								aria-label="Back to active document results"
+								onClick={() => executions.clearViewing()}
+							>
+								×
+							</button>
+						</span>
+					)}
 					{execution?.status === "queued" && "Queued…"}
 					{execution?.status === "running" && "Running…"}
 					{execution?.status === "succeeded" &&
@@ -283,7 +314,12 @@ export function ResultsPanel() {
 
 			{showHistory ? (
 				<div className="dg-results-body">
-					<HistoryView />
+					<HistoryView
+						onOpenExecution={(executionId) => {
+							void executions.openSharedExecution(executionId);
+							setShowHistory(false);
+						}}
+					/>
 				</div>
 			) : (
 				<div className="dg-results-body">

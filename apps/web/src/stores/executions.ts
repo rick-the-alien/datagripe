@@ -6,7 +6,16 @@ import type { WsRequestFn } from "../api/ws";
 import { ensureResultsPanel } from "../app/resultsPanel";
 import { getEditorHandle } from "../editor/handles";
 import { useDocumentsStore } from "./documents";
+import { useSessionStore } from "./session";
 import { useViewsStore } from "./views";
+
+/** A connection ref as stored on workspaces: managed id or predefined:<slug>. */
+export function refToConnectionId(ref: string | null): string | undefined {
+	if (ref === null) {
+		return undefined;
+	}
+	return ref.startsWith("predefined:") ? ref.slice("predefined:".length) : ref;
+}
 
 /**
  * Client execution state (docs/spec/query-execution.md): accumulates
@@ -61,6 +70,8 @@ export type ExecutionsState = {
 	 * subscribe this socket to its live row batches. */
 	openSharedExecution: (executionId: string) => Promise<void>;
 	clearViewing: () => void;
+	/** Drop all execution state (workspace switch). */
+	reset: () => void;
 	handleEvent: (event: ServerEvent) => void;
 };
 
@@ -206,7 +217,11 @@ export function createExecutionsStore(request: WsRequestFn) {
 				}
 
 				const connectionId =
-					useDocumentsStore.getState().prefs[documentId]?.defaultConnectionId;
+					useDocumentsStore.getState().prefs[documentId]?.defaultConnectionId ??
+					refToConnectionId(
+						useSessionStore.getState().currentWorkspace?.defaultConnectionRef ??
+							null,
+					);
 				if (connectionId === undefined) {
 					set({
 						runErrors: {
@@ -343,6 +358,16 @@ export function createExecutionsStore(request: WsRequestFn) {
 
 			clearViewing() {
 				set({ viewingExecutionId: null });
+			},
+
+			reset() {
+				set({
+					executions: {},
+					latestByDocument: {},
+					runErrors: {},
+					earlyEvents: {},
+					viewingExecutionId: null,
+				});
 			},
 
 			handleEvent(event) {

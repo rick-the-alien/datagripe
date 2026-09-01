@@ -20,6 +20,20 @@ export const documentGetRequestSchema = z.object({
 
 export type DocumentGetRequest = z.infer<typeof documentGetRequestSchema>;
 
+/** Live notification when a workspace document is created/saved/archived
+ * by any member (6a). Clients merge it incrementally. */
+export const documentChangedPayloadSchema = z.object({
+	id: z.uuid(),
+	title: z.string().min(1).max(255),
+	revision: z.number().int().nonnegative(),
+	updatedAt: z.iso.datetime(),
+	archived: z.boolean().default(false),
+});
+
+export type DocumentChangedPayload = z.infer<
+	typeof documentChangedPayloadSchema
+>;
+
 /** Document metadata as listed by workspace.open (no content). */
 export const documentListEntrySchema = z.object({
 	id: z.uuid(),

@@ -1,18 +1,41 @@
-import type { SessionBootstrap } from "@datagripe/contracts";
+import type {
+	SessionBootstrap,
+	WorkspaceListEntry,
+	WorkspaceListResult,
+} from "@datagripe/contracts";
 import { create } from "zustand";
 import { wsClient } from "../api/ws";
 
 /**
- * Session state: the /api/session bootstrap plus login/signup/logout.
- * The workspace renders only after a successful bootstrap; AuthScreen
- * covers the unauthenticated case.
+ * Session state: the /api/session bootstrap plus login/signup/logout,
+ * and the current workspace (the project unit). Workspace switching
+ * reconnects the socket and rescopes every workspace-bound store.
  */
+
+const WORKSPACE_STORAGE_KEY = "dg.currentWorkspace";
+
+export interface CurrentWorkspace {
+	id: string;
+	name: string;
+	role: "owner" | "editor" | "viewer";
+	defaultConnectionRef: string | null;
+}
 
 export type SessionState = {
 	bootstrap: SessionBootstrap | null;
+	/** Workspace the socket is bound to (defaults to the account's first). */
+	currentWorkspaceId: string | null;
+	/** Bound workspace details, refreshed on every workspace.open. */
+	currentWorkspace: CurrentWorkspace | null;
+	/** All workspaces the account belongs to (switcher list). */
+	workspaces: WorkspaceListEntry[];
 	error: string | null;
 	busy: boolean;
 	load: () => Promise<void>;
+	loadWorkspaces: () => Promise<void>;
+	switchWorkspace: (id: string) => void;
+	createWorkspace: (name: string) => Promise<void>;
+	confirmWorkspace: (workspace: CurrentWorkspace) => void;
 	login: (email: string, password: string) => Promise<boolean>;
 	signup: (email: string, password: string) => Promise<boolean>;
 	logout: () => Promise<void>;
@@ -35,13 +58,65 @@ async function post(
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
 	bootstrap: null,
+	currentWorkspaceId: null,
+	currentWorkspace: null,
+	workspaces: [],
 	error: null,
 	busy: false,
 
 	async load() {
 		const res = await fetch("/api/session");
 		const bootstrap = (await res.json()) as SessionBootstrap;
-		set({ bootstrap });
+		const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+		set({
+			bootstrap,
+			currentWorkspaceId: saved ?? bootstrap.workspace?.id ?? null,
+			// Until the socket's first workspace.open confirms the binding,
+			// show the bootstrap default.
+			currentWorkspace:
+				get().currentWorkspace ??
+				(bootstrap.workspace !== null
+					? {
+							id: bootstrap.workspace.id,
+							name: bootstrap.workspace.name,
+							role: bootstrap.workspace.role,
+							defaultConnectionRef: bootstrap.workspace.defaultConnectionRef,
+						}
+					: null),
+		});
+	},
+
+	async loadWorkspaces() {
+		const result = await wsClient.request<WorkspaceListResult>(
+			"workspace.list",
+			{},
+		);
+		set({ workspaces: result.workspaces });
+	},
+
+	switchWorkspace(id) {
+		if (id === get().currentWorkspaceId) {
+			return;
+		}
+		localStorage.setItem(WORKSPACE_STORAGE_KEY, id);
+		set({ currentWorkspaceId: id, currentWorkspace: null });
+		wsClient.setWorkspace(id);
+	},
+
+	async createWorkspace(name) {
+		const result = await wsClient.request<{ workspace: WorkspaceListEntry }>(
+			"workspace.create",
+			{ name },
+		);
+		await get().loadWorkspaces();
+		get().switchWorkspace(result.workspace.id);
+	},
+
+	/** Called with every workspace.open result: confirms the actual bound
+	 * workspace (the server falls back to the default for stale ids). */
+	confirmWorkspace(workspace: CurrentWorkspace) {
+		localStorage.setItem(WORKSPACE_STORAGE_KEY, workspace.id);
+		set({ currentWorkspaceId: workspace.id, currentWorkspace: workspace });
 	},
 
 	async login(email, password) {

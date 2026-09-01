@@ -131,8 +131,8 @@ describe("documents server sync", () => {
 		};
 		server.documents.set(serverDoc.id, serverDoc);
 
-		await store.getState().hydrate();
-		await store.getState().syncFromServer([serverEntry(serverDoc)]);
+		await store.getState().hydrate("ws-test");
+		await store.getState().syncFromServer([serverEntry(serverDoc)], "ws-test");
 
 		const doc = store.getState().documents[serverDoc.id];
 		expect(doc).toMatchObject({
@@ -168,7 +168,10 @@ describe("documents server sync", () => {
 
 		await store
 			.getState()
-			.syncFromServer([serverEntry(server.documents.get(doc.id) as Document)]);
+			.syncFromServer(
+				[serverEntry(server.documents.get(doc.id) as Document)],
+				"ws-test",
+			);
 
 		const after = store.getState().documents[doc.id];
 		expect(after?.currentContent).toBe("mine -- unsaved");
@@ -191,7 +194,10 @@ describe("documents server sync", () => {
 		});
 		await store
 			.getState()
-			.syncFromServer([serverEntry(server.documents.get(doc.id) as Document)]);
+			.syncFromServer(
+				[serverEntry(server.documents.get(doc.id) as Document)],
+				"ws-test",
+			);
 
 		const after = store.getState().documents[doc.id];
 		expect(after).toMatchObject({

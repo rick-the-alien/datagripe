@@ -6,7 +6,11 @@ import { type AuthContext, createDispatcher } from "./dispatch";
 
 /** RBAC and rate-limit enforcement in the dispatcher (unit-level). */
 
-const WORKSPACE = { id: "00000000-0000-4000-8000-000000000001", name: "Local" };
+const WORKSPACE = {
+	id: "00000000-0000-4000-8000-000000000001",
+	name: "Local",
+	defaultConnectionRef: null,
+};
 
 function ctx(role: AuthContext["role"]): AuthContext {
 	return {

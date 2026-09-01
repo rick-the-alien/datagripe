@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { adapterInfoSchema, connectionAdapterSchema } from "./adapters";
+import { workspaceRoleSchema } from "./auth";
 import { documentListEntrySchema } from "./multiplayer";
 
 /** Connection contracts. Secrets are write-only; never serialized back to clients. */
@@ -127,6 +128,9 @@ export type ConnectionTestRequest = z.infer<typeof connectionTestRequestSchema>;
 export const workspaceDescriptorSchema = z.object({
 	id: z.uuid(),
 	name: z.string().min(1).max(255),
+	role: workspaceRoleSchema,
+	/** Workspace default target: managed UUID or "predefined:<slug>". */
+	defaultConnectionRef: z.string().nullable(),
 });
 
 export type WorkspaceDescriptor = z.infer<typeof workspaceDescriptorSchema>;

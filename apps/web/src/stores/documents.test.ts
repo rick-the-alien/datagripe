@@ -154,7 +154,7 @@ describe("documents store", () => {
 		});
 
 		const { store } = createTestStore();
-		await store.getState().hydrate();
+		await store.getState().hydrate("ws-test");
 
 		const doc =
 			store.getState().documents["11111111-1111-4111-8111-111111111111"];

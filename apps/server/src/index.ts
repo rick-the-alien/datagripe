@@ -5,7 +5,7 @@ import {
 	SqliteAdapter,
 } from "@datagripe/database-adapters";
 import { serve } from "bun";
-import { defaultWorkspaceFor } from "./auth/accounts";
+import { defaultWorkspaceFor, workspaceForMember } from "./auth/accounts";
 import { createSessionStore } from "./auth/sessions";
 import { loadConfig } from "./config";
 import { loadPredefinedConnections } from "./connections/predefined";
@@ -144,7 +144,13 @@ const server = serve<SocketData>({
 					requestId,
 				);
 			}
-			const workspace = await defaultWorkspaceFor(appDb, session.userId);
+			// Optional workspace switch target; falls back to the default.
+			const requested = url.searchParams.get("workspace");
+			const workspace =
+				requested !== null
+					? ((await workspaceForMember(appDb, session.userId, requested)) ??
+						(await defaultWorkspaceFor(appDb, session.userId)))
+					: await defaultWorkspaceFor(appDb, session.userId);
 			if (workspace === null) {
 				return errorResponse(
 					403,
@@ -164,7 +170,11 @@ const server = serve<SocketData>({
 						userId: session.userId,
 						email: userRow[0]?.email ?? "",
 						sessionId: session.id,
-						workspace: { id: workspace.id, name: workspace.name },
+						workspace: {
+							id: workspace.id,
+							name: workspace.name,
+							defaultConnectionRef: workspace.defaultConnectionRef,
+						},
 						role: workspace.role,
 					},
 				})

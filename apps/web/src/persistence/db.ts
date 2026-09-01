@@ -13,6 +13,10 @@ export interface StoredDocument {
 	revision: number;
 	createdAt: string;
 	updatedAt: string;
+	/** True for workspace-shared files; absent/false = local scratchpad. */
+	shared?: boolean;
+	/** Owning workspace for shared files; null/absent for scratchpads. */
+	workspaceId?: string | null;
 }
 
 export interface StoredDraft {

@@ -18,6 +18,8 @@ import {
 	schemaChildrenRequestSchema,
 	viewBroadcastRequestSchema,
 	viewFollowRequestSchema,
+	workspaceCreateRequestSchema,
+	workspaceSetDefaultConnectionRequestSchema,
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type { ClientAction } from "@datagripe/contracts/ws";
@@ -33,6 +35,11 @@ import type { PresenceTracker } from "../multiplayer/presence";
 import type { ViewBroadcastThrottle } from "../multiplayer/views";
 import type { RateLimiter } from "../security/rateLimit";
 import { addMember, listMembers, removeMember } from "../workspaces/members";
+import {
+	createWorkspace,
+	listWorkspaces,
+	setDefaultConnection,
+} from "../workspaces/service";
 import type { SocketHub } from "./hub";
 
 /**
@@ -44,7 +51,7 @@ import type { SocketHub } from "./hub";
 export interface AuthContext {
 	userId: string;
 	sessionId: string;
-	workspace: { id: string; name: string };
+	workspace: { id: string; name: string; defaultConnectionRef: string | null };
 	role: "owner" | "editor" | "viewer";
 }
 
@@ -79,6 +86,7 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"document.archive": "editor",
 	"execution.start": "editor",
 	"execution.cancel": "editor",
+	"workspace.set-default-connection": "editor",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
 };
@@ -111,6 +119,33 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 		hub,
 		rateLimiter,
 	} = deps;
+
+	/** Notify the workspace about a created/saved/archived document (6a). */
+	function broadcastDocumentChanged(
+		workspaceId: string,
+		entry: {
+			id: string;
+			title: string;
+			revision: number;
+			updatedAt: string;
+		},
+		archived: boolean,
+	): void {
+		hub.broadcastToWorkspace(workspaceId, {
+			version: 1,
+			kind: "event",
+			eventId: crypto.randomUUID(),
+			topic: "document.changed",
+			occurredAt: new Date().toISOString(),
+			payload: {
+				id: entry.id,
+				title: entry.title,
+				revision: entry.revision,
+				updatedAt: entry.updatedAt,
+				archived,
+			},
+		});
+	}
 
 	return async (ctx, action, payload) => {
 		requireRole(ctx, action);
@@ -150,7 +185,12 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 		switch (action) {
 			case "workspace.open":
 				return {
-					workspace,
+					workspace: {
+						id: workspace.id,
+						name: workspace.name,
+						defaultConnectionRef: workspace.defaultConnectionRef,
+						role: ctx.role,
+					},
 					connections: await connections.listConnections(workspace),
 					adapters: connections.adapterInfos(),
 					documents: await documents.listDocuments(workspace.id),
@@ -165,7 +205,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 
 			case "document.create": {
 				const request = documentCreateRequestSchema.parse(payload);
-				return withIdempotency(
+				const result = await withIdempotency(
 					appDb,
 					workspace.id,
 					action,
@@ -174,11 +214,13 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						document: await documents.createDocument(workspace.id, request),
 					}),
 				);
+				broadcastDocumentChanged(workspace.id, result.document, false);
+				return result;
 			}
 
 			case "document.save": {
 				const request = documentSaveRequestSchema.parse(payload);
-				return withIdempotency(
+				const result = await withIdempotency(
 					appDb,
 					workspace.id,
 					action,
@@ -187,11 +229,17 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						document: await documents.saveDocument(workspace.id, request),
 					}),
 				);
+				broadcastDocumentChanged(workspace.id, result.document, false);
+				return result;
 			}
 
 			case "document.archive": {
 				const request = documentArchiveRequestSchema.parse(payload);
-				await documents.archiveDocument(workspace.id, request.id);
+				const archived = await documents.archiveDocument(
+					workspace.id,
+					request.id,
+				);
+				broadcastDocumentChanged(workspace.id, archived, true);
 				return {};
 			}
 
@@ -259,6 +307,28 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 
 			case "workspace.members":
 				return { members: await listMembers(appDb, workspace.id) };
+
+			case "workspace.create": {
+				const request = workspaceCreateRequestSchema.parse(payload);
+				return {
+					workspace: await createWorkspace(appDb, ctx.userId, request.name),
+				};
+			}
+
+			case "workspace.list":
+				return { workspaces: await listWorkspaces(appDb, ctx.userId) };
+
+			case "workspace.set-default-connection": {
+				const request =
+					workspaceSetDefaultConnectionRequestSchema.parse(payload);
+				await setDefaultConnection(
+					appDb,
+					workspace.id,
+					request.connectionRef,
+					(ref) => connections.hasConnectionRef(workspace, ref),
+				);
+				return {};
+			}
 
 			case "workspace.member.add": {
 				const request = memberAddRequestSchema.parse(payload);

@@ -1,4 +1,8 @@
-import type { Document, DocumentListEntry } from "@datagripe/contracts";
+import type {
+	Document,
+	DocumentChangedPayload,
+	DocumentListEntry,
+} from "@datagripe/contracts";
 import { create } from "zustand";
 import { WsError, type WsRequestFn, wsClient } from "../api/ws";
 import { db } from "../persistence/db";
@@ -36,15 +40,25 @@ export type DocumentsState = {
 	/** Per-document preferences (default connection) from documentPrefs. */
 	prefs: Record<string, { defaultConnectionId?: string | undefined }>;
 	hydrated: boolean;
+	/** Workspace whose shared files are currently loaded. */
+	workspaceId: string | null;
 	/** Last server state seen via workspace.open (6a shared files). */
 	serverDocs: Record<string, DocumentListEntry>;
 	/** Documents with an unresolved save conflict (409). */
 	conflicts: Record<string, DocumentConflict>;
 	/** Permission/validation save failures (per document). */
 	saveErrors: Record<string, string>;
-	hydrate: () => Promise<void>;
-	syncFromServer: (serverDocs: DocumentListEntry[]) => Promise<void>;
-	createDocument: (title?: string) => EditorDocument;
+	hydrate: (workspaceId: string | null) => Promise<void>;
+	syncFromServer: (
+		serverDocs: DocumentListEntry[],
+		workspaceId: string,
+	) => Promise<void>;
+	/** Live incremental merge of one server-side change (document.changed). */
+	applyServerChange: (change: DocumentChangedPayload) => Promise<void>;
+	/** Scratchpads are local (IndexedDB); shared files sync to the server. */
+	createDocument: (title?: string, shared?: boolean) => EditorDocument;
+	/** Re-scope shared files to a different workspace (switch). */
+	switchWorkspace: (workspaceId: string) => Promise<void>;
 	renameDocument: (id: string, title: string) => void;
 	updateContent: (id: string, content: string) => void;
 	saveDocument: (id: string) => Promise<void>;
@@ -229,17 +243,26 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 			order: [],
 			prefs: {},
 			hydrated: false,
+			workspaceId: null,
 			serverDocs: {},
 			conflicts: {},
 			saveErrors: {},
 
-			async hydrate() {
+			/** Scratchpads (local) plus this workspace's shared files. */
+			async hydrate(workspaceId) {
 				const [documents, drafts, prefs] = await Promise.all([
 					db.documents.toArray(),
 					db.drafts.toArray(),
 					db.documentPrefs.toArray(),
 				]);
-				const recovered = mergeDrafts(documents, drafts);
+				const scoped = documents.filter(
+					(row) => row.shared !== true || row.workspaceId === workspaceId,
+				);
+				const scopedIds = new Set(scoped.map((row) => row.id));
+				const recovered = mergeDrafts(
+					scoped,
+					drafts.filter((draft) => scopedIds.has(draft.id)),
+				);
 				set({
 					documents: Object.fromEntries(recovered.map((doc) => [doc.id, doc])),
 					order: recovered
@@ -252,7 +275,46 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							{ defaultConnectionId: pref.defaultConnectionId },
 						]),
 					),
+					workspaceId,
 					hydrated: true,
+				});
+			},
+
+			async switchWorkspace(workspaceId) {
+				if (workspaceId === get().workspaceId) {
+					return;
+				}
+				// Drop other workspaces' shared files from memory (they stay
+				// cached in IndexedDB under their workspace), keep scratchpads,
+				// then load this workspace's shared files.
+				const kept = Object.values(get().documents).filter(
+					(doc) => !doc.shared,
+				);
+				const cached = await db.documents.toArray();
+				const sharedRows = cached.filter(
+					(row) => row.shared === true && row.workspaceId === workspaceId,
+				);
+				const drafts = await db.drafts.toArray();
+				const keptIds = new Set([
+					...kept.map((doc) => doc.id),
+					...sharedRows.map((row) => row.id),
+				]);
+				const recovered = mergeDrafts(
+					sharedRows,
+					drafts.filter((draft) => keptIds.has(draft.id)),
+				);
+				const documents = Object.fromEntries(
+					[...kept, ...recovered].map((doc) => [doc.id, doc]),
+				);
+				set({
+					documents,
+					order: Object.values(documents)
+						.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+						.map((doc) => doc.id),
+					workspaceId,
+					serverDocs: {},
+					conflicts: {},
+					saveErrors: {},
 				});
 			},
 
@@ -265,7 +327,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 			 * - local doc ahead of server (saved offline) → push on reconnect.
 			 * A dirty draft is never silently overwritten.
 			 */
-			async syncFromServer(serverDocs) {
+			async syncFromServer(serverDocs, workspaceId) {
 				const serverById = new Map(serverDocs.map((doc) => [doc.id, doc]));
 				const previousServer = get().serverDocs;
 				set({
@@ -290,6 +352,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							currentContent: fetched.content,
 							revision: fetched.revision,
 							dirty: false,
+							shared: true,
 							createdAt: timestamp,
 							updatedAt: fetched.updatedAt,
 						};
@@ -306,6 +369,8 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							revision: doc.revision,
 							createdAt: doc.createdAt,
 							updatedAt: doc.updatedAt,
+							shared: true,
+							workspaceId,
 						});
 						continue;
 					}
@@ -341,6 +406,8 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 								revision: adopted.revision,
 								createdAt: adopted.createdAt,
 								updatedAt: adopted.updatedAt,
+								shared: true,
+								workspaceId,
 							});
 						} else {
 							// Dirty → keep the draft, flag the conflict.
@@ -368,18 +435,42 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 
 					// Local is ahead (saved while offline) → push.
 					if (
+						local.shared &&
 						local.revision > serverDoc.revision &&
 						!local.dirty &&
 						previousServer[serverDoc.id] !== undefined
 					) {
 						await get().saveDocument(serverDoc.id);
 					}
+
+					// Repair: synced before the shared flag existed → mark shared.
+					if (!local.shared && local.revision === serverDoc.revision) {
+						const repaired: EditorDocument = { ...local, shared: true };
+						set({
+							documents: { ...get().documents, [local.id]: repaired },
+						});
+						void db.documents.put({
+							id: repaired.id,
+							title: repaired.title,
+							content: repaired.savedContent,
+							revision: repaired.revision,
+							createdAt: repaired.createdAt,
+							updatedAt: repaired.updatedAt,
+							shared: true,
+							workspaceId,
+						});
+					}
 				}
 
-				// Local documents unknown to the server → create them.
+				// Local SHARED documents unknown to the server → create them.
 				for (const id of get().order) {
 					const local = get().documents[id];
-					if (local === undefined || serverById.has(id) || local.revision > 0) {
+					if (
+						local === undefined ||
+						!local.shared ||
+						serverById.has(id) ||
+						local.revision > 0
+					) {
 						continue;
 					}
 					if (ws === undefined || !ws.isOpen()) {
@@ -405,6 +496,127 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						});
 					} catch {
 						// Offline or rejected — next sync retries.
+					}
+				}
+			},
+
+			async applyServerChange(change) {
+				const workspaceId = get().workspaceId;
+				const local = get().documents[change.id];
+				set({
+					serverDocs: {
+						...get().serverDocs,
+						[change.id]: {
+							id: change.id,
+							title: change.title,
+							revision: change.revision,
+							updatedAt: change.updatedAt,
+						},
+					},
+				});
+
+				if (change.archived) {
+					// Archived elsewhere: clean copies drop; dirty drafts stay put.
+					if (local !== undefined && !local.dirty) {
+						const { [change.id]: _gone, ...documents } = get().documents;
+						set({
+							documents,
+							order: get().order.filter((id) => id !== change.id),
+						});
+						await db.documents.delete(change.id);
+					}
+					return;
+				}
+
+				if (local === undefined) {
+					const fetched = await fetchServerDocument(change.id);
+					if (fetched === undefined) {
+						return;
+					}
+					const timestamp = now();
+					const doc: EditorDocument = {
+						id: fetched.id,
+						title: fetched.title,
+						language: "sql",
+						savedContent: fetched.content,
+						currentContent: fetched.content,
+						revision: fetched.revision,
+						dirty: false,
+						shared: true,
+						createdAt: timestamp,
+						updatedAt: fetched.updatedAt,
+					};
+					set({
+						documents: { ...get().documents, [doc.id]: doc },
+						order: get().order.includes(doc.id)
+							? get().order
+							: [...get().order, doc.id],
+					});
+					void db.documents.put({
+						id: doc.id,
+						title: doc.title,
+						content: doc.savedContent,
+						revision: doc.revision,
+						createdAt: doc.createdAt,
+						updatedAt: doc.updatedAt,
+						shared: true,
+						workspaceId,
+					});
+					return;
+				}
+
+				if (!local.shared) {
+					return; // a scratchpad with a colliding id is left alone
+				}
+				if (change.revision > local.revision) {
+					const fetched = await fetchServerDocument(change.id);
+					if (fetched === undefined) {
+						return;
+					}
+					if (!local.dirty) {
+						const adopted: EditorDocument = {
+							...local,
+							title: fetched.title,
+							savedContent: fetched.content,
+							currentContent: fetched.content,
+							revision: fetched.revision,
+							dirty: false,
+							updatedAt: fetched.updatedAt,
+						};
+						set({
+							documents: { ...get().documents, [local.id]: adopted },
+						});
+						debouncer.cancel(local.id);
+						void db.drafts.delete(local.id);
+						void db.documents.put({
+							id: adopted.id,
+							title: adopted.title,
+							content: adopted.savedContent,
+							revision: adopted.revision,
+							createdAt: adopted.createdAt,
+							updatedAt: adopted.updatedAt,
+							shared: true,
+							workspaceId,
+						});
+					} else {
+						set({
+							documents: {
+								...get().documents,
+								[local.id]: {
+									...local,
+									savedContent: fetched.content,
+									revision: fetched.revision,
+								},
+							},
+							conflicts: {
+								...get().conflicts,
+								[local.id]: {
+									revision: fetched.revision,
+									content: fetched.content,
+									updatedAt: fetched.updatedAt,
+								},
+							},
+						});
 					}
 				}
 			},
@@ -443,7 +655,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 				}
 			},
 
-			createDocument(title) {
+			createDocument(title, shared = false) {
 				const state = get();
 				const resolvedTitle =
 					title ??
@@ -459,6 +671,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					currentContent: "",
 					revision: 0,
 					dirty: false,
+					shared,
 					createdAt: timestamp,
 					updatedAt: timestamp,
 				};
@@ -475,7 +688,33 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					revision: 0,
 					createdAt: doc.createdAt,
 					updatedAt: doc.updatedAt,
+					shared: doc.shared,
+					workspaceId: doc.shared ? get().workspaceId : null,
 				});
+				// Shared files register server-side immediately when connected.
+				if (shared && ws?.isOpen()) {
+					void ws
+						.request("document.create", {
+							id: doc.id,
+							title: doc.title,
+							content: "",
+							idempotencyKey: crypto.randomUUID(),
+						})
+						.then(() => {
+							set({
+								serverDocs: {
+									...get().serverDocs,
+									[doc.id]: {
+										id: doc.id,
+										title: doc.title,
+										revision: 0,
+										updatedAt: doc.updatedAt,
+									},
+								},
+							});
+						})
+						.catch(() => {});
+				}
 				return doc;
 			},
 

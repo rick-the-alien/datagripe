@@ -75,6 +75,14 @@ Tracked in `docs/spec/multiplayer.md`.
 - [x] 6d: shared execution visibility — see what others ran and its results; run queries on shared connections under your own identity
 - [x] 6e: audit trail for cross-user execution
 
+## Phase 7 — Workspaces as projects · shipped 2026-09-01
+
+- [x] Workspace create + switch (socket rebinds, everything rescopes)
+- [x] Sidebar split: local scratchpads (IndexedDB) vs shared workspace files
+- [x] Workspace default connection (document pick falls back to it)
+- [x] Live `document.changed` broadcast for shared files
+- [x] Spec: `docs/spec/workspaces.md`
+
 ## Unscheduled / parking lot
 
 - AI query generation (explicit MVP non-goal; revisit after Phase 4)

@@ -3,6 +3,7 @@ import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
 import { type DocumentsState, useDocumentsStore } from "../stores/documents";
+import { refToConnectionId } from "../stores/executions";
 import { useConnectionsStore, useExecutionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
@@ -148,11 +149,16 @@ export function ResultsPanel() {
 		documentId === undefined ? undefined : state.runErrors[documentId],
 	);
 	const connections = useConnectionsStore((state) => state.connections);
-	const defaultConnectionId = useDocumentsStore((state) =>
+	const docConnectionId = useDocumentsStore((state) =>
 		documentId === undefined
 			? undefined
 			: state.prefs[documentId]?.defaultConnectionId,
 	);
+	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
+	const workspaceDefaultId = refToConnectionId(
+		currentWorkspace?.defaultConnectionRef ?? null,
+	);
+	const defaultConnectionId = docConnectionId ?? workspaceDefaultId;
 	const [showHistory, setShowHistory] = useState(false);
 
 	const executions = useExecutionsStore.getState();
@@ -165,7 +171,7 @@ export function ResultsPanel() {
 			: ADAPTER_CAPABILITIES[connection.adapter];
 	const canExecute = capabilities?.execution != null;
 	const myUserId = useSessionStore((state) => state.bootstrap?.user?.id);
-	const myRole = useSessionStore((state) => state.bootstrap?.workspace?.role);
+	const myRole = currentWorkspace?.role;
 	const canCancel =
 		capabilities?.cancellation === true &&
 		execution !== undefined &&
@@ -200,6 +206,45 @@ export function ResultsPanel() {
 						</option>
 					))}
 				</select>
+				{docConnectionId === undefined && workspaceDefaultId !== undefined && (
+					<span className="dg-header-meta">workspace default</span>
+				)}
+				{docConnectionId !== undefined &&
+					myRole !== "viewer" &&
+					docConnectionId !== workspaceDefaultId && (
+						<button
+							type="button"
+							className="dg-pin"
+							title="Use this connection for the whole workspace"
+							onClick={() => {
+								const connection = connections.find(
+									(c) => c.id === docConnectionId,
+								);
+								if (connection === undefined) {
+									return;
+								}
+								const ref =
+									connection.source === "predefined"
+										? `predefined:${connection.id}`
+										: connection.id;
+								void wsClient
+									.request("workspace.set-default-connection", {
+										connectionRef: ref,
+									})
+									.then(() => {
+										const current = useSessionStore.getState().currentWorkspace;
+										if (current !== null) {
+											useSessionStore.getState().confirmWorkspace({
+												...current,
+												defaultConnectionRef: ref,
+											});
+										}
+									});
+							}}
+						>
+							⧉ workspace
+						</button>
+					)}
 				<button
 					type="button"
 					disabled={lastEditorViewId === null || !canExecute}

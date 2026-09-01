@@ -64,7 +64,10 @@ export interface DocumentsService {
 		workspaceId: string,
 		request: DocumentSaveRequest,
 	) => Promise<Document>;
-	archiveDocument: (workspaceId: string, id: string) => Promise<void>;
+	archiveDocument: (
+		workspaceId: string,
+		id: string,
+	) => Promise<DocumentListEntry>;
 }
 
 export function createDocumentsService(appDb: AppDb): DocumentsService {
@@ -142,17 +145,24 @@ export function createDocumentsService(appDb: AppDb): DocumentsService {
 		},
 
 		async archiveDocument(workspaceId, id) {
-			const rows = await appDb<{ id: string }[]>`
+			const rows = await appDb<DocumentRow[]>`
 				UPDATE documents SET archived_at = now()
 				WHERE id = ${id} AND workspace_id = ${workspaceId} AND archived_at IS NULL
-				RETURNING id
+				RETURNING *
 			`;
-			if (rows[0] === undefined) {
+			const row = rows[0];
+			if (row === undefined) {
 				throw new ServiceError(
 					ErrorCodes.NotFound,
 					`Document '${id}' not found`,
 				);
 			}
+			return {
+				id: row.id,
+				title: row.title,
+				revision: row.revision,
+				updatedAt: new Date(row.updated_at).toISOString(),
+			};
 		},
 	};
 }

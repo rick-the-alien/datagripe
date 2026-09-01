@@ -1,4 +1,5 @@
 import type {
+	DocumentChangedPayload,
 	PresenceUser,
 	ViewFollowedPayload,
 	ViewStatePayload,
@@ -9,7 +10,7 @@ import {
 	type DockviewReadyEvent,
 	type SerializedDockview,
 } from "dockview-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { wsClient } from "../api/ws";
 import { ConnectionDialog } from "../components/ConnectionDialog";
 import { DocumentSidebar } from "../components/DocumentSidebar";
@@ -43,25 +44,42 @@ const LAYOUT_SAVE_DELAY_MS = 500;
 
 const layoutDebouncer = createDebouncer();
 
-// Hydration runs once per app lifetime, shared across StrictMode remounts.
-let hydratePromise: Promise<void> | undefined;
-function ensureHydrated(): Promise<void> {
-	hydratePromise ??= useDocumentsStore.getState().hydrate();
-	return hydratePromise;
+/** Layouts are per workspace (dock arrangements differ per project);
+ * scratchpads appear in every workspace's layout. */
+function layoutKey(workspaceId: string | null): string {
+	return workspaceId === null ? LOCAL_LAYOUT_ID : `ws:${workspaceId}`;
+}
+
+// Hydration runs once per workspace, shared across StrictMode remounts.
+const hydratePromises = new Map<string | null, Promise<void>>();
+function ensureHydrated(workspaceId: string | null): Promise<void> {
+	let promise = hydratePromises.get(workspaceId);
+	if (promise === undefined) {
+		promise = useDocumentsStore.getState().hydrate(workspaceId);
+		hydratePromises.set(workspaceId, promise);
+	}
+	return promise;
 }
 
 const components = { editor: EditorView, results: ResultsPanel };
 
 function persistLayout(api: DockviewApi): void {
 	void db.layouts.put({
-		id: LOCAL_LAYOUT_ID,
+		id: layoutKey(useSessionStore.getState().currentWorkspaceId),
 		json: api.toJSON(),
 		updatedAt: new Date().toISOString(),
 	});
 }
 
-async function restoreLayout(api: DockviewApi): Promise<void> {
-	const row = await db.layouts.get(LOCAL_LAYOUT_ID);
+async function restoreLayout(
+	api: DockviewApi,
+	workspaceId: string | null,
+): Promise<void> {
+	let row = await db.layouts.get(layoutKey(workspaceId));
+	// One-time fallback: layouts saved before per-workspace keys.
+	if (row === undefined && workspaceId !== null) {
+		row = await db.layouts.get(LOCAL_LAYOUT_ID);
+	}
 	if (row === undefined) {
 		return;
 	}
@@ -95,11 +113,11 @@ function saveActiveDocument(): void {
 
 export function Workspace() {
 	const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
+	const dockApiRef = useRef<DockviewApi | null>(null);
 	const [showMembers, setShowMembers] = useState(false);
 	const sessionUser = useSessionStore((state) => state.bootstrap?.user);
-	const sessionWorkspace = useSessionStore(
-		(state) => state.bootstrap?.workspace,
-	);
+	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
+	const workspaces = useSessionStore((state) => state.workspaces);
 	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
 	const followingUserId = usePresenceStore((state) => state.followingUserId);
@@ -119,23 +137,46 @@ export function Workspace() {
 			: (state.documents[activeDocumentId]?.dirty ?? false),
 	);
 
-	useEffect(() => {
-		void ensureHydrated();
-	}, []);
+	const currentWorkspaceId = useSessionStore(
+		(state) => state.currentWorkspaceId,
+	);
 
-	// Workspace socket: connects once; every (re)open reloads connection
-	// metadata, syncs shared documents, and drops cached explorer trees.
 	useEffect(() => {
-		wsClient.connect();
+		void ensureHydrated(currentWorkspaceId);
+	}, [currentWorkspaceId]);
+
+	// Workspace socket: connects once; every (re)open confirms the bound
+	// workspace, reloads its metadata, syncs its shared documents, and —
+	// on workspace switch — replaces the layout.
+	useEffect(() => {
+		wsClient.connect(currentWorkspaceId);
+		void useSessionStore.getState().loadWorkspaces();
 		const offOpen = wsClient.onOpen(() => {
 			useExplorerStore.getState().reset();
 			usePresenceStore.getState().reset();
+			useExecutionsStore.getState().reset();
 			void useConnectionsStore
 				.getState()
 				.load()
-				.then((result) =>
-					useDocumentsStore.getState().syncFromServer(result.documents),
-				);
+				.then((result) => {
+					useSessionStore.getState().confirmWorkspace(result.workspace);
+					void useDocumentsStore
+						.getState()
+						.switchWorkspace(result.workspace.id)
+						.then(() =>
+							useDocumentsStore
+								.getState()
+								.syncFromServer(result.documents, result.workspace.id),
+						)
+						.then(() => {
+							const api = dockApiRef.current;
+							if (api !== null) {
+								// Workspace switch: replace the layout wholesale.
+								api.clear();
+								void restoreLayout(api, result.workspace.id);
+							}
+						});
+				});
 		});
 		const offEvent = wsClient.onEvent((event) => {
 			if (event.topic === "presence.update") {
@@ -156,13 +197,19 @@ export function Workspace() {
 					.setFollowedBy(payload.followerUserId, payload.following);
 				return;
 			}
+			if (event.topic === "document.changed") {
+				void useDocumentsStore
+					.getState()
+					.applyServerChange(event.payload as DocumentChangedPayload);
+				return;
+			}
 			useExecutionsStore.getState().handleEvent(event);
 		});
 		return () => {
 			offOpen();
 			offEvent();
 		};
-	}, []);
+	}, [currentWorkspaceId]);
 
 	// Publish the focused document for presence (server dedups unchanged).
 	const lastEditorDocumentId = useViewsStore((state) =>
@@ -252,26 +299,29 @@ export function Workspace() {
 		});
 
 		setDockApi(api);
-		void ensureHydrated().then(async () => {
-			await restoreLayout(api);
-			// onDidAddPanel does not reliably fire for panels restored via
-			// fromJSON; sync the view store from Dockview (source of truth).
-			const { registerView, setActiveView } = useViewsStore.getState();
-			for (const panel of api.panels) {
-				const documentId = panelDocumentId(panel.params);
-				if (documentId !== undefined) {
-					registerView(panel.id, documentId);
+		dockApiRef.current = api;
+		void ensureHydrated(useSessionStore.getState().currentWorkspaceId).then(
+			async () => {
+				await restoreLayout(api, useSessionStore.getState().currentWorkspaceId);
+				// onDidAddPanel does not reliably fire for panels restored via
+				// fromJSON; sync the view store from Dockview (source of truth).
+				const { registerView, setActiveView } = useViewsStore.getState();
+				for (const panel of api.panels) {
+					const documentId = panelDocumentId(panel.params);
+					if (documentId !== undefined) {
+						registerView(panel.id, documentId);
+					}
 				}
-			}
-			setActiveView(api.activePanel?.id ?? null);
-		});
+				setActiveView(api.activePanel?.id ?? null);
+			},
+		);
 	};
 
-	const newQuery = () => {
+	const newDocument = (shared: boolean) => {
 		if (dockApi === null) {
 			return;
 		}
-		const doc = useDocumentsStore.getState().createDocument();
+		const doc = useDocumentsStore.getState().createDocument(undefined, shared);
 		openEditorPanel(dockApi, doc);
 	};
 
@@ -279,8 +329,52 @@ export function Workspace() {
 		<div className="dg-workspace">
 			<header className="dg-header">
 				<span className="dg-brand">DataGripe</span>
-				<button type="button" onClick={newQuery} disabled={dockApi === null}>
-					New query
+				<select
+					className="dg-workspace-select"
+					aria-label="Current workspace"
+					value={currentWorkspace?.id ?? ""}
+					onChange={(event) =>
+						useSessionStore.getState().switchWorkspace(event.target.value)
+					}
+				>
+					{currentWorkspace === null && (
+						<option value="" disabled>
+							…
+						</option>
+					)}
+					{workspaces.map((workspace) => (
+						<option key={workspace.id} value={workspace.id}>
+							{workspace.name}
+						</option>
+					))}
+				</select>
+				<button
+					type="button"
+					title="Create a new workspace"
+					onClick={() => {
+						const name = window.prompt("Workspace name");
+						if (name !== null && name.trim().length > 0) {
+							void useSessionStore.getState().createWorkspace(name.trim());
+						}
+					}}
+				>
+					+
+				</button>
+				<button
+					type="button"
+					onClick={() => newDocument(false)}
+					disabled={dockApi === null}
+					title="New local scratchpad (never shared)"
+				>
+					New scratchpad
+				</button>
+				<button
+					type="button"
+					onClick={() => newDocument(true)}
+					disabled={dockApi === null}
+					title="New shared file (every workspace member)"
+				>
+					New shared file
 				</button>
 				<button
 					type="button"
@@ -309,9 +403,9 @@ export function Workspace() {
 						Followed by {followedBy.length}
 					</span>
 				)}
-				{sessionWorkspace !== null && sessionWorkspace !== undefined && (
+				{currentWorkspace !== null && (
 					<span className="dg-header-meta">
-						{sessionWorkspace.name} · {sessionWorkspace.role}
+						{currentWorkspace.name} · {currentWorkspace.role}
 					</span>
 				)}
 				<button type="button" onClick={() => setShowMembers(true)}>

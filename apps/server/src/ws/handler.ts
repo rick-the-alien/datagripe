@@ -18,7 +18,7 @@ export type SocketData = {
 	userId: string;
 	email: string;
 	sessionId: string;
-	workspace: { id: string; name: string };
+	workspace: { id: string; name: string; defaultConnectionRef: string | null };
 	role: "owner" | "editor" | "viewer";
 };
 

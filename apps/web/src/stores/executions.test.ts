@@ -45,6 +45,7 @@ test("events arriving before the start response are drained on register", async 
 				currentContent: "select 1",
 				revision: 1,
 				dirty: false,
+				shared: false,
 				createdAt: "2026-08-31T10:00:00.000Z",
 				updatedAt: "2026-08-31T10:00:00.000Z",
 			},

@@ -15,6 +15,8 @@ export const recoveredDocumentSchema = z.object({
 	currentContent: z.string(),
 	revision: z.number().int().nonnegative(),
 	dirty: z.boolean(),
+	/** Workspace-shared file (server-synced) vs local scratchpad. */
+	shared: z.boolean().default(false),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 });
@@ -39,6 +41,7 @@ export function mergeDrafts(
 			currentContent: draftWins ? draft.content : doc.content,
 			revision: doc.revision,
 			dirty: draftWins,
+			shared: doc.shared ?? false,
 			createdAt: doc.createdAt,
 			updatedAt: draftWins ? draft.updatedAt : doc.updatedAt,
 		});
@@ -60,6 +63,7 @@ export function mergeDrafts(
 			currentContent: draft.content,
 			revision: draft.baseRevision,
 			dirty: true,
+			shared: false,
 			createdAt: draft.updatedAt,
 			updatedAt: draft.updatedAt,
 		});

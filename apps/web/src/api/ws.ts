@@ -44,18 +44,34 @@ export class WsError extends Error {
 export class WsClient {
 	private socket: WebSocket | null = null;
 	private started = false;
+	private workspaceId: string | null = null;
 	private readonly pending = new Map<string, PendingRequest>();
 	private readonly queue: Array<() => void> = [];
 	private readonly openListeners = new Set<() => void>();
 	private readonly eventListeners = new Set<(event: ServerEvent) => void>();
 
 	/** Connect once; subsequent calls are no-ops. Reconnects automatically. */
-	connect(): void {
+	connect(workspaceId?: string | null): void {
+		if (workspaceId !== undefined) {
+			this.workspaceId = workspaceId;
+		}
 		if (this.started) {
 			return;
 		}
 		this.started = true;
 		this.open();
+	}
+
+	/** Switch workspaces: close the socket; the reconnect binds the new
+	 * workspace and every onOpen listener rescopes. */
+	setWorkspace(workspaceId: string): void {
+		if (workspaceId === this.workspaceId) {
+			return;
+		}
+		this.workspaceId = workspaceId;
+		if (this.started) {
+			this.socket?.close();
+		}
 	}
 
 	/** Stop reconnecting and close the socket (logout, session expiry). */
@@ -113,7 +129,11 @@ export class WsClient {
 
 	private open(): void {
 		const protocol = location.protocol === "https:" ? "wss" : "ws";
-		const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+		const suffix =
+			this.workspaceId !== null
+				? `?workspace=${encodeURIComponent(this.workspaceId)}`
+				: "";
+		const socket = new WebSocket(`${protocol}://${location.host}/ws${suffix}`);
 		this.socket = socket;
 
 		socket.onopen = () => {

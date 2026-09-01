@@ -98,6 +98,9 @@ export interface ConnectionsService {
 	predefinedName: (connectionId: string) => string | undefined;
 	/** Adapter for a resolved connection's dialect. */
 	adapterFor: (adapter: ConnectionAdapter) => DatabaseAdapter;
+	/** Whether a connection ref (managed UUID or predefined:<slug>) is
+	 * usable in this workspace. */
+	hasConnectionRef: (workspace: WorkspaceRef, ref: string) => Promise<boolean>;
 	/** Capability descriptors for every registered adapter. */
 	adapterInfos: () => AdapterInfo[];
 	/** Fetch one key's value (keyspace adapters). */
@@ -397,6 +400,23 @@ export function createConnectionsService(
 
 		adapterFor(adapter) {
 			return adapters[adapter];
+		},
+
+		async hasConnectionRef(workspace, ref) {
+			if (ref.startsWith("predefined:")) {
+				const slug = ref.slice("predefined:".length);
+				const entry = predefined.get(slug);
+				return (
+					entry !== undefined &&
+					(entry.definition.workspaces.includes("*") ||
+						entry.definition.workspaces.includes(workspace.name))
+				);
+			}
+			const rows = await appDb<{ id: string }[]>`
+				SELECT id FROM connections
+				WHERE id = ${ref} AND workspace_id = ${workspace.id}
+			`;
+			return rows.length > 0;
 		},
 
 		adapterInfos() {

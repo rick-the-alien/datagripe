@@ -110,20 +110,52 @@ export async function createAccount(
 export async function defaultWorkspaceFor(
 	appDb: AppDb,
 	userId: string,
-): Promise<{
-	id: string;
-	name: string;
-	role: "owner" | "editor" | "viewer";
-} | null> {
-	const rows = await appDb<
-		Array<{ id: string; name: string; role: "owner" | "editor" | "viewer" }>
-	>`
-		SELECT w.id, w.name, m.role
+): Promise<WorkspaceContext | null> {
+	const rows = await appDb<WorkspaceContextRow[]>`
+		SELECT w.id, w.name, m.role, w.default_connection_ref
 		FROM workspace_members m
 		JOIN workspaces w ON w.id = m.workspace_id
 		WHERE m.user_id = ${userId}
 		ORDER BY w.created_at
 		LIMIT 1
 	`;
-	return rows[0] ?? null;
+	return rows[0] === undefined ? null : rowToContext(rows[0]);
+}
+
+/** A specific workspace the user is a member of (switch target). */
+export async function workspaceForMember(
+	appDb: AppDb,
+	userId: string,
+	workspaceId: string,
+): Promise<WorkspaceContext | null> {
+	const rows = await appDb<WorkspaceContextRow[]>`
+		SELECT w.id, w.name, m.role, w.default_connection_ref
+		FROM workspace_members m
+		JOIN workspaces w ON w.id = m.workspace_id
+		WHERE m.user_id = ${userId} AND w.id = ${workspaceId}
+	`;
+	return rows[0] === undefined ? null : rowToContext(rows[0]);
+}
+
+export interface WorkspaceContext {
+	id: string;
+	name: string;
+	role: "owner" | "editor" | "viewer";
+	defaultConnectionRef: string | null;
+}
+
+type WorkspaceContextRow = {
+	id: string;
+	name: string;
+	role: "owner" | "editor" | "viewer";
+	default_connection_ref: string | null;
+};
+
+function rowToContext(row: WorkspaceContextRow): WorkspaceContext {
+	return {
+		id: row.id,
+		name: row.name,
+		role: row.role,
+		defaultConnectionRef: row.default_connection_ref,
+	};
 }

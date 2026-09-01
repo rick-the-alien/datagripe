@@ -21,6 +21,7 @@ export const sessionBootstrapSchema = z.object({
 			id: z.uuid(),
 			name: z.string(),
 			role: workspaceRoleSchema,
+			defaultConnectionRef: z.string().nullable(),
 		})
 		.nullable(),
 	csrfToken: z.string().nullable(),
@@ -75,3 +76,35 @@ export const memberRemoveRequestSchema = z.object({
 });
 
 export type MemberRemoveRequest = z.infer<typeof memberRemoveRequestSchema>;
+
+/** Workspace creation and listing (workspaces are the project unit). */
+export const workspaceCreateRequestSchema = z.object({
+	name: z.string().min(1).max(255),
+});
+
+export type WorkspaceCreateRequest = z.infer<
+	typeof workspaceCreateRequestSchema
+>;
+
+export const workspaceListEntrySchema = z.object({
+	id: z.uuid(),
+	name: z.string().min(1).max(255),
+	role: workspaceRoleSchema,
+});
+
+export type WorkspaceListEntry = z.infer<typeof workspaceListEntrySchema>;
+
+export const workspaceListResultSchema = z.object({
+	workspaces: z.array(workspaceListEntrySchema),
+});
+
+export type WorkspaceListResult = z.infer<typeof workspaceListResultSchema>;
+
+export const workspaceSetDefaultConnectionRequestSchema = z.object({
+	/** Managed UUID, "predefined:<slug>", or null to clear. */
+	connectionRef: z.string().min(1).max(255).nullable(),
+});
+
+export type WorkspaceSetDefaultConnectionRequest = z.infer<
+	typeof workspaceSetDefaultConnectionRequestSchema
+>;

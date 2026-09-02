@@ -1,6 +1,6 @@
 import type { ColumnDescriptor, ExecutionStatus } from "@datagripe/contracts";
 import type { ServerEvent } from "@datagripe/contracts/ws";
-import { statementAt } from "@datagripe/sql-tools";
+import { splitStatements, statementAt } from "@datagripe/sql-tools";
 import { create } from "zustand";
 import type { WsRequestFn } from "../api/ws";
 import { ensureResultsPanel } from "../app/resultsPanel";
@@ -53,11 +53,29 @@ export interface ExecutionViewState {
 	startedAt?: string | undefined;
 }
 
+/**
+ * Gutter glyph for one executed statement: document offsets captured at
+ * run time plus the statement's last known result state. Rendered by
+ * EditorView as a glyph-margin decoration.
+ */
+export interface StatementMarker {
+	id: string;
+	/** Real execution id once execution.start resolves; a `pending:*`
+	 * placeholder before that. */
+	executionId: string;
+	start: number;
+	end: number;
+	status: ExecutionStatus;
+	message?: string | undefined;
+}
+
 export type ExecutionsState = {
 	executions: Record<string, ExecutionViewState>;
 	latestByDocument: Record<string, string>;
 	/** Start-failures that never produced an execution (per document). */
 	runErrors: Record<string, string>;
+	/** Last-run result glyphs per statement, by document id. */
+	statementMarkers: Record<string, StatementMarker[]>;
 	/** Events that arrived before their execution.start response (fast
 	 * executions race the response on the wire). Drained on register. */
 	earlyEvents: Record<string, ServerEvent[]>;
@@ -88,6 +106,47 @@ export function createExecutionsStore(request: WsRequestFn) {
 					[id]: { ...current, ...partial },
 				},
 			});
+		};
+
+		/**
+		 * Apply a transition to the markers of one execution (an execution
+		 * belongs to exactly one document). `index` is the marker's ordinal
+		 * within its execution — the 0-based counterpart of the 1-based
+		 * statement number in execution.progress events.
+		 */
+		const patchMarkers = (
+			executionId: string,
+			transition: (marker: StatementMarker, index: number) => StatementMarker,
+		) => {
+			for (const [documentId, markers] of Object.entries(
+				get().statementMarkers,
+			)) {
+				if (!markers.some((marker) => marker.executionId === executionId)) {
+					continue;
+				}
+				let index = 0;
+				let changed = false;
+				const next = markers.map((marker) => {
+					if (marker.executionId !== executionId) {
+						return marker;
+					}
+					const patched = transition(marker, index);
+					index += 1;
+					if (patched !== marker) {
+						changed = true;
+					}
+					return patched;
+				});
+				if (changed) {
+					set({
+						statementMarkers: {
+							...get().statementMarkers,
+							[documentId]: next,
+						},
+					});
+				}
+				return;
+			}
 		};
 
 		function applyEvent(id: string, event: ServerEvent): void {
@@ -143,6 +202,11 @@ export function createExecutionsStore(request: WsRequestFn) {
 				case "execution.progress": {
 					const payload = event.payload as ExecutionProgress;
 					patch(id, { progress: [...current.progress, payload] });
+					patchMarkers(id, (marker, index) =>
+						index === payload.statement - 1 && marker.status !== "succeeded"
+							? { ...marker, status: "succeeded" }
+							: marker,
+					);
 					break;
 				}
 				case "execution.completed": {
@@ -157,6 +221,11 @@ export function createExecutionsStore(request: WsRequestFn) {
 						truncated: payload.truncated,
 						elapsedMs: payload.elapsedMs,
 					});
+					patchMarkers(id, (marker) =>
+						marker.status === "succeeded"
+							? marker
+							: { ...marker, status: "succeeded" },
+					);
 					break;
 				}
 				case "execution.failed": {
@@ -171,6 +240,14 @@ export function createExecutionsStore(request: WsRequestFn) {
 							message: payload.message,
 						},
 					});
+					// Statements before it reported progress; the one at the current
+					// progress count is the one that failed. Later statements are
+					// left as-is.
+					patchMarkers(id, (marker, index) =>
+						index === current.progress.length && marker.status !== "succeeded"
+							? { ...marker, status: "failed", message: payload.message }
+							: marker,
+					);
 					break;
 				}
 				case "execution.cancelled": {
@@ -179,6 +256,11 @@ export function createExecutionsStore(request: WsRequestFn) {
 						status: "cancelled",
 						elapsedMs: payload.elapsedMs,
 					});
+					patchMarkers(id, (marker) =>
+						marker.status === "succeeded"
+							? marker
+							: { ...marker, status: "cancelled" },
+					);
 					break;
 				}
 			}
@@ -188,6 +270,7 @@ export function createExecutionsStore(request: WsRequestFn) {
 			executions: {},
 			latestByDocument: {},
 			runErrors: {},
+			statementMarkers: {},
 			earlyEvents: {},
 			viewingExecutionId: null,
 
@@ -203,14 +286,31 @@ export function createExecutionsStore(request: WsRequestFn) {
 				}
 
 				let sql: string;
+				let ranges: Array<{ start: number; end: number }> = [];
 				if (mode === "document") {
 					sql = handle.getText();
+					ranges = splitStatements(sql).map((statement) => ({
+						start: statement.start,
+						end: statement.end,
+					}));
 				} else {
 					const selection = handle.getSelection();
-					sql = selection.isEmpty
-						? (statementAt(handle.getText(), handle.getCursorOffset())?.text ??
-							"")
-						: selection.text;
+					if (selection.isEmpty) {
+						const statement = statementAt(
+							handle.getText(),
+							handle.getCursorOffset(),
+						);
+						sql = statement?.text ?? "";
+						if (statement !== null) {
+							ranges = [{ start: statement.start, end: statement.end }];
+						}
+					} else {
+						sql = selection.text;
+						const offsets = handle.getSelectionOffsets();
+						if (offsets !== null) {
+							ranges = [offsets];
+						}
+					}
 				}
 				if (sql.trim().length === 0) {
 					return;
@@ -235,6 +335,32 @@ export function createExecutionsStore(request: WsRequestFn) {
 				}
 
 				ensureResultsPanel();
+				// Gutter glyphs: one queued marker per statement. Old markers whose
+				// range intersects a re-run statement are replaced; markers for
+				// statements outside this run survive.
+				const pendingExecutionId = `pending:${crypto.randomUUID()}`;
+				const newMarkers: StatementMarker[] = ranges.map((range) => ({
+					id: crypto.randomUUID(),
+					executionId: pendingExecutionId,
+					start: range.start,
+					end: range.end,
+					status: "queued",
+				}));
+				if (newMarkers.length > 0) {
+					const existing = get().statementMarkers[documentId] ?? [];
+					const kept = existing.filter(
+						(old) =>
+							!newMarkers.some(
+								(marker) => marker.start < old.end && old.start < marker.end,
+							),
+					);
+					set({
+						statementMarkers: {
+							...get().statementMarkers,
+							[documentId]: [...kept, ...newMarkers],
+						},
+					});
+				}
 				try {
 					const result = await request<{ executionId: string }>(
 						"execution.start",
@@ -267,6 +393,13 @@ export function createExecutionsStore(request: WsRequestFn) {
 						},
 						runErrors,
 					});
+					// Stamp markers with the real execution id and mark them
+					// running; events drained below then move them on.
+					patchMarkers(pendingExecutionId, (marker) => ({
+						...marker,
+						executionId: result.executionId,
+						status: "running",
+					}));
 					// Drain events that raced the response.
 					const early = get().earlyEvents[result.executionId];
 					if (early !== undefined && early.length > 0) {
@@ -278,13 +411,18 @@ export function createExecutionsStore(request: WsRequestFn) {
 						}
 					}
 				} catch (error) {
+					const message = error instanceof Error ? error.message : "Run failed";
 					set({
 						runErrors: {
 							...get().runErrors,
-							[documentId]:
-								error instanceof Error ? error.message : "Run failed",
+							[documentId]: message,
 						},
 					});
+					patchMarkers(pendingExecutionId, (marker) => ({
+						...marker,
+						status: "failed",
+						message,
+					}));
 				}
 			},
 
@@ -365,6 +503,7 @@ export function createExecutionsStore(request: WsRequestFn) {
 					executions: {},
 					latestByDocument: {},
 					runErrors: {},
+					statementMarkers: {},
 					earlyEvents: {},
 					viewingExecutionId: null,
 				});

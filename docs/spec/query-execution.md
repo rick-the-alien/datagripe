@@ -125,6 +125,14 @@ role allows them.
   affected rows), Cancel while running, inline errors with position.
 - `history.list` returns paginated metadata (newest first); used by a
   simple History view in the results panel.
+- Statement result glyphs (DataGrip-style gutter ticks): `run()` records
+  one `StatementMarker` (text offsets, status) per submitted statement in
+  the executions store, keyed by document. Markers transition with
+  execution events (`execution.progress` marks statement N succeeded,
+  terminal events resolve the rest). Each `EditorView` renders them as
+  glyph-margin decorations (`dg-glyph-<status>`, hover carries the error
+  message) so glyphs track edits via Monaco's sticky ranges; re-running a
+  statement replaces only intersecting markers.
 
 ## Open questions
 

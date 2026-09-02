@@ -7,6 +7,8 @@ export interface EditorHandle {
 	getText: () => string;
 	getSelection: () => { text: string; isEmpty: boolean };
 	getCursorOffset: () => number;
+	/** Document offsets of the selection range, or null when empty. */
+	getSelectionOffsets: () => { start: number; end: number } | null;
 }
 
 const handles = new Map<string, EditorHandle>();

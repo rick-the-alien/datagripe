@@ -5,6 +5,7 @@ import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "../stores/documents";
 import { usePresenceStore } from "../stores/presence";
+import { useExecutionsStore } from "../stores/runtime";
 import { useViewsStore } from "../stores/views";
 import { registerEditorHandle, unregisterEditorHandle } from "./handles";
 import { monaco } from "./monacoSetup";
@@ -17,6 +18,11 @@ const BROADCAST_DELAY_MS = 250;
 /** Live editor instances and their decoration collections by view id. */
 const editorInstances = new Map<string, monaco.editor.IStandaloneCodeEditor>();
 const editorDecorations = new Map<
+	string,
+	monaco.editor.IEditorDecorationsCollection
+>();
+/** Statement result glyphs (executed-statement gutter ticks), per view. */
+const statementDecorations = new Map<
 	string,
 	monaco.editor.IEditorDecorationsCollection
 >();
@@ -101,6 +107,7 @@ export function EditorView(props: IDockviewPanelProps) {
 			theme: "datagripe-dark",
 			automaticLayout: true,
 			minimap: { enabled: false },
+			glyphMargin: true,
 			fontSize: 13,
 			scrollBeyondLastLine: false,
 			padding: { top: 8 },
@@ -120,12 +127,23 @@ export function EditorView(props: IDockviewPanelProps) {
 				const position = editor.getPosition();
 				return position === null ? 0 : model.getOffsetAt(position);
 			},
+			getSelectionOffsets: () => {
+				const selection = editor.getSelection();
+				if (selection === null || selection.isEmpty()) {
+					return null;
+				}
+				return {
+					start: model.getOffsetAt(selection.getStartPosition()),
+					end: model.getOffsetAt(selection.getEndPosition()),
+				};
+			},
 		});
 
 		let disposed = false;
 		const viewStateDebouncer = createDebouncer();
 		const decorations = editor.createDecorationsCollection();
 		editorDecorations.set(viewId, decorations);
+		statementDecorations.set(viewId, editor.createDecorationsCollection());
 		editorInstances.set(viewId, editor);
 		const persistViewState = () => {
 			const state = editor.saveViewState();
@@ -189,6 +207,7 @@ export function EditorView(props: IDockviewPanelProps) {
 				subscription.dispose();
 			}
 			editorDecorations.delete(viewId);
+			statementDecorations.delete(viewId);
 			editorInstances.delete(viewId);
 			unregisterEditorHandle(viewId);
 			editor.dispose();
@@ -222,6 +241,46 @@ export function EditorView(props: IDockviewPanelProps) {
 		}
 		decorations.set(remoteViewDecorations(monaco, remoteView));
 	}, [remoteView, props.api]);
+
+	// Executed-statement gutter ticks (DataGrip-style): one glyph per
+	// statement of the last run, rebuilt from document-level markers.
+	// Decorations are per-editor; split views on one model each render the
+	// same markers.
+	const statementMarkers = useExecutionsStore((state) =>
+		documentId === undefined ? undefined : state.statementMarkers[documentId],
+	);
+	useEffect(() => {
+		const decorations = statementDecorations.get(props.api.id);
+		const model = editorInstances.get(props.api.id)?.getModel();
+		if (decorations === undefined || model === undefined || model === null) {
+			return;
+		}
+		if (statementMarkers === undefined || statementMarkers.length === 0) {
+			decorations.clear();
+			return;
+		}
+		decorations.set(
+			statementMarkers.map(
+				(marker): monaco.editor.IModelDeltaDecoration => ({
+					range: monaco.Range.fromPositions(
+						model.getPositionAt(marker.start),
+						model.getPositionAt(marker.end),
+					),
+					options: {
+						glyphMarginClassName: `dg-glyph-${marker.status}`,
+						glyphMarginHoverMessage: {
+							value:
+								marker.status === "failed" && marker.message !== undefined
+									? `Statement ${marker.status}\n\n${marker.message}`
+									: `Statement ${marker.status}`,
+						},
+						stickiness:
+							monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+					},
+				}),
+			),
+		);
+	}, [statementMarkers, props.api]);
 
 	// External content changes (server sync adoption, conflict reload)
 	// replace the model's content for clean documents. Dirty documents are

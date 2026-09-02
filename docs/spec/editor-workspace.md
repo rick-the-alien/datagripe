@@ -138,6 +138,30 @@ One model per document, owned by `createModelRegistry`:
 The registry takes its model factory as a parameter, so the reference
 counting and flush-on-dispose logic is unit-tested without Monaco.
 
+### SQL completion
+
+A `CompletionItemProvider` for language `sql` (registered once in
+`monacoSetup.ts`) provides DataGrip-style schema-aware suggestions:
+
+- Catalog cache (`editor/completion/catalog.ts`): per-connection schema →
+  table/view tree fetched via `schema.children`. Schemas and table lists
+  load eagerly per connection (bounded concurrency); columns load lazily
+  per table on first reference (the `schema.children` rate limit forbids
+  bulk column fetch). Completion returns what is cached; Monaco re-queries
+  on the next keystroke as data arrives.
+- Context (`editor/completion/context.ts`, pure and unit-tested): the
+  statement under the cursor (sql-tools `statementAt`) is scanned for
+  FROM/JOIN/UPDATE/INTO table refs and aliases. After `qualifier.` the
+  qualifier resolves as alias/table (columns) then schema (tables) —
+  falling through when a name matches no known table, so typing
+  `FROM schema.` still completes. FROM/JOIN position suggests schemas,
+  tables, and `schema.table` variants; elsewhere aliases, in-scope
+  columns, tables, then keywords/functions.
+- Document → connection resolution mirrors the executions store
+  (document pref, then workspace default); model URIs parse as
+  `datagripe://document/<id>.sql` with the id in `uri.path`
+  (`authority === "document"`).
+
 ### Views and Dockview
 
 - Each panel id is a stable `view-{uuid}`; the document binding travels in

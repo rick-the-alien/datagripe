@@ -219,6 +219,64 @@ button:disabled {
 	min-height: 0;
 }
 
+/* Executed-statement gutter ticks (glyph margin). Monaco applies the class
+ * to the glyph element; ::before carries the mark. */
+.dg-glyph-succeeded,
+.dg-glyph-failed,
+.dg-glyph-running,
+.dg-glyph-queued,
+.dg-glyph-cancelled {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dg-glyph-succeeded::before,
+.dg-glyph-failed::before,
+.dg-glyph-running::before,
+.dg-glyph-queued::before,
+.dg-glyph-cancelled::before {
+	font-size: 11px;
+	line-height: 1;
+}
+
+.dg-glyph-succeeded::before {
+	content: "✓";
+	color: #98c379;
+}
+
+.dg-glyph-failed::before {
+	content: "✕";
+	color: #e06c75;
+}
+
+.dg-glyph-queued::before {
+	content: "●";
+	color: #e5c07b;
+	opacity: 0.5;
+}
+
+.dg-glyph-running::before {
+	content: "●";
+	color: #e5c07b;
+	animation: dg-glyph-pulse 1s ease-in-out infinite;
+}
+
+.dg-glyph-cancelled::before {
+	content: "⊘";
+	color: #8a8d96;
+}
+
+@keyframes dg-glyph-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
 .dg-conflict {
 	display: flex;
 	align-items: center;

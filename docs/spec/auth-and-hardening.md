@@ -77,7 +77,10 @@ classified. Blocked by default: loopback, RFC1918, link-local
 (including 169.254.169.254 cloud metadata), ULA, multicast,
 unspecified, and reserved ranges. `TARGET_HOST_ALLOWLIST` (comma
 separated, exact or `*.suffix`) overrides per hostname — development
-uses `localhost,127.0.0.1,::1`.
+uses `localhost,127.0.0.1,::1`. `SSRF_DISABLED=true` bypasses the
+policy entirely; intended only for trusted-network deployments, since
+the server will then connect to any host, including loopback and cloud
+metadata endpoints.
 
 Limitation (accepted): Bun.SQL resolves hostnames itself at connect
 time, so a DNS answer can change between our check and the driver's

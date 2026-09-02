@@ -70,4 +70,12 @@ describe("ssrf policy", () => {
 		const policy = createSsrfPolicy("");
 		await expect(policy.assertHostAllowed("localhost")).rejects.toThrow("SSRF");
 	});
+
+	test("disabled policy allows every host", async () => {
+		const policy = createSsrfPolicy("", true);
+		await policy.assertHostAllowed("127.0.0.1");
+		await policy.assertHostAllowed("10.0.226.24");
+		await policy.assertHostAllowed("localhost");
+		await policy.assertHostAllowed("::1");
+	});
 });

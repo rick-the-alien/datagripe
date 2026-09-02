@@ -90,6 +90,7 @@ beforeAll(async () => {
 			MAX_CONCURRENT_QUERIES_PER_USER: 3,
 			ALLOW_SIGNUP: false,
 			TARGET_HOST_ALLOWLIST: "",
+			SSRF_DISABLED: false,
 		},
 		sessions: createSessionStore(appDb),
 		rateLimiter: createRateLimiter({

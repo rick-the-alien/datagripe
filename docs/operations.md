@@ -80,7 +80,10 @@ Pipe to your log stack and alert on `auth.login.failure` bursts and any
 - `NODE_ENV=production` (enables the `Secure` cookie attribute).
 - `ALLOW_SIGNUP=false` after provisioning accounts.
 - `TARGET_HOST_ALLOWLIST` empty unless private targets are intentional —
-  the SSRF policy blocks private ranges by default.
+  the SSRF policy blocks private ranges by default. `SSRF_DISABLED=true`
+  disables the policy entirely; use only on trusted networks, since the
+  server will then connect to any host (including loopback and cloud
+  metadata endpoints).
 - `CONNECTION_ENCRYPTION_KEY` from your secret manager; rotation
   procedure: add the new key as version 2 in `crypto/keyring.ts`
   wiring, restart, and re-save connections opportunistically (old

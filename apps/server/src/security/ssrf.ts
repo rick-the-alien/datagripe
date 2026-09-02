@@ -81,7 +81,10 @@ export function isBlockedAddress(address: string): boolean {
 	return true;
 }
 
-export function createSsrfPolicy(allowlistEnv: string): SsrfPolicy {
+export function createSsrfPolicy(
+	allowlistEnv: string,
+	disabled = false,
+): SsrfPolicy {
 	const allowlist = allowlistEnv
 		.split(",")
 		.map((entry) => entry.trim().toLowerCase())
@@ -102,6 +105,9 @@ export function createSsrfPolicy(allowlistEnv: string): SsrfPolicy {
 
 	return {
 		async assertHostAllowed(host) {
+			if (disabled) {
+				return;
+			}
 			if (isAllowlisted(host)) {
 				return;
 			}

@@ -52,7 +52,7 @@ const connections = createConnectionsService({
 	keyring,
 	adapters,
 	predefined,
-	ssrf: createSsrfPolicy(config.TARGET_HOST_ALLOWLIST),
+	ssrf: createSsrfPolicy(config.TARGET_HOST_ALLOWLIST, config.SSRF_DISABLED),
 });
 const executions = createExecutionRegistry({
 	adapters,

@@ -19,6 +19,11 @@ const envSchema = z.object({
 		.transform((value) => value === "true"),
 	/** Comma-separated hostnames allowed despite SSRF private-range blocks. */
 	TARGET_HOST_ALLOWLIST: z.string().default(""),
+	/** Disable SSRF target-host blocking entirely (trusted-network deployments). */
+	SSRF_DISABLED: z
+		.enum(["true", "false"])
+		.default("false")
+		.transform((value) => value === "true"),
 	QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 	QUERY_MAX_ROWS: z.coerce.number().int().positive().default(10_000),
 	QUERY_MAX_BYTES: z.coerce.number().int().positive().default(25_000_000),

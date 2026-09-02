@@ -4,20 +4,34 @@ import { z } from "zod";
  * Schema explorer contracts. The tree is lazily loaded one level at a
  * time via the `schema.children` WebSocket action:
  *
- *   connection                 path: []
- *   └── schema                 path: [schema]
- *       ├── tables (category)  path: [schema, tables]
- *       │   └── table          path: [schema, tables, table]  → columns
- *       └── views (category)   path: [schema, views]
- *           └── view           path: [schema, views, view]    → columns
+ *   connection                    path: []
+ *   └── schema                    path: [schema]
+ *       ├── tables (category)     path: [schema, tables]
+ *       │   └── table             path: [schema, tables, table]  → columns
+ *       ├── views (category)      path: [schema, views]
+ *       │   └── view              path: [schema, views, view]    → columns
+ *       ├── functions (category)  path: [schema, functions]
+ *       │   └── function          leaf (Postgres names carry the identity args)
+ *       ├── procedures (category) path: [schema, procedures]     (MySQL)
+ *       │   └── procedure         leaf
+ *       └── sequences (category)  path: [schema, sequences]      (Postgres)
+ *           └── sequence          leaf
+ *
+ * SQLite has no catalog routines, so its schemas only list tables/views.
  */
 
 export const schemaNodeKindSchema = z.enum([
 	"schema",
 	"tables",
 	"views",
+	"functions",
+	"procedures",
+	"sequences",
 	"table",
 	"view",
+	"function",
+	"procedure",
+	"sequence",
 	"column",
 	// Keyspace browsing (Redis): db index → key prefix → key.
 	"db",

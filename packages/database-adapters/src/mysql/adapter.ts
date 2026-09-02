@@ -129,17 +129,45 @@ export class MysqlAdapter implements DatabaseAdapter {
 			return [
 				{ kind: "tables", name: "tables", hasChildren: true },
 				{ kind: "views", name: "views", hasChildren: true },
+				{ kind: "functions", name: "functions", hasChildren: true },
+				{ kind: "procedures", name: "procedures", hasChildren: true },
 			];
 		}
 
-		if (
-			categorySegment === undefined ||
-			(categorySegment.kind !== "tables" && categorySegment.kind !== "views")
-		) {
+		if (categorySegment === undefined) {
 			throw new InvalidIntrospectionPathError(path);
 		}
 
 		if (path.length === 2) {
+			// Routines are leaf objects: only tables/views descend to columns.
+			// MySQL has no overloading, so routine names are unique per schema.
+			if (
+				categorySegment.kind === "functions" ||
+				categorySegment.kind === "procedures"
+			) {
+				const routineType =
+					categorySegment.kind === "functions" ? "FUNCTION" : "PROCEDURE";
+				const kind =
+					categorySegment.kind === "functions" ? "function" : "procedure";
+				const rows = await sql`
+					SELECT routine_name AS name
+					FROM information_schema.routines
+					WHERE routine_schema = ${schemaName}
+						AND routine_type = ${routineType}
+					ORDER BY routine_name
+				`;
+				return rows.map((row: { name: string }) => ({
+					kind: kind as "function" | "procedure",
+					name: row.name,
+					hasChildren: false,
+				}));
+			}
+			if (
+				categorySegment.kind !== "tables" &&
+				categorySegment.kind !== "views"
+			) {
+				throw new InvalidIntrospectionPathError(path);
+			}
 			const tableType =
 				categorySegment.kind === "tables" ? "BASE TABLE" : "VIEW";
 			const kind = categorySegment.kind === "tables" ? "table" : "view";
@@ -159,6 +187,7 @@ export class MysqlAdapter implements DatabaseAdapter {
 
 		if (
 			objectSegment === undefined ||
+			(categorySegment.kind !== "tables" && categorySegment.kind !== "views") ||
 			(categorySegment.kind === "tables" && objectSegment.kind !== "table") ||
 			(categorySegment.kind === "views" && objectSegment.kind !== "view")
 		) {

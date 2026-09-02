@@ -124,17 +124,55 @@ export class PostgresAdapter implements DatabaseAdapter {
 			return [
 				{ kind: "tables", name: "tables", hasChildren: true },
 				{ kind: "views", name: "views", hasChildren: true },
+				{ kind: "functions", name: "functions", hasChildren: true },
+				{ kind: "sequences", name: "sequences", hasChildren: true },
 			];
 		}
 
-		if (
-			categorySegment === undefined ||
-			(categorySegment.kind !== "tables" && categorySegment.kind !== "views")
-		) {
+		if (categorySegment === undefined) {
 			throw new InvalidIntrospectionPathError(path);
 		}
 
 		if (path.length === 2) {
+			// Routines and sequences are leaf objects: only tables/views
+			// descend to columns.
+			if (categorySegment.kind === "functions") {
+				// Plain and window functions (prokind f/w); aggregates are not
+				// listed. Names carry identity arguments to keep overloaded
+				// functions distinct in the tree.
+				const rows = await sql`
+					SELECT p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS name
+					FROM pg_proc p
+					JOIN pg_namespace n ON n.oid = p.pronamespace
+					WHERE n.nspname = ${schemaName}
+						AND p.prokind IN ('f', 'w')
+					ORDER BY name
+				`;
+				return rows.map((row: { name: string }) => ({
+					kind: "function" as const,
+					name: row.name,
+					hasChildren: false,
+				}));
+			}
+			if (categorySegment.kind === "sequences") {
+				const rows = await sql`
+					SELECT sequence_name AS name
+					FROM information_schema.sequences
+					WHERE sequence_schema = ${schemaName}
+					ORDER BY sequence_name
+				`;
+				return rows.map((row: { name: string }) => ({
+					kind: "sequence" as const,
+					name: row.name,
+					hasChildren: false,
+				}));
+			}
+			if (
+				categorySegment.kind !== "tables" &&
+				categorySegment.kind !== "views"
+			) {
+				throw new InvalidIntrospectionPathError(path);
+			}
 			const tableType =
 				categorySegment.kind === "tables" ? "BASE TABLE" : "VIEW";
 			const kind = categorySegment.kind === "tables" ? "table" : "view";
@@ -154,6 +192,7 @@ export class PostgresAdapter implements DatabaseAdapter {
 
 		if (
 			objectSegment === undefined ||
+			(categorySegment.kind !== "tables" && categorySegment.kind !== "views") ||
 			(categorySegment.kind === "tables" && objectSegment.kind !== "table") ||
 			(categorySegment.kind === "views" && objectSegment.kind !== "view")
 		) {

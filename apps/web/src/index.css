@@ -294,8 +294,10 @@ button:disabled {
 	font-size: 12px;
 }
 
-.dg-tree-glyph {
-	color: #8a8d96;
+.dg-tree-icon {
+	flex: none;
+	width: 14px;
+	height: 14px;
 }
 
 .dg-tree-type {

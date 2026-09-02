@@ -65,6 +65,16 @@ beforeAll(async () => {
 	await admin.unsafe(
 		"INSERT IGNORE INTO shop.products (id, sku, title, price_cents) VALUES (1,'SKU-1','Widget',1999),(2,'SKU-2','Gadget',4990)",
 	);
+	// Routines are recreated each run: MySQL has no CREATE OR REPLACE for them.
+	// DETERMINISTIC keeps the function legal with binary logging enabled.
+	await admin.unsafe("DROP FUNCTION IF EXISTS shop.price_with_tax");
+	await admin.unsafe(
+		"CREATE FUNCTION shop.price_with_tax(price_cents INT) RETURNS INT DETERMINISTIC RETURN price_cents * 1.2",
+	);
+	await admin.unsafe("DROP PROCEDURE IF EXISTS shop.reset_products");
+	await admin.unsafe(
+		"CREATE PROCEDURE shop.reset_products() BEGIN DELETE FROM shop.products; END",
+	);
 	await admin.close();
 });
 
@@ -87,10 +97,20 @@ describe("MysqlAdapter", () => {
 		expect(result.ok).toBe(false);
 	});
 
-	myTest("introspects schemas, tables, views, columns", async () => {
+	myTest("introspects schemas, tables, views, routines, columns", async () => {
 		const schemas = await adapter.introspectChildren(CONNECTION, []);
 		expect(schemas.map((n) => n.name)).toContain("shop");
 		expect(schemas.map((n) => n.name)).not.toContain("mysql");
+
+		const categories = await adapter.introspectChildren(CONNECTION, [
+			{ kind: "schema", name: "shop" },
+		]);
+		expect(categories.map((n) => n.kind)).toEqual([
+			"tables",
+			"views",
+			"functions",
+			"procedures",
+		]);
 
 		const tables = await adapter.introspectChildren(CONNECTION, [
 			{ kind: "schema", name: "shop" },
@@ -106,6 +126,22 @@ describe("MysqlAdapter", () => {
 		]);
 		expect(views).toEqual([
 			{ kind: "view", name: "product_skus", hasChildren: true },
+		]);
+
+		const functions = await adapter.introspectChildren(CONNECTION, [
+			{ kind: "schema", name: "shop" },
+			{ kind: "functions", name: "functions" },
+		]);
+		expect(functions).toEqual([
+			{ kind: "function", name: "price_with_tax", hasChildren: false },
+		]);
+
+		const procedures = await adapter.introspectChildren(CONNECTION, [
+			{ kind: "schema", name: "shop" },
+			{ kind: "procedures", name: "procedures" },
+		]);
+		expect(procedures).toEqual([
+			{ kind: "procedure", name: "reset_products", hasChildren: false },
 		]);
 
 		const columns = await adapter.introspectChildren(CONNECTION, [

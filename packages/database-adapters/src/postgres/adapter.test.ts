@@ -66,6 +66,10 @@ beforeAll(async () => {
 		);
 		CREATE OR REPLACE VIEW app.user_emails AS
 			SELECT id, email FROM app.users;
+		CREATE OR REPLACE FUNCTION app.user_email_by_id(user_id integer)
+			RETURNS text LANGUAGE sql STABLE AS
+		$$ SELECT email FROM app.users WHERE id = user_id $$;
+		CREATE SEQUENCE IF NOT EXISTS app.user_emails_seq;
 	`);
 	await fixtures.close();
 });
@@ -95,7 +99,7 @@ describe("PostgresAdapter", () => {
 	});
 
 	pgTest(
-		"introspects schemas, categories, tables, views, columns",
+		"introspects schemas, categories, tables, views, routines, columns",
 		async () => {
 			const schemas = await adapter.introspectChildren(CONNECTION, []);
 			const names = schemas.map((node) => node.name);
@@ -105,7 +109,12 @@ describe("PostgresAdapter", () => {
 			const categories = await adapter.introspectChildren(CONNECTION, [
 				{ kind: "schema", name: "app" },
 			]);
-			expect(categories.map((node) => node.kind)).toEqual(["tables", "views"]);
+			expect(categories.map((node) => node.kind)).toEqual([
+				"tables",
+				"views",
+				"functions",
+				"sequences",
+			]);
 
 			const tables = await adapter.introspectChildren(CONNECTION, [
 				{ kind: "schema", name: "app" },
@@ -121,6 +130,26 @@ describe("PostgresAdapter", () => {
 			]);
 			expect(views).toEqual([
 				{ kind: "view", name: "user_emails", hasChildren: true },
+			]);
+
+			const functions = await adapter.introspectChildren(CONNECTION, [
+				{ kind: "schema", name: "app" },
+				{ kind: "functions", name: "functions" },
+			]);
+			expect(functions).toEqual([
+				{
+					kind: "function",
+					name: "user_email_by_id(user_id integer)",
+					hasChildren: false,
+				},
+			]);
+
+			const sequences = await adapter.introspectChildren(CONNECTION, [
+				{ kind: "schema", name: "app" },
+				{ kind: "sequences", name: "sequences" },
+			]);
+			expect(sequences).toEqual([
+				{ kind: "sequence", name: "user_emails_seq", hasChildren: false },
 			]);
 
 			const columns = await adapter.introspectChildren(CONNECTION, [

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — vibrant activity bar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0B0E14; --panel:#0E1220; --raised:#161C29; --rule:#212A3A;
+  --ink:#E2E8F0; --ink-dim:#9AA5B6; --ink-mute:#6B7688; --violet-text:#A78BFA;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Space Grotesk",system-ui,sans-serif;
+
+  --ramp:linear-gradient(90deg,
+    #00E599 0%,#00E599 3.75%, #5EEAD4 7.08%,#5EEAD4 10.83%,
+    #8B5CF6 14.17%,#8B5CF6 17.92%, #FF3EA5 21.25%,#FF3EA5 28.75%,
+    #8B5CF6 32.08%,#8B5CF6 35.83%, #5EEAD4 39.17%,#5EEAD4 42.92%,
+    #00E599 46.25%,#00E599 53.75%, #5EEAD4 57.08%,#5EEAD4 60.83%,
+    #8B5CF6 64.17%,#8B5CF6 67.92%, #FF3EA5 71.25%,#FF3EA5 78.75%,
+    #8B5CF6 82.08%,#8B5CF6 85.83%, #5EEAD4 89.17%,#5EEAD4 92.92%,
+    #00E599 96.25%,#00E599 100%);
+
+  --ramp-rev:linear-gradient(90deg,
+    #FF3EA5 0%,#FF3EA5 3.75%, #8B5CF6 7.08%,#8B5CF6 10.83%,
+    #5EEAD4 14.17%,#5EEAD4 17.92%, #00E599 21.25%,#00E599 28.75%,
+    #5EEAD4 32.08%,#5EEAD4 35.83%, #8B5CF6 39.17%,#8B5CF6 42.92%,
+    #FF3EA5 46.25%,#FF3EA5 53.75%, #8B5CF6 57.08%,#8B5CF6 60.83%,
+    #5EEAD4 64.17%,#5EEAD4 67.92%, #00E599 71.25%,#00E599 78.75%,
+    #5EEAD4 82.08%,#5EEAD4 85.83%, #8B5CF6 89.17%,#8B5CF6 92.92%,
+    #FF3EA5 96.25%,#FF3EA5 100%);
+}
+@supports (background:linear-gradient(90deg in oklab,red,blue)){
+  :root{
+    --ramp:linear-gradient(90deg in oklab,
+      #00E599 0%,#00E599 3.75%, #5EEAD4 7.08%,#5EEAD4 10.83%,
+      #8B5CF6 14.17%,#8B5CF6 17.92%, #FF3EA5 21.25%,#FF3EA5 28.75%,
+      #8B5CF6 32.08%,#8B5CF6 35.83%, #5EEAD4 39.17%,#5EEAD4 42.92%,
+      #00E599 46.25%,#00E599 53.75%, #5EEAD4 57.08%,#5EEAD4 60.83%,
+      #8B5CF6 64.17%,#8B5CF6 67.92%, #FF3EA5 71.25%,#FF3EA5 78.75%,
+      #8B5CF6 82.08%,#8B5CF6 85.83%, #5EEAD4 89.17%,#5EEAD4 92.92%,
+      #00E599 96.25%,#00E599 100%);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:760px;margin:0 auto;padding:44px 22px 90px}
+h1{font-family:var(--display);font-weight:500;font-size:30px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-family:var(--display);font-weight:500;font-size:17px;margin:46px 0 4px}
+p{color:var(--ink-dim);max-width:62ch;margin:0 0 14px;font-size:14.5px}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+code{font-family:var(--mono);font-size:.87em;color:#5EEAD4}
+
+.bar{position:relative;overflow:hidden;background:var(--void);height:4px;
+  filter:saturate(var(--sat,1.22));animation:hue 31s ease-in-out infinite}
+.bar.fat{height:52px;border-radius:6px}
+.bar .l{position:absolute;top:0;bottom:0;left:0;width:200%}
+
+.colour{background:var(--ramp);animation:drift 17s linear infinite}
+
+.wave{mix-blend-mode:multiply;
+  background:linear-gradient(90deg,
+    rgba(11,14,20,var(--d1,.5)) 0%,rgba(11,14,20,0) 25%,
+    rgba(11,14,20,calc(var(--d1,.5) * .8)) 50%,rgba(11,14,20,0) 75%,
+    rgba(11,14,20,var(--d1,.5)) 100%);
+  animation:back 11s linear infinite}
+.wave2{mix-blend-mode:multiply;
+  background:linear-gradient(90deg,
+    rgba(11,14,20,0) 0%,rgba(11,14,20,var(--d2,.34)) 33%,
+    rgba(11,14,20,0) 50%,rgba(11,14,20,calc(var(--d2,.34) * .7)) 83%,
+    rgba(11,14,20,0) 100%);
+  animation:drift 23s linear infinite}
+
+.legacy .colour2{background:var(--ramp-rev);opacity:.5;mix-blend-mode:screen;animation:back 11s linear infinite}
+.legacy .wave,.legacy .wave2{--d1:.6;--d2:0}
+
+@keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes back{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@keyframes hue{0%,100%{filter:saturate(var(--sat,1.22)) hue-rotate(-7deg)}
+               50%{filter:saturate(var(--sat,1.22)) hue-rotate(7deg)}}
+@media (prefers-reduced-motion:reduce){
+  .bar,.bar .l{animation:none!important;transform:none}
+  .wave,.wave2,.colour2{display:none}
+  .colour{width:100%}
+}
+
+.demo{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:15px 16px;margin:14px 0 6px}
+.controls{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin:16px 0 10px}
+.crow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.crow:last-child{margin-bottom:0}
+label{font-size:13.5px;color:var(--ink-dim);white-space:nowrap;min-width:104px}
+input[type=range]{flex:1;min-width:140px;accent-color:#A78BFA}
+.read{font-family:var(--mono);font-size:12.5px;color:var(--ink);min-width:52px;text-align:right}
+pre{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;
+  overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--ink-dim);margin:12px 0}
+pre b{color:#5EEAD4;font-weight:400}
+pre i{color:#FF3EA5;font-style:normal}
+.note{border-left:3px solid #8B5CF6;background:#100E1C;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="bar"><div class="l colour"></div><div class="l wave"></div><div class="l wave2"></div></div>
+
+<div class="wrap">
+<h1>Getting the vibrance back</h1>
+<p>The frozen single layer in your screenshot looked right and the composited one looked like a sorbet, which localises the fault precisely: the ramp was fine, the compositing was destroying it.</p>
+<p>The cause was <code>mix-blend-mode: screen</code> on the second colour layer. Screen is additive — it can only ever move a pixel toward white. Screening magenta over green produces something close to white, so every point where the two layers disagreed on hue got bleached. The more the layers drifted out of phase, the more of the bar was bleached, which is why the moving version looked pastel and the frozen one did not.</p>
+
+<h2>The fix</h2>
+<p>Stop blending colour with colour. There is now exactly one colour layer, always at full saturation, and the other two layers are neutral dark waves that only modulate brightness. Hue is never averaged with another hue, so no pixel can drift toward grey. The non-repeating quality survives because the two dark waves still run at 11 and 23 seconds against the colour layer's 17.</p>
+
+<h2>Before and after</h2>
+<div class="demo">
+  <div class="bar fat legacy"><div class="l colour"></div><div class="l colour2"></div><div class="l wave"></div></div>
+  <p class="meta" style="margin:10px 0 0">screen blend — hues average toward white</p>
+</div>
+<div class="demo">
+  <div class="bar fat"><div class="l colour"></div><div class="l wave"></div><div class="l wave2"></div></div>
+  <p class="meta" style="margin:10px 0 0">multiply only — hue untouched, brightness modulated</p>
+</div>
+<div class="demo">
+  <div class="bar"><div class="l colour"></div><div class="l wave"></div><div class="l wave2"></div></div>
+  <p class="meta" style="margin:10px 0 0">production, 4px</p>
+</div>
+
+<h2>Push it further</h2>
+<p>Two extra dials. Saturation is a filter on the container, so it lifts the whole stack without touching the palette definition. Dim depth controls how dark the neutral waves get — heavy dimming reads as dramatic but costs apparent vibrance, since a dimmed saturated colour still looks duller.</p>
+<div class="controls">
+  <div class="crow"><label for="sat">Saturation</label>
+    <input type="range" id="sat" min="100" max="180" value="122" step="2"><span class="read" id="satr">1.22</span></div>
+  <div class="crow"><label for="d1">Wave depth</label>
+    <input type="range" id="d1" min="0" max="80" value="50" step="2"><span class="read" id="d1r">0.50</span></div>
+  <div class="crow"><label for="d2">Counter wave</label>
+    <input type="range" id="d2" min="0" max="70" value="34" step="2"><span class="read" id="d2r">0.34</span></div>
+</div>
+<div class="demo">
+  <div class="bar fat" id="tune"><div class="l colour"></div><div class="l wave"></div><div class="l wave2"></div></div>
+</div>
+<div class="demo">
+  <div class="bar" id="tune2"><div class="l colour"></div><div class="l wave"></div><div class="l wave2"></div></div>
+  <p class="meta" style="margin:10px 0 0">same settings, 4px</p>
+</div>
+
+<h2>On the cyan</h2>
+<p>One honest caveat. <code>#5EEAD4</code> is a genuinely pale colour — high lightness, moderate chroma — so it will always read softer than the other three no matter how the layers composite. If the bar still feels light after this, that band is why, and the fix is a deeper cyan in motion contexts rather than more filtering. Something around <code>#14D9C4</code> holds the same hue with more depth, and you would keep <code>#5EEAD4</code> for static interface use where it sits on small text and needs the lightness.</p>
+
+<h2>The CSS</h2>
+<pre><b>.bar</b>{ position:relative; height:4px; overflow:hidden; background:#0B0E14;
+  filter:saturate(1.22) }
+
+<b>.colour</b>{ position:absolute; inset:0; width:200%;
+  background:var(--ramp); animation:drift 17s linear infinite }
+
+<b>.wave</b>{ position:absolute; inset:0; width:200%; <i>mix-blend-mode:multiply</i>;
+  background:linear-gradient(90deg,rgba(11,14,20,.5),transparent 25%,
+    rgba(11,14,20,.4) 50%,transparent 75%,rgba(11,14,20,.5));
+  animation:back 11s linear infinite }
+
+<b>.wave2</b>{ <i>/* same idea, different shape and phase */</i>
+  animation:drift 23s linear infinite }</pre>
+
+<div class="note">The rule to carry forward: neutral layers may multiply, colour layers may not blend with each other. Any future layer that introduces a second hue will re-open the same washout, whatever blend mode it uses.</div>
+</div>
+
+<script>
+(function(){
+  var ids=['sat','d1','d2'], t1=document.getElementById('tune'), t2=document.getElementById('tune2');
+  function apply(){
+    var s=document.getElementById('sat').value/100,
+        a=document.getElementById('d1').value/100,
+        b=document.getElementById('d2').value/100;
+    document.getElementById('satr').textContent=s.toFixed(2);
+    document.getElementById('d1r').textContent=a.toFixed(2);
+    document.getElementById('d2r').textContent=b.toFixed(2);
+    [t1,t2].forEach(function(n){
+      n.style.setProperty('--sat',s);
+      n.style.setProperty('--d1',a);
+      n.style.setProperty('--d2',b);
+    });
+  }
+  ids.forEach(function(i){ document.getElementById(i).addEventListener('input',apply); });
+  apply();
+})();
+</script>
+</body>
+</html>

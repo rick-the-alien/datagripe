@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — tree interactions and object view</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#00E599; --cyan:#5EEAD4; --violet:#8B5CF6; --violet-text:#A78BFA; --magenta:#FF3EA5;
+  --void:#0B0E14; --panel:#0E1220; --raised:#161C29; --rule:#212A3A; --rule-soft:#161C29;
+  --ink:#E2E8F0; --ink-dim:#9AA5B6; --ink-mute:#6B7688; --ink-faint:#3D4759;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Space Grotesk",system-ui,sans-serif;
+  --ramp:linear-gradient(90deg,#00E599 0%,#00E599 3.75%,#5EEAD4 7.08%,#5EEAD4 10.83%,#8B5CF6 14.17%,#8B5CF6 17.92%,
+    #FF3EA5 21.25%,#FF3EA5 28.75%,#8B5CF6 32.08%,#8B5CF6 35.83%,#5EEAD4 39.17%,#5EEAD4 42.92%,
+    #00E599 46.25%,#00E599 53.75%,#5EEAD4 57.08%,#5EEAD4 60.83%,#8B5CF6 64.17%,#8B5CF6 67.92%,
+    #FF3EA5 71.25%,#FF3EA5 78.75%,#8B5CF6 82.08%,#8B5CF6 85.83%,#5EEAD4 89.17%,#5EEAD4 92.92%,
+    #00E599 96.25%,#00E599 100%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 80px}
+h1{font-family:var(--display);font-weight:500;font-size:27px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:38px 0 6px}
+p{color:var(--ink-dim);max-width:66ch;margin:0 0 13px;font-size:14.5px}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+code{font-family:var(--mono);font-size:.87em;color:var(--cyan)}
+kbd{font-family:var(--mono);font-size:11px;background:var(--raised);border:1px solid var(--rule);
+  border-radius:4px;padding:1px 6px;color:var(--ink-dim)}
+
+.abar{position:relative;overflow:hidden;height:3px;filter:saturate(1.22)}
+.abar .l{position:absolute;top:0;bottom:0;left:0;width:200%}
+.colour{background:var(--ramp);animation:drift 17s linear infinite}
+.wave{mix-blend-mode:multiply;background:linear-gradient(90deg,rgba(11,14,20,.5),rgba(11,14,20,0) 25%,
+  rgba(11,14,20,.4) 50%,rgba(11,14,20,0) 75%,rgba(11,14,20,.5));animation:back 11s linear infinite}
+@keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes back{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.abar .l{animation:none;transform:none}.wave{display:none}
+  .colour{width:100%;background:linear-gradient(90deg,#00E599,#5EEAD4 26%,#8B5CF6 58%,#FF3EA5)}}
+
+.hint{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:13px 16px;margin:14px 0 16px;
+  font-size:13.5px;color:var(--ink-dim);display:flex;gap:20px;flex-wrap:wrap}
+.hint b{color:var(--ink);font-weight:500}
+
+.scroller{overflow-x:auto;border-radius:10px}
+.ide{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--void);min-width:900px;position:relative}
+
+.top{display:flex;align-items:center;gap:12px;padding:9px 13px;background:var(--panel);border-bottom:1px solid var(--rule)}
+.prompt{font-family:var(--mono);font-size:13px;display:flex;align-items:center}
+.prompt .gt{color:var(--magenta)}
+.prompt .br em{color:var(--green);font-style:normal}
+.prompt .sep{color:var(--ink-faint)}
+.prompt .pj{color:#FF3EA5}
+.cur{display:inline-block;width:8px;height:15px;background:#FF3EA5;margin-left:2px;
+  animation:blink 1.1s steps(1) infinite;vertical-align:-2px}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+.body{display:flex;align-items:stretch;height:420px}
+.side{width:224px;flex:none;border-right:1px solid var(--rule);background:var(--panel);
+  font-family:var(--mono);font-size:11.5px;display:flex;flex-direction:column}
+.crumb{padding:7px 9px;border-bottom:1px solid var(--rule);color:var(--ink-dim);font-size:11px;display:flex;gap:5px}
+.crumb b{color:var(--ink);font-weight:400}
+.filter{padding:7px 9px;border-bottom:1px solid var(--rule);color:var(--ink-faint);font-size:11px}
+.tr{flex:1;overflow-y:auto;padding:5px 0}
+.n{display:flex;align-items:center;gap:5px;padding:3.5px 6px 3.5px 9px;color:var(--ink-dim);cursor:pointer;
+  border-left:2px solid transparent;white-space:nowrap;user-select:none}
+.n:hover{background:#141A2C;color:var(--ink)}
+.n.sel{background:#141A2C;color:var(--ink);border-left-color:var(--violet)}
+.n.multi{background:#161226;color:var(--ink);border-left-color:var(--violet-text)}
+.n .ic{width:13px;flex:none;text-align:center;font-size:10px}
+.n:hover .ic{color:var(--violet-text)}
+.n .cnt{color:var(--ink-faint);margin-left:auto;padding-left:8px}
+.n .open{margin-left:auto;padding-left:8px;color:var(--ink-faint);opacity:0;font-size:11px}
+.n:hover .open{opacity:1}
+.n .open:hover{color:var(--cyan)}
+.d1{padding-left:9px}.d2{padding-left:22px}
+.empty{color:var(--ink-faint);font-style:italic;padding:3px 9px 3px 35px;font-family:var(--mono);font-size:11px}
+.loading{color:var(--violet-text);padding:3px 9px 3px 35px;font-family:var(--mono);font-size:11px}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.tabs{display:flex;border-bottom:1px solid var(--rule);background:var(--panel);overflow-x:auto}
+.tabs .tb{padding:7px 10px 5px;font-size:11.5px;color:#5A6478;font-family:var(--mono);
+  border-bottom:2px solid transparent;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tabs .tb:hover{color:var(--ink-dim)}
+.tabs .tb.on{color:var(--ink);border-bottom-color:var(--violet)}
+.tabs .tb .g{font-size:9px}
+.tabs .tb .g.data{color:var(--green)}
+.tabs .tb .g.struct{color:var(--cyan)}
+.tabs .tb .x{color:var(--ink-faint);margin-left:3px;font-size:12px}
+.tabs .tb .x:hover{color:var(--magenta)}
+
+.pane{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.ed{padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.85}
+.ln{color:var(--ink-faint);display:inline-block;width:15px}
+.kw{color:var(--magenta)}.tb2{color:var(--green)}.st{color:#C4A6FF}.idn{color:var(--ink-mute)}
+
+/* table view */
+.tvbar{display:flex;align-items:center;gap:9px;padding:6px 11px;background:var(--panel);
+  border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:11px}
+.tvbar .fx{flex:1;min-width:90px;background:var(--void);border:1px solid var(--rule);border-radius:5px;
+  padding:4px 8px;color:var(--ink-faint)}
+.tvbar .lim{color:var(--ink-dim);border:1px solid var(--rule);border-radius:5px;padding:4px 8px;cursor:pointer}
+.tvbar .ico{color:var(--ink-mute);cursor:pointer;padding:0 3px}
+.tvbar .ico:hover{color:var(--cyan)}
+.gwrap{flex:1;overflow:auto}
+.dt{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+.dt th{text-align:left;font-weight:400;color:var(--ink-mute);padding:6px 10px;background:#12182A;
+  border-bottom:1px solid var(--rule);position:sticky;top:0;font-size:11px;white-space:nowrap}
+.dt td{padding:5px 10px;border-bottom:1px solid var(--rule-soft);color:#C7D0DC;white-space:nowrap}
+.dt tr:hover td{background:#101725}
+.dt td.k{color:var(--green)}.dt td.t{color:var(--cyan)}.dt td.m{color:var(--ink-mute)}
+.dt td.pk{color:var(--magenta)}
+.dt td.rn{color:var(--ink-faint);width:34px}
+
+/* object view */
+.ovhead{padding:11px 14px 0;border-bottom:1px solid var(--rule);background:var(--panel)}
+.ovtitle{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}
+.ovtitle b{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--ink)}
+.ovtitle span{font-family:var(--mono);font-size:11px;color:var(--ink-mute)}
+.ovtabs{display:flex;gap:1px;overflow-x:auto}
+.ovtabs div{padding:6px 10px;font-family:var(--mono);font-size:11px;color:#5A6478;cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap}
+.ovtabs div:hover{color:var(--ink-dim)}
+.ovtabs div.on{color:var(--ink);border-bottom-color:var(--cyan)}
+.ovtabs div.danger{color:#7A3A56;margin-left:auto;border-left:1px solid var(--rule);padding-left:14px}
+.ovtabs div.danger:hover{color:var(--magenta)}
+.ovtabs div.danger.on{color:var(--magenta);border-bottom-color:var(--magenta)}
+.ovbody{flex:1;overflow:auto}
+.warn{border-left:3px solid var(--magenta);background:#12101A;padding:9px 13px;margin:10px;
+  font-size:12.5px;color:var(--ink)}
+.warn .w{font-family:var(--mono);font-size:10.5px;color:var(--ink-mute);margin-top:4px}
+.ddl{padding:12px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.8;color:#C7D0DC;white-space:pre}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--rule-soft)}
+.stat div{background:var(--void);padding:12px 14px}
+.stat b{display:block;font-family:var(--mono);font-size:16px;color:var(--ink);font-weight:400}
+.stat span{font-size:11px;color:var(--ink-mute);font-family:var(--mono)}
+
+/* danger zone */
+.dz{padding:14px}
+.dzhead{border-left:3px solid var(--magenta);background:#12101A;padding:11px 14px;margin-bottom:14px;font-size:13px}
+.dzrow{border:1px solid var(--rule);border-radius:8px;padding:13px 15px;margin-bottom:10px;background:var(--panel)}
+.dzrow h4{font-family:var(--mono);font-size:12.5px;font-weight:500;margin:0 0 4px;color:var(--ink)}
+.dzrow p{font-size:12.5px;margin:0 0 10px;color:var(--ink-mute);max-width:none}
+.dzbtn{font-family:var(--mono);font-size:11.5px;color:#8A4762;background:transparent;
+  border:1px solid #3A1F2C;border-radius:6px;padding:5px 12px;cursor:pointer}
+.dzbtn:hover{color:var(--magenta);border-color:var(--magenta)}
+.dzconfirm{margin-top:11px;padding-top:11px;border-top:1px solid var(--rule)}
+.dzconfirm p{color:var(--ink-dim);margin-bottom:8px}
+.dzin{font-family:var(--mono);font-size:11.5px;background:var(--void);border:1px solid var(--rule);
+  border-radius:5px;padding:5px 9px;color:var(--ink);width:190px}
+.dzgo{font-family:var(--mono);font-size:11.5px;background:#2A0F1C;border:1px solid var(--magenta);
+  color:var(--magenta);border-radius:6px;padding:5px 12px;margin-left:7px;cursor:pointer}
+.dzgo[disabled]{opacity:.35;cursor:default;border-color:#3A1F2C;color:#7A3A56}
+
+.status{display:flex;align-items:center;gap:10px;padding:7px 13px;border-top:1px solid var(--rule);
+  background:var(--panel);font-family:var(--mono);font-size:11px}
+
+/* popover + context menu */
+.pop{position:absolute;z-index:40;background:var(--raised);border:1px solid var(--rule);border-radius:8px;
+  padding:7px 0;min-width:196px;font-family:var(--mono);font-size:11px;pointer-events:none}
+.pop .ph{padding:2px 12px 6px;color:var(--ink-faint);border-bottom:1px solid var(--rule);margin-bottom:5px}
+.pop .pr{display:flex;gap:12px;padding:2.5px 12px;color:#C7D0DC}
+.pop .pr span{margin-left:auto;color:var(--cyan)}
+.pop .pr.pk b{color:var(--magenta);font-weight:400}
+.pop .pf{padding:6px 12px 1px;color:var(--ink-faint);font-size:10.5px}
+.ctx{position:absolute;z-index:50;background:var(--raised);border:1px solid var(--rule);border-radius:8px;
+  padding:5px;min-width:184px;font-family:var(--mono);font-size:11.5px}
+.ctx .ci{padding:6px 10px;border-radius:5px;color:var(--ink-dim);cursor:pointer;display:flex;align-items:center}
+.ctx .ci:hover{background:#1D2537;color:var(--ink)}
+.ctx .ci .kb{margin-left:auto;color:var(--ink-faint);font-size:10.5px}
+.ctx .cs{height:1px;background:var(--rule);margin:5px 0}
+.ctx .ci.dg{color:#8A4762}
+.ctx .ci.dg:hover{background:#2A0F1C;color:var(--magenta)}
+.hide{display:none!important}
+.callout{border-left:3px solid var(--violet);background:#100E1C;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="abar"><div class="l colour"></div><div class="l wave"></div></div>
+
+<div class="wrap">
+<h1>Tree interactions and object view</h1>
+<p>Your spec, wired up. Everything below is live.</p>
+
+<div class="hint">
+  <span><b>Hover</b> a table — field popover after 450ms</span>
+  <span><b>Hover far right</b> — <code>⊞</code> opens object view</span>
+  <span><b>Double click</b> — opens table view</span>
+  <span><b>Right click</b> — context menu</span>
+  <span><b>Ctrl click</b> — multi select</span>
+</div>
+
+<div class="scroller"><div class="ide" id="ide">
+  <div class="abar"><div class="l colour"></div><div class="l wave"></div></div>
+  <div class="top">
+    <div class="prompt"><span class="gt">&gt;</span><span class="br">Data<em>gripe</em></span><span class="sep">:</span><span class="pj">wallet-prod</span><span class="cur"></span></div>
+    <span class="meta" style="margin-left:auto">pg 16.2 · production</span>
+  </div>
+
+  <div class="body">
+    <div class="side">
+      <div class="crumb"><b>wallet-prod</b><span style="color:var(--ink-faint)">/</span><b>public</b><span style="margin-left:auto;color:var(--ink-faint)">▾</span></div>
+      <div class="filter">filter objects…</div>
+      <div class="tr" id="tree"></div>
+    </div>
+
+    <div class="main">
+      <div class="tabs" id="tabs"></div>
+      <div class="pane" id="pane"></div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span style="color:var(--green)">connected</span>
+    <span id="selinfo" style="color:var(--ink-mute)">public</span>
+    <span style="margin-left:auto;color:var(--magenta)">3 gripes</span>
+  </div>
+
+  <div class="pop hide" id="pop"></div>
+  <div class="ctx hide" id="ctx"></div>
+</div></div>
+
+<h2>What the mock settles</h2>
+<p>Two openable surfaces, deliberately different weights. <b>Table view</b> is a double click and gets the whole pane — one filter line at the top, then rows all the way down. <b>Object view</b> is the <code>⊞</code> affordance or the context menu, and it owns everything structural. No data tab in it, as you specified; the two never compete for space.</p>
+<p>Tab glyphs differ so the strip stays readable when you have both open for the same table: green <code>▤</code> for rows, cyan <code>⊞</code> for structure. Without that, two tabs both saying <code>payments</code> is a coin flip.</p>
+
+<h2>Danger zone</h2>
+<p>Last tab, pushed to the right edge behind a divider, dim magenta until hovered. Each action is collapsed until you click it, then asks you to type the object name. That's your extra click or two, and the typed name means muscle memory can't fire it.</p>
+<div class="callout">Worth wiring to the project class: on an <code>analytics</code> read-only project the tab renders disabled with the reason, and on <code>production</code> the confirm could additionally require the project name rather than the table name. The colour class already knows — it may as well do a second job.</div>
+
+<h2>Open questions I hit while building</h2>
+<p><b>Single click on an already-selected table.</b> Currently does nothing. Candidate: it could focus the field popover so keyboard users get the same lookup, since hover has no keyboard equivalent.</p>
+<p><b>Multi-select scope.</b> Ctrl click works on tables here. The context menu adapts, but it needs deciding what a multi-selection can actually do — export, generate a join skeleton, compare structures — before the menu grows a section that does nothing.</p>
+<p><b>Popover while dragging.</b> If you support drag-a-table-into-the-editor, the popover has to suppress on mousedown or it fights the drag.</p>
+</div>
+
+<script>
+(function(){
+  var COLS=[
+    ['id','uuid',1],['user_id','uuid',0],['amount','numeric(12,2)',0],['currency','char(3)',0],
+    ['status','text',0],['provider','text',0],['reference_id','uuid',0],
+    ['created_at','timestamptz',0],['updated_at','timestamptz',0]
+  ];
+  var ROWS=[
+    ['4e4b67a2','a91f','240.00','EUR','pending','payram','2026-09-01 14:22'],
+    ['f05288db','7c02','75.50','EUR','pending','payram','2026-09-01 14:19'],
+    ['907a542c','1de8','1020.00','GBP','settled','stripe','2026-09-01 13:58'],
+    ['b2c41a90','a91f','12.00','EUR','failed','payram','2026-09-01 13:44'],
+    ['3fd90c1b','5510','480.25','EUR','settled','stripe','2026-09-01 13:31'],
+    ['c8e17b44','9a03','65.00','USD','pending','payram','2026-09-01 13:12'],
+    ['1a7f2e60','a91f','2300.00','EUR','settled','stripe','2026-09-01 12:58'],
+    ['e40b83d2','2ff1','19.99','EUR','failed','payram','2026-09-01 12:40']
+  ];
+
+  var OV={
+    columns:['columns','<table class="dt"><thead><tr><th>name</th><th>type</th><th>null</th><th>default</th></tr></thead><tbody>'+
+      COLS.map(function(c){return '<tr><td class="'+(c[2]?'pk':'')+'">'+c[0]+'</td><td class="t">'+c[1]+
+      '</td><td class="m">'+(c[2]?'not null':'null')+'</td><td class="m">—</td></tr>'}).join('')+'</tbody></table>'],
+    indexes:['indexes','<div class="warn">No index on <code>status</code>, which four of your five slowest queries filter on.<div class="w">blocker · index · missing</div></div>'+
+      '<table class="dt"><thead><tr><th>name</th><th>method</th><th>columns</th><th>size</th></tr></thead><tbody>'+
+      '<tr><td class="pk">payments_pkey</td><td class="m">btree</td><td class="t">id</td><td class="m">1.2 GB</td></tr>'+
+      '<tr><td>idx_payments_user</td><td class="m">btree</td><td class="t">user_id</td><td class="m">890 MB</td></tr>'+
+      '<tr><td>idx_payments_created</td><td class="m">btree</td><td class="t">created_at desc</td><td class="m">1.1 GB</td></tr></tbody></table>'],
+    constraints:['constraints','<table class="dt"><thead><tr><th>name</th><th>type</th><th>definition</th></tr></thead><tbody>'+
+      '<tr><td class="pk">payments_pkey</td><td class="m">primary key</td><td class="t">(id)</td></tr>'+
+      '<tr><td class="k">payments_user_fk</td><td class="m">foreign key</td><td class="t">user_id → users(id)</td></tr>'+
+      '<tr><td>payments_amount_ck</td><td class="m">check</td><td class="t">amount &gt; 0</td></tr></tbody></table>'],
+    triggers:['triggers','<table class="dt"><thead><tr><th>name</th><th>timing</th><th>event</th><th>function</th></tr></thead><tbody>'+
+      '<tr><td>trg_payments_touch</td><td class="m">before</td><td class="m">update</td><td class="t">fn_touch_updated_at()</td></tr>'+
+      '<tr><td>trg_payments_audit</td><td class="m">after</td><td class="m">insert, update</td><td class="t">fn_audit_write()</td></tr></tbody></table>'],
+    grants:['grants','<table class="dt"><thead><tr><th>role</th><th>privileges</th><th>granted by</th></tr></thead><tbody>'+
+      '<tr><td class="k">app_rw</td><td class="t">select, insert, update</td><td class="m">migrator</td></tr>'+
+      '<tr><td class="k">app_ro</td><td class="t">select</td><td class="m">migrator</td></tr>'+
+      '<tr><td class="k">analytics_ro</td><td class="t">select</td><td class="m">migrator</td></tr></tbody></table>'],
+    stats:['statistics','<div class="stat"><div><b>41.2M</b><span>live rows</span></div><div><b>8.4 GB</b><span>heap</span></div>'+
+      '<div><b>3.2 GB</b><span>indexes</span></div><div><b>2.1%</b><span>dead tuples</span></div>'+
+      '<div><b>4h ago</b><span>autovacuum</span></div><div><b>4h ago</b><span>analyze</span></div></div>'],
+    ddl:['ddl','<div class="ddl"><span class="kw">create table</span> public.payments (\n'+
+      '  id          <span class="t">uuid</span>          <span class="kw">not null default</span> gen_random_uuid(),\n'+
+      '  user_id     <span class="t">uuid</span>          <span class="kw">not null</span>,\n'+
+      '  amount      <span class="t">numeric</span>(12,2) <span class="kw">not null</span>,\n'+
+      '  status      <span class="t">text</span>          <span class="kw">not null default</span> <span class="st">\'pending\'</span>,\n'+
+      '  created_at  <span class="t">timestamptz</span>   <span class="kw">not null default</span> now(),\n'+
+      '  <span class="kw">constraint</span> payments_pkey <span class="kw">primary key</span> (id)\n);</div>']
+  };
+  var OVORDER=['columns','indexes','constraints','triggers','grants','stats','ddl'];
+
+  function dangerHTML(){
+    return '<div class="dz">'+
+      '<div class="dzhead">These operations are irreversible and this is a <b>production</b> project. Nothing here is undoable and nothing here is transactional once committed.</div>'+
+      dzRow('truncate','truncate payments','Removes all 41.2M rows. Indexes are kept, sequences are not reset.')+
+      dzRow('drop','drop table payments','Removes the table, its data, its indexes, and everything that depends on it.')+
+      '</div>';
+  }
+  function dzRow(id,title,desc){
+    return '<div class="dzrow"><h4>'+title+'</h4><p>'+desc+'</p>'+
+      '<button class="dzbtn" data-dz="'+id+'">reveal</button>'+
+      '<div class="dzconfirm hide" id="dzc-'+id+'"><p>Type <code>payments</code> to confirm.</p>'+
+      '<input class="dzin" data-dzin="'+id+'" placeholder="object name" aria-label="confirm object name">'+
+      '<button class="dzgo" data-dzgo="'+id+'" disabled>'+id+'</button></div></div>';
+  }
+
+  var tabs=[{id:'sql',kind:'sql',name:'payouts.sql'}], activeTab='sql', ovTab='columns';
+  var selected='payments', multi=[];
+
+  var TREE=[
+    {d:1,ic:'▸',n:'tables',c:'7',k:'grp'},
+    {d:2,ic:'▤',n:'payments',k:'tbl'},
+    {d:2,ic:'▤',n:'users',k:'tbl'},
+    {d:2,ic:'▤',n:'payouts',k:'tbl'},
+    {d:2,ic:'▤',n:'providers',k:'tbl'},
+    {d:1,ic:'▸',n:'views',c:'2',k:'grp'},
+    {d:2,ic:'◫',n:'v_pending',k:'tbl'},
+    {d:1,ic:'▸',n:'functions',c:'4',k:'grp'},
+    {d:2,ic:'ƒ',n:'fn_settle',k:'fn'},
+    {d:1,ic:'▸',n:'sequences',c:'0',k:'grp'},
+    {d:0,n:'no sequences',k:'empty'},
+    {d:1,ic:'▸',n:'materialized views',k:'grp'},
+    {d:0,n:'loading…',k:'loading'}
+  ];
+
+  function renderTree(){
+    document.getElementById('tree').innerHTML=TREE.map(function(r,i){
+      if(r.k==='empty') return '<div class="empty">'+r.n+'</div>';
+      if(r.k==='loading') return '<div class="loading">'+r.n+'</div>';
+      var cls='n d'+r.d+(r.n===selected?' sel':'')+(multi.indexOf(r.n)>-1?' multi':'');
+      var right=r.c!==undefined?'<span class="cnt">'+r.c+'</span>':
+        (r.k==='tbl'?'<span class="open" data-open="'+r.n+'" title="object view">⊞</span>':'');
+      return '<div class="'+cls+'" data-i="'+i+'" data-k="'+r.k+'" data-n="'+r.n+'"><span class="ic">'+r.ic+'</span>'+r.n+right+'</div>';
+    }).join('');
+    wireTree();
+  }
+
+  function renderTabs(){
+    document.getElementById('tabs').innerHTML=tabs.map(function(t){
+      var g=t.kind==='data'?'<span class="g data">▤</span>':t.kind==='obj'?'<span class="g struct">⊞</span>':'';
+      var x=t.id==='sql'?'':'<span class="x" data-close="'+t.id+'">×</span>';
+      var nm=t.kind==='obj'?t.name+' · structure':t.name;
+      return '<div class="tb'+(t.id===activeTab?' on':'')+'" data-tab="'+t.id+'">'+g+nm+x+'</div>';
+    }).join('');
+    document.querySelectorAll('[data-tab]').forEach(function(e){
+      e.addEventListener('click',function(ev){
+        if(ev.target.hasAttribute('data-close')){
+          var id=ev.target.getAttribute('data-close');
+          tabs=tabs.filter(function(t){return t.id!==id});
+          if(activeTab===id) activeTab=tabs[tabs.length-1].id;
+        } else { activeTab=e.getAttribute('data-tab'); }
+        renderTabs(); renderPane();
+      });
+    });
+  }
+
+  function renderPane(){
+    var t=tabs.filter(function(x){return x.id===activeTab})[0], p=document.getElementById('pane');
+    if(!t){p.innerHTML='';return}
+    if(t.kind==='sql'){
+      p.innerHTML='<div class="ed"><div><span class="ln">1</span><span class="kw">select</span> <span class="idn">id, amount</span> '+
+        '<span class="kw">from</span> <span class="tb2">payments</span></div>'+
+        '<div><span class="ln">2</span><span class="kw">where</span> <span class="idn">status</span> = <span class="st">\'pending\'</span></div></div>';
+    } else if(t.kind==='data'){
+      p.innerHTML='<div class="tvbar"><span class="ico">↻</span><div class="fx">where …</div>'+
+        '<span class="lim">limit 100 ▾</span><span class="ico">⤓</span><span class="ico">⋯</span></div>'+
+        '<div class="gwrap"><table class="dt"><thead><tr><th></th><th>id</th><th>user_id</th><th>amount</th>'+
+        '<th>currency</th><th>status</th><th>provider</th><th>created_at</th></tr></thead><tbody>'+
+        ROWS.map(function(r,i){return '<tr><td class="rn">'+(i+1)+'</td><td class="pk">'+r[0]+'</td><td class="m">'+r[1]+
+          '</td><td class="k">'+r[2]+'</td><td class="m">'+r[3]+'</td><td>'+r[4]+'</td><td class="m">'+r[5]+
+          '</td><td class="m">'+r[6]+'</td></tr>'}).join('')+
+        '</tbody></table></div>'+
+        '<div class="status" style="border-top:1px solid var(--rule)"><span style="color:var(--ink-mute)">100 of 41,203,882 rows</span>'+
+        '<span style="margin-left:auto;color:var(--ink-faint)">read only until you edit a cell</span></div>';
+    } else {
+      var tabsHTML=OVORDER.map(function(k){
+        return '<div data-ov="'+k+'"'+(ovTab===k?' class="on"':'')+'>'+OV[k][0]+'</div>';
+      }).join('')+'<div data-ov="danger" class="danger'+(ovTab==='danger'?' on':'')+'">danger zone</div>';
+      p.innerHTML='<div class="ovhead"><div class="ovtitle"><b>payments</b><span>table · public · 41.2M rows</span></div>'+
+        '<div class="ovtabs">'+tabsHTML+'</div></div>'+
+        '<div class="ovbody">'+(ovTab==='danger'?dangerHTML():OV[ovTab][1])+'</div>';
+      p.querySelectorAll('[data-ov]').forEach(function(e){
+        e.addEventListener('click',function(){ ovTab=e.getAttribute('data-ov'); renderPane(); });
+      });
+      p.querySelectorAll('[data-dz]').forEach(function(b){
+        b.addEventListener('click',function(){
+          document.getElementById('dzc-'+b.getAttribute('data-dz')).classList.remove('hide');
+          b.classList.add('hide');
+        });
+      });
+      p.querySelectorAll('[data-dzin]').forEach(function(inp){
+        inp.addEventListener('input',function(){
+          var go=p.querySelector('[data-dzgo="'+inp.getAttribute('data-dzin')+'"]');
+          if(inp.value.trim()==='payments'){go.removeAttribute('disabled')}else{go.setAttribute('disabled','')}
+        });
+      });
+    }
+  }
+
+  function openTab(kind,name){
+    var id=kind+':'+name;
+    if(!tabs.some(function(t){return t.id===id})) tabs.push({id:id,kind:kind,name:name});
+    activeTab=id; if(kind==='obj') ovTab='columns';
+    renderTabs(); renderPane();
+  }
+
+  var pop=document.getElementById('pop'), ctx=document.getElementById('ctx'), timer=null;
+  function showPop(el,name){
+    pop.innerHTML='<div class="ph">'+name+' · '+COLS.length+' columns</div>'+
+      COLS.map(function(c){return '<div class="pr'+(c[2]?' pk':'')+'">'+(c[2]?'<b>'+c[0]+'</b>':c[0])+
+        '<span>'+c[1]+'</span></div>'}).join('')+
+      '<div class="pf">⊞ object view · dbl click for rows</div>';
+    var ide=document.getElementById('ide').getBoundingClientRect(), r=el.getBoundingClientRect();
+    pop.classList.remove('hide');
+    var top=r.top-ide.top; 
+    if(top+pop.offsetHeight>ide.height-20) top=ide.height-pop.offsetHeight-20;
+    pop.style.left=(r.right-ide.left+8)+'px'; pop.style.top=Math.max(8,top)+'px';
+  }
+  function hidePop(){ pop.classList.add('hide'); if(timer){clearTimeout(timer);timer=null} }
+
+  function showCtx(x,y,name){
+    var n=multi.length>1?multi.length+' tables':name;
+    ctx.innerHTML='<div class="ci" data-c="rows">view rows<span class="kb">dbl click</span></div>'+
+      '<div class="cs"></div>'+
+      OVORDER.map(function(k){return '<div class="ci" data-c="ov:'+k+'">'+OV[k][0]+'</div>'}).join('')+
+      '<div class="cs"></div><div class="ci" data-c="copy">copy name</div>'+
+      '<div class="cs"></div><div class="ci dg" data-c="ov:danger">danger zone…</div>';
+    var ide=document.getElementById('ide').getBoundingClientRect();
+    ctx.classList.remove('hide');
+    var left=x-ide.left, top=y-ide.top;
+    if(left+ctx.offsetWidth>ide.width-10) left=ide.width-ctx.offsetWidth-10;
+    if(top+ctx.offsetHeight>ide.height-10) top=ide.height-ctx.offsetHeight-10;
+    ctx.style.left=left+'px'; ctx.style.top=top+'px';
+    ctx.querySelectorAll('[data-c]').forEach(function(e){
+      e.addEventListener('click',function(){
+        var c=e.getAttribute('data-c');
+        if(c==='rows') openTab('data',name);
+        else if(c.indexOf('ov:')===0){ ovTab=c.slice(3); openTab('obj',name); }
+        ctx.classList.add('hide');
+      });
+    });
+  }
+
+  function wireTree(){
+    document.querySelectorAll('#tree .n').forEach(function(el){
+      var name=el.getAttribute('data-n'), kind=el.getAttribute('data-k');
+      el.addEventListener('click',function(ev){
+        if(ev.target.hasAttribute('data-open')){ ovTab='columns'; openTab('obj',name); return; }
+        if(ev.ctrlKey||ev.metaKey){
+          if(kind!=='tbl') return;
+          var i=multi.indexOf(name);
+          if(i>-1) multi.splice(i,1); else multi.push(name);
+        } else { selected=name; multi=[]; }
+        document.getElementById('selinfo').textContent=multi.length>1?multi.length+' selected':name;
+        renderTree();
+      });
+      el.addEventListener('dblclick',function(){ if(kind==='tbl'){ hidePop(); openTab('data',name); } });
+      el.addEventListener('contextmenu',function(ev){
+        ev.preventDefault(); hidePop();
+        if(kind!=='tbl') return;
+        if(multi.indexOf(name)<0){ selected=name; multi=[]; renderTree(); }
+        showCtx(ev.clientX,ev.clientY,name);
+      });
+      if(kind==='tbl'){
+        el.addEventListener('mouseenter',function(){
+          if(!ctx.classList.contains('hide')) return;
+          timer=setTimeout(function(){ showPop(el,name); },450);
+        });
+        el.addEventListener('mouseleave',hidePop);
+        el.addEventListener('mousedown',hidePop);
+      }
+    });
+  }
+
+  document.addEventListener('click',function(e){ if(!ctx.contains(e.target)) ctx.classList.add('hide'); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ctx.classList.add('hide');hidePop();} });
+
+  renderTree(); renderTabs(); renderPane();
+})();
+</script>
+</body>
+</html>

@@ -417,13 +417,23 @@ export function ResultsPanel() {
 												<tr key={rowIndex}>
 													{row.map((value, columnIndex) => {
 														const cell = cellText(value);
+														// Brand: numerics right-aligned and coloured,
+														// everything else neutral.
+														const numeric =
+															!cell.isNull && typeof value === "number";
 														return (
 															<td
 																key={
 																	resultSet.columns[columnIndex]?.name ??
 																	columnIndex
 																}
-																className={cell.isNull ? "dg-grid-null" : ""}
+																className={
+																	cell.isNull
+																		? "dg-grid-null"
+																		: numeric
+																			? "dg-grid-num"
+																			: ""
+																}
 															>
 																{cell.text}
 															</td>

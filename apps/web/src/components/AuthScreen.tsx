@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSessionStore } from "../stores/session";
+import { Mascot } from "./Mascot";
 
 /**
  * Login / signup screen. Bootstrap mode (zero users) asks for the first
@@ -37,7 +38,12 @@ export function AuthScreen() {
 					submit();
 				}}
 			>
-				<h1 className="dg-auth-brand">DataGripe</h1>
+				<h1 className="dg-auth-brand">
+					<Mascot size={72} />
+					<span className="dg-auth-lockup">
+						Data<b>gripe</b>
+					</span>
+				</h1>
 				<p className="dg-auth-subtitle">
 					{mode === "signup"
 						? bootstrap?.bootstrap === true

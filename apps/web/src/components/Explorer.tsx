@@ -1,49 +1,90 @@
-import type {
-	ConnectionAdapter,
-	ConnectionMetadata,
-	SchemaNode,
-	SchemaPathSegment,
-} from "@datagripe/contracts";
-import type { ReactNode } from "react";
+import type { SchemaNode, SchemaPathSegment } from "@datagripe/contracts";
 import {
+	type ReactNode,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
+import { create } from "zustand";
+import { openObjectView, openTableView } from "../app/viewPanels";
+import { useDatasourceStore } from "../stores/datasource";
+import {
+	type ChildrenState,
 	nodeKey,
 	useConnectionsStore,
 	useExplorerStore,
 } from "../stores/runtime";
+import { DatasourceBreadcrumb, treeRootPath } from "./DatasourceBreadcrumb";
 
 /**
- * Lazy schema explorer (docs/initial_idea.md §11):
- * connection → schema → tables/views/functions/… → object → columns.
- * Children load on first expand; refresh re-requests expanded paths and
- * bypasses the server cache.
+ * Schema tree scoped to the breadcrumb's datasource + namespace
+ * (docs/brand/mocks/datasource-selector.html). No chevron gutter: the
+ * type icon swaps to a chevron on hover/focus and the whole row toggles.
+ * The filter shows loaded objects whose name matches. Hovering a table
+ * or view for 450ms opens the field popover — a singleton, so a new one
+ * replaces the last rather than stacking.
  */
 
-/** DataGrip-style accent colors, one per object family. */
+/** Brand tree colouring: categories carry the accent, leaves stay
+ * neutral so a wide schema does not turn into confetti. */
 const KIND_COLORS: Record<SchemaNode["kind"], string> = {
-	schema: "#5b9bd5",
-	tables: "#4e8cc4",
-	views: "#4caf7d",
-	functions: "#d8a33b",
-	procedures: "#a56fd4",
-	sequences: "#4fb3b3",
-	table: "#4e8cc4",
-	view: "#4caf7d",
-	function: "#d8a33b",
-	procedure: "#a56fd4",
-	sequence: "#4fb3b3",
-	column: "#9aa0ab",
-	db: "#c14b41",
-	prefix: "#5b9bd5",
-	key: "#d8a33b",
+	schema: "#5EEAD4",
+	tables: "#8B5CF6",
+	views: "#FF3EA5",
+	functions: "#5EEAD4",
+	procedures: "#5EEAD4",
+	sequences: "#5EEAD4",
+	table: "#9AA5B6",
+	view: "#9AA5B6",
+	function: "#9AA5B6",
+	procedure: "#9AA5B6",
+	sequence: "#9AA5B6",
+	column: "#3D4759",
+	db: "#9AA5B6",
+	prefix: "#8B5CF6",
+	key: "#A78BFA",
 };
 
-/** Vendor tint for the connection-level cylinder. */
-const ADAPTER_COLORS: Record<ConnectionAdapter, string> = {
-	postgres: "#5b83b0",
-	mysql: "#d98e32",
-	sqlite: "#4fb3d9",
-	redis: "#c14b41",
+const CATEGORY_KINDS: Partial<Record<SchemaNode["kind"], true>> = {
+	tables: true,
+	views: true,
+	functions: true,
+	procedures: true,
+	sequences: true,
 };
+
+const OBJECT_KINDS: Partial<Record<SchemaNode["kind"], true>> = {
+	table: true,
+	view: true,
+};
+
+/** Synthetic empty-row label per category (brand-system.md "Chevrons"). */
+const EMPTY_LABELS: Partial<Record<SchemaNode["kind"], string>> = {
+	tables: "no tables",
+	views: "no views",
+	functions: "no functions",
+	procedures: "no procedures",
+	sequences: "no sequences",
+};
+
+/** Single-row selection plus the singleton field popover, shared across
+ * the recursive tree. Opening a popover replaces whichever was open. */
+interface TreeUiState {
+	selectedKey: string | null;
+	popoverKey: string | null;
+	select: (key: string | null) => void;
+	openPopover: (key: string) => void;
+	closePopover: () => void;
+}
+
+const useTreeUi = create<TreeUiState>()((set) => ({
+	selectedKey: null,
+	popoverKey: null,
+	select: (key) => set({ selectedKey: key }),
+	openPopover: (key) => set({ popoverKey: key }),
+	closePopover: () => set({ popoverKey: null }),
+}));
 
 function CylinderIcon({ color }: { color: string }) {
 	return (
@@ -222,18 +263,308 @@ function TreeIcon(props: { kind: SchemaNode["kind"]; color?: string }) {
 	);
 }
 
+/**
+ * The type icon swaps to a chevron on hover and keyboard focus
+ * (brand-system.md "Chevrons") — content visibility is the state signal,
+ * so no permanent gutter column is spent on it.
+ */
+function TreeGlyph(props: {
+	kind: SchemaNode["kind"];
+	hasChildren: boolean;
+	expanded: boolean;
+}) {
+	return (
+		<span
+			className={`dg-tree-glyph${props.hasChildren ? " dg-tree-glyph-parent" : ""}`}
+		>
+			<TreeIcon kind={props.kind} />
+			{props.hasChildren && (
+				<span className="dg-tree-glyph-chev" aria-hidden="true">
+					{props.expanded ? "▾" : "▸"}
+				</span>
+			)}
+		</span>
+	);
+}
+
+/**
+ * Composite column glyph for the field popover: base bars carry the
+ * column, overlays stack state without growing the row — hollow ring =
+ * nullable, filled dot = not null, magenta key tooth = primary key, cyan
+ * tick = indexed. The schema contract currently ships nullability only;
+ * key and index parts layer in once the contract exposes them.
+ */
+function ColumnGlyph(props: {
+	nullable: boolean | undefined;
+	primaryKey?: boolean;
+	indexed?: boolean;
+}) {
+	return (
+		<svg className="dg-popover-glyph" viewBox="0 0 14 14" aria-hidden="true">
+			<path
+				d="M4 2.5v9M7.5 2.5v6"
+				fill="none"
+				stroke="var(--dg-ink-mute)"
+				strokeWidth="1.3"
+				strokeLinecap="round"
+			/>
+			{/* nullability: ring vs filled dot, shape + colour cue */}
+			{props.nullable === false ? (
+				<circle cx="11" cy="11" r="2" fill="var(--dg-cyan)" />
+			) : (
+				<circle
+					cx="11"
+					cy="11"
+					r="2"
+					fill="none"
+					stroke="var(--dg-ink-faint)"
+					strokeWidth="1.1"
+				/>
+			)}
+			{props.primaryKey === true && (
+				<path
+					d="M9.5 4.5 13 .5M11.5 2.5l1.4 1.4"
+					fill="none"
+					stroke="var(--dg-magenta)"
+					strokeWidth="1.3"
+					strokeLinecap="round"
+				/>
+			)}
+			{props.indexed === true && (
+				<path
+					d="M1 12.5 4.5 9"
+					fill="none"
+					stroke="var(--dg-cyan)"
+					strokeWidth="1.3"
+					strokeLinecap="round"
+				/>
+			)}
+		</svg>
+	);
+}
+
+/* ---- field popover (singleton) -------------------------------------
+ * Hover a table or view for 450ms: columns to the right. Dismisses on
+ * mouseleave, Escape and mousedown (so it never fights a drag), and is
+ * replaced — never stacked — when another row's delay elapses.
+ * Suppressed while a context menu is open.
+ */
+
+const POPOVER_DELAY_MS = 450;
+
+function FieldPopover(props: {
+	connectionId: string;
+	path: SchemaPathSegment[];
+	name: string;
+	anchor: DOMRect;
+	onClose: () => void;
+}) {
+	const children = useExplorerStore(
+		(state) => state.children[nodeKey(props.connectionId, props.path)],
+	);
+	const ref = useRef<HTMLDivElement | null>(null);
+	const [top, setTop] = useState(props.anchor.top);
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				props.onClose();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		window.addEventListener("mousedown", props.onClose);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("mousedown", props.onClose);
+		};
+	}, [props.onClose]);
+
+	// Reposition upward when the popover would overflow the pane bottom.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-run when column content arrives, since offsetHeight grows
+	useLayoutEffect(() => {
+		const popover = ref.current;
+		if (popover !== null) {
+			const overflow =
+				props.anchor.top + popover.offsetHeight - window.innerHeight + 8;
+			if (overflow > 0) {
+				setTop(Math.max(8, props.anchor.top - overflow));
+			}
+		}
+	}, [props.anchor.top, children]);
+
+	return (
+		<div
+			ref={ref}
+			className="dg-popover"
+			role="tooltip"
+			style={{ top, left: props.anchor.right + 8 }}
+			onMouseLeave={props.onClose}
+		>
+			<div className="dg-popover-title">{props.name}</div>
+			{children === undefined || children.status === "loading" ? (
+				<div className="dg-popover-note">loading…</div>
+			) : children.status === "error" ? (
+				<div className="dg-popover-note">{children.message}</div>
+			) : (
+				children.nodes
+					.filter((node) => node.kind === "column")
+					.map((column) => (
+						<div key={column.name} className="dg-popover-row">
+							<ColumnGlyph nullable={column.nullable} />
+							<span className="dg-popover-col">{column.name}</span>
+							<span className="dg-popover-type">{column.dataType ?? ""}</span>
+						</div>
+					))
+			)}
+		</div>
+	);
+}
+
+/* ---- context menu ----------------------------------------------------
+ * Structural entries deep-link into the object view (brand-system.md
+ * "Context menu").
+ */
+
+const STRUCTURE_MENU = [
+	"columns",
+	"indexes",
+	"constraints",
+	"triggers",
+	"grants",
+	"statistics",
+	"ddl",
+];
+
+function ContextMenu(props: {
+	x: number;
+	y: number;
+	target: { connectionId: string; name: string; kind: "table" | "view" };
+	onClose: () => void;
+}) {
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				props.onClose();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		window.addEventListener("mousedown", props.onClose);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("mousedown", props.onClose);
+		};
+	}, [props.onClose]);
+
+	return (
+		<div
+			className="dg-context-menu"
+			role="menu"
+			style={{ top: props.y, left: props.x }}
+			onMouseDown={(event) => event.stopPropagation()}
+		>
+			<button
+				type="button"
+				className="dg-context-item"
+				role="menuitem"
+				onClick={() => {
+					props.onClose();
+					openTableView(props.target);
+				}}
+			>
+				view rows <kbd>dbl click</kbd>
+			</button>
+			<div className="dg-context-separator" />
+			{STRUCTURE_MENU.map((tab) => (
+				<button
+					key={tab}
+					type="button"
+					className="dg-context-item"
+					role="menuitem"
+					onClick={() => {
+						props.onClose();
+						openObjectView(props.target, tab);
+					}}
+				>
+					{tab}
+				</button>
+			))}
+			<div className="dg-context-separator" />
+			<button
+				type="button"
+				className="dg-context-item"
+				role="menuitem"
+				onClick={() => {
+					props.onClose();
+					void navigator.clipboard.writeText(props.target.name);
+				}}
+			>
+				copy name
+			</button>
+			<div className="dg-context-separator" />
+			<button
+				type="button"
+				className="dg-context-item dg-context-danger"
+				role="menuitem"
+				onClick={() => {
+					props.onClose();
+					openObjectView(props.target, "danger");
+				}}
+			>
+				danger zone…
+			</button>
+		</div>
+	);
+}
+
+/* ---- filtering ------------------------------------------------------
+ * "filter objects…" matches against loaded nodes by name. Categories
+ * (and Redis prefixes) with matching loaded children open for the
+ * duration of the filter without touching the expansion state.
+ */
+
+function nameMatches(name: string, filter: string): boolean {
+	return name.toLowerCase().includes(filter);
+}
+
+/** True when the node or any loaded descendant matches the filter. */
+function subtreeMatches(
+	connectionId: string,
+	path: SchemaPathSegment[],
+	node: SchemaNode,
+	filter: string,
+	children: Record<string, ChildrenState>,
+): boolean {
+	if (nameMatches(node.name, filter)) {
+		return true;
+	}
+	const nodePath = [...path, { kind: node.kind, name: node.name }];
+	const state = children[nodeKey(connectionId, nodePath)];
+	if (state?.status !== "loaded") {
+		return false;
+	}
+	return state.nodes.some((child) =>
+		subtreeMatches(connectionId, nodePath, child, filter, children),
+	);
+}
+
 function NodeRows(props: {
 	connectionId: string;
 	parentPath: SchemaPathSegment[];
 	depth: number;
+	filter: string;
 }) {
 	const key = nodeKey(props.connectionId, props.parentPath);
 	const children = useExplorerStore((state) => state.children[key]);
+	const allChildren = useExplorerStore((state) => state.children);
+	const filtering = props.filter.length > 0;
 
 	if (children === undefined || children.status === "loading") {
 		return (
-			<div className="dg-tree-note" style={{ paddingLeft: props.depth * 14 }}>
-				Loading…
+			<div
+				className="dg-tree-note dg-tree-note-loading"
+				style={{ paddingLeft: 10 + props.depth * 14 }}
+			>
+				loading…
 			</div>
 		);
 	}
@@ -241,28 +572,47 @@ function NodeRows(props: {
 		return (
 			<div
 				className="dg-tree-note dg-tree-error"
-				style={{ paddingLeft: props.depth * 14 }}
+				style={{ paddingLeft: 10 + props.depth * 14 }}
 			>
 				{children.message}
 			</div>
 		);
 	}
-	if (children.nodes.length === 0) {
+	const visible = filtering
+		? children.nodes.filter((node) =>
+				subtreeMatches(
+					props.connectionId,
+					props.parentPath,
+					node,
+					props.filter,
+					allChildren,
+				),
+			)
+		: children.nodes;
+	if (visible.length === 0) {
+		if (filtering) {
+			return null;
+		}
+		const parentKind = props.parentPath[props.parentPath.length - 1]?.kind;
 		return (
-			<div className="dg-tree-note" style={{ paddingLeft: props.depth * 14 }}>
-				empty
+			<div
+				className="dg-tree-note"
+				style={{ paddingLeft: 10 + props.depth * 14 }}
+			>
+				{(parentKind !== undefined && EMPTY_LABELS[parentKind]) || "empty"}
 			</div>
 		);
 	}
 	return (
 		<>
-			{children.nodes.map((node) => (
+			{visible.map((node) => (
 				<TreeNode
 					key={`${node.kind}:${node.name}`}
 					connectionId={props.connectionId}
 					parentPath={props.parentPath}
 					node={node}
 					depth={props.depth}
+					filter={props.filter}
 				/>
 			))}
 		</>
@@ -279,8 +629,11 @@ function KeyValueView(props: {
 
 	if (state === undefined || state.status === "loading") {
 		return (
-			<div className="dg-tree-note" style={{ paddingLeft: props.depth * 14 }}>
-				Loading…
+			<div
+				className="dg-tree-note dg-tree-note-loading"
+				style={{ paddingLeft: 10 + props.depth * 14 }}
+			>
+				loading…
 			</div>
 		);
 	}
@@ -288,7 +641,7 @@ function KeyValueView(props: {
 		return (
 			<div
 				className="dg-tree-note dg-tree-error"
-				style={{ paddingLeft: props.depth * 14 }}
+				style={{ paddingLeft: 10 + props.depth * 14 }}
 			>
 				{state.message}
 			</div>
@@ -296,7 +649,7 @@ function KeyValueView(props: {
 	}
 	const { value } = state;
 	return (
-		<div className="dg-kv" style={{ paddingLeft: props.depth * 14 }}>
+		<div className="dg-kv" style={{ paddingLeft: 10 + props.depth * 14 }}>
 			<div className="dg-kv-meta">
 				{value.type}
 				{value.ttlSeconds >= 0 ? ` · ttl ${value.ttlSeconds}s` : " · no expiry"}
@@ -320,6 +673,7 @@ function TreeNode(props: {
 	parentPath: SchemaPathSegment[];
 	node: SchemaNode;
 	depth: number;
+	filter: string;
 }) {
 	const segment: SchemaPathSegment = {
 		kind: props.node.kind,
@@ -330,8 +684,105 @@ function TreeNode(props: {
 	const expanded = useExplorerStore(
 		(state) => state.expanded[key] !== undefined,
 	);
+	const children = useExplorerStore((state) => state.children[key]);
 	const toggle = useExplorerStore((state) => state.toggle);
 	const toggleKeyValue = useExplorerStore((state) => state.toggleKeyValue);
+	const ensure = useExplorerStore((state) => state.ensure);
+	const selected = useTreeUi((state) => state.selectedKey === key);
+	const popoverOpen = useTreeUi((state) => state.popoverKey === key);
+	const select = useTreeUi((state) => state.select);
+	const openPopover = useTreeUi((state) => state.openPopover);
+	const closePopover = useTreeUi((state) => state.closePopover);
+
+	const isObject = OBJECT_KINDS[props.node.kind] === true;
+	const isCategory = CATEGORY_KINDS[props.node.kind] === true;
+	const filtering = props.filter.length > 0;
+	const [anchor, setAnchor] = useState<DOMRect | null>(null);
+	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+	const hoverTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
+	const rowRef = useRef<HTMLDivElement | null>(null);
+
+	const clearHoverTimer = () => {
+		clearTimeout(hoverTimer.current);
+		hoverTimer.current = undefined;
+	};
+
+	useEffect(
+		() => () => {
+			clearTimeout(hoverTimer.current);
+		},
+		[],
+	);
+
+	// While filtering, categories self-load so their objects can match.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: path is rebuilt per render; keyed on its stable string form instead
+	useEffect(() => {
+		if (filtering && isCategory && children === undefined) {
+			void ensure(props.connectionId, path);
+		}
+	}, [filtering, isCategory, children, ensure, props.connectionId, key]);
+
+	// In filter mode a node with matches opens for the duration without
+	// touching the stored expansion state.
+	const forceOpen =
+		filtering &&
+		children?.status === "loaded" &&
+		children.nodes.some((child) => nameMatches(child.name, props.filter));
+	const showChildren = props.node.hasChildren && (expanded || forceOpen);
+
+	const objectHandlers = isObject
+		? {
+				onMouseEnter: () => {
+					clearHoverTimer();
+					hoverTimer.current = setTimeout(() => {
+						// Suppressed while a context menu is open.
+						if (menu === null && rowRef.current !== null) {
+							void ensure(props.connectionId, path);
+							setAnchor(rowRef.current.getBoundingClientRect());
+							openPopover(key);
+						}
+					}, POPOVER_DELAY_MS);
+				},
+				onMouseLeave: () => {
+					clearHoverTimer();
+				},
+				onMouseDown: (event: React.MouseEvent) => {
+					// The popover must not fight drag-to-editor or middle click.
+					clearHoverTimer();
+					closePopover();
+					if (event.button === 1) {
+						event.preventDefault();
+						openTableView({
+							connectionId: props.connectionId,
+							name: props.node.name,
+							kind: props.node.kind as "table" | "view",
+						});
+					}
+				},
+				onDoubleClick: () => {
+					openTableView({
+						connectionId: props.connectionId,
+						name: props.node.name,
+						kind: props.node.kind as "table" | "view",
+					});
+				},
+				onContextMenu: (event: React.MouseEvent) => {
+					event.preventDefault();
+					clearHoverTimer();
+					closePopover();
+					setMenu({ x: event.clientX, y: event.clientY });
+				},
+			}
+		: {};
+
+	const activate = () => {
+		select(key);
+		if (props.node.hasChildren) {
+			void toggle(props.connectionId, path);
+		}
+	};
 
 	if (props.node.kind === "key") {
 		// Redis key = path segments after the db node, joined by ":".
@@ -341,20 +792,32 @@ function TreeNode(props: {
 			.join(":");
 		return (
 			<>
-				<div className="dg-tree-row" style={{ paddingLeft: props.depth * 14 }}>
-					<button
-						type="button"
-						className="dg-tree-chevron"
-						aria-label={expanded ? "Hide value" : "Show value"}
-						aria-expanded={expanded}
-						onClick={() =>
-							void toggleKeyValue(props.connectionId, path, redisKey)
+				<div
+					className={
+						selected ? "dg-tree-row dg-tree-row-selected" : "dg-tree-row"
+					}
+					style={{ paddingLeft: 10 + props.depth * 14 }}
+					role="treeitem"
+					aria-selected={selected}
+					tabIndex={0}
+					onClick={() => {
+						select(key);
+						void toggleKeyValue(props.connectionId, path, redisKey);
+					}}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" || event.key === " ") {
+							event.preventDefault();
+							select(key);
+							void toggleKeyValue(props.connectionId, path, redisKey);
 						}
-					>
-						{expanded ? "▾" : "▸"}
-					</button>
+					}}
+				>
 					<span className="dg-tree-label">
-						<TreeIcon kind={props.node.kind} />
+						<TreeGlyph
+							kind={props.node.kind}
+							hasChildren={false}
+							expanded={false}
+						/>
 						{props.node.name}
 					</span>
 				</div>
@@ -371,103 +834,103 @@ function TreeNode(props: {
 
 	return (
 		<>
-			<div className="dg-tree-row" style={{ paddingLeft: props.depth * 14 }}>
-				{props.node.hasChildren ? (
-					<button
-						type="button"
-						className="dg-tree-chevron"
-						aria-label={expanded ? "Collapse" : "Expand"}
-						onClick={() => void toggle(props.connectionId, path)}
-					>
-						{expanded ? "▾" : "▸"}
-					</button>
-				) : (
-					<span className="dg-tree-chevron dg-tree-leaf" />
-				)}
-				<span className="dg-tree-label">
-					<TreeIcon kind={props.node.kind} />
+			<div
+				ref={rowRef}
+				className={
+					selected ? "dg-tree-row dg-tree-row-selected" : "dg-tree-row"
+				}
+				style={{ paddingLeft: 10 + props.depth * 14 }}
+				role="treeitem"
+				aria-selected={selected}
+				aria-expanded={props.node.hasChildren ? showChildren : undefined}
+				tabIndex={0}
+				onClick={activate}
+				onKeyDown={(event) => {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						activate();
+					}
+				}}
+				{...objectHandlers}
+			>
+				<span
+					className={
+						isCategory
+							? "dg-tree-label dg-tree-label-category"
+							: "dg-tree-label"
+					}
+					style={
+						isCategory
+							? ({
+									"--dg-tree-accent": KIND_COLORS[props.node.kind],
+								} as React.CSSProperties)
+							: undefined
+					}
+				>
+					<TreeGlyph
+						kind={props.node.kind}
+						hasChildren={props.node.hasChildren}
+						expanded={showChildren}
+					/>
 					{props.node.name}
+					{isCategory &&
+						children !== undefined &&
+						children.status === "loaded" && (
+							<span className="dg-tree-count">{children.nodes.length}</span>
+						)}
 					{props.node.kind === "column" &&
 						props.node.dataType !== undefined && (
-							<span className="dg-tree-type">
-								{` ${props.node.dataType}${props.node.nullable === false ? " not null" : ""}`}
-							</span>
+							<span className="dg-tree-type">{` ${props.node.dataType}`}</span>
 						)}
 				</span>
+				{isObject && (
+					<span className="dg-tree-actions">
+						<button
+							type="button"
+							title="Open object view"
+							aria-label={`Open object view for ${props.node.name}`}
+							onClick={(event) => {
+								event.stopPropagation();
+								openObjectView({
+									connectionId: props.connectionId,
+									name: props.node.name,
+									kind: props.node.kind as "table" | "view",
+								});
+							}}
+						>
+							⊞
+						</button>
+					</span>
+				)}
 			</div>
-			{expanded && (
+			{popoverOpen && anchor !== null && menu === null && (
+				<FieldPopover
+					connectionId={props.connectionId}
+					path={path}
+					name={props.node.name}
+					anchor={anchor}
+					onClose={closePopover}
+				/>
+			)}
+			{menu !== null && (
+				<ContextMenu
+					x={menu.x}
+					y={menu.y}
+					target={{
+						connectionId: props.connectionId,
+						name: props.node.name,
+						kind: props.node.kind as "table" | "view",
+					}}
+					onClose={() => setMenu(null)}
+				/>
+			)}
+			{showChildren && (
 				<NodeRows
 					connectionId={props.connectionId}
 					parentPath={path}
 					depth={props.depth + 1}
+					filter={props.filter}
 				/>
-			)}
-		</>
-	);
-}
-
-function ConnectionRow(props: { connection: ConnectionMetadata }) {
-	const { connection } = props;
-	const key = nodeKey(connection.id, []);
-	const expanded = useExplorerStore(
-		(state) => state.expanded[key] !== undefined,
-	);
-	const explorer = useExplorerStore.getState();
-	const connections = useConnectionsStore.getState();
-
-	return (
-		<>
-			<div className="dg-tree-row dg-tree-connection">
-				<button
-					type="button"
-					className="dg-tree-chevron"
-					aria-label={expanded ? "Collapse" : "Expand"}
-					onClick={() => void explorer.toggle(connection.id, [])}
-				>
-					{expanded ? "▾" : "▸"}
-				</button>
-				<span className="dg-tree-label">
-					<TreeIcon kind="db" color={ADAPTER_COLORS[connection.adapter]} />
-					{connection.name}
-					{connection.source === "predefined" && (
-						<span className="dg-badge">predefined</span>
-					)}
-				</span>
-				<span className="dg-tree-actions">
-					<button
-						type="button"
-						title="Refresh"
-						aria-label={`Refresh ${connection.name}`}
-						onClick={() => void explorer.refresh(connection.id)}
-					>
-						⟳
-					</button>
-					<button
-						type="button"
-						title={connection.source === "predefined" ? "View" : "Edit"}
-						aria-label={`${connection.source === "predefined" ? "View" : "Edit"} ${connection.name}`}
-						onClick={() => connections.openEditDialog(connection)}
-					>
-						✎
-					</button>
-					{connection.source === "managed" && (
-						<button
-							type="button"
-							title="Delete"
-							aria-label={`Delete ${connection.name}`}
-							onClick={() => {
-								if (window.confirm(`Delete connection "${connection.name}"?`)) {
-									void connections.remove(connection.id);
-								}
-							}}
-						>
-							×
-						</button>
-					)}
-				</span>
-			</div>
-			{expanded && (
-				<NodeRows connectionId={connection.id} parentPath={[]} depth={1} />
 			)}
 		</>
 	);
@@ -476,30 +939,66 @@ function ConnectionRow(props: { connection: ConnectionMetadata }) {
 export function Explorer() {
 	const connections = useConnectionsStore((state) => state.connections);
 	const loaded = useConnectionsStore((state) => state.loaded);
-	const openCreateDialog = useConnectionsStore(
-		(state) => state.openCreateDialog,
+	const activeConnectionId = useDatasourceStore(
+		(state) => state.activeConnectionId,
 	);
+	const namespaceByConnection = useDatasourceStore(
+		(state) => state.namespaceByConnection,
+	);
+	const ensure = useExplorerStore((state) => state.ensure);
+	const [filter, setFilter] = useState("");
+
+	const active =
+		connections.find((connection) => connection.id === activeConnectionId) ??
+		null;
+	const rootPath =
+		active === null
+			? null
+			: treeRootPath(active, namespaceByConnection[active.id]);
+
+	// The tree root hangs from the breadcrumb selection; load it when the
+	// selection lands (this is also what connects a lazy datasource).
+	const rootPathKey =
+		active !== null && rootPath !== null ? nodeKey(active.id, rootPath) : null;
+	const rootChildren = useExplorerStore((state) =>
+		rootPathKey === null ? undefined : state.children[rootPathKey],
+	);
+	useEffect(() => {
+		if (active !== null && rootPath !== null && rootChildren === undefined) {
+			void ensure(active.id, rootPath);
+		}
+	}, [active, rootPath, rootChildren, ensure]);
 
 	return (
 		<div className="dg-explorer">
-			<div className="dg-sidebar-heading">
-				Connections
-				<button
-					type="button"
-					className="dg-heading-action"
-					title="New connection"
-					onClick={openCreateDialog}
-				>
-					+
-				</button>
+			<DatasourceBreadcrumb />
+			<div className="dg-tree-filter">
+				<input
+					placeholder="filter objects…"
+					aria-label="Filter objects"
+					value={filter}
+					onChange={(event) => setFilter(event.target.value)}
+				/>
 			</div>
-			{!loaded && <div className="dg-tree-note">Connecting…</div>}
-			{loaded && connections.length === 0 && (
-				<div className="dg-tree-note">No connections yet.</div>
+			{!loaded && (
+				<div className="dg-tree-note dg-tree-note-loading">connecting…</div>
 			)}
-			{connections.map((connection) => (
-				<ConnectionRow key={connection.id} connection={connection} />
-			))}
+			{loaded && connections.length === 0 && (
+				<div className="dg-tree-note">
+					no datasources — ＋ in the breadcrumb adds one
+				</div>
+			)}
+			{loaded && active !== null && rootPath === null && (
+				<div className="dg-tree-note dg-tree-note-loading">loading…</div>
+			)}
+			{active !== null && rootPath !== null && (
+				<NodeRows
+					connectionId={active.id}
+					parentPath={rootPath}
+					depth={0}
+					filter={filter.trim().toLowerCase()}
+				/>
+			)}
 		</div>
 	);
 }

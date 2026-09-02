@@ -12,18 +12,26 @@ import {
 } from "dockview-react";
 import { useEffect, useRef, useState } from "react";
 import { wsClient } from "../api/ws";
+import { ActivityBar } from "../components/ActivityBar";
 import { ConnectionDialog } from "../components/ConnectionDialog";
 import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
+import { GripesPanel } from "../components/GripesPanel";
 import { MembersDialog } from "../components/MembersDialog";
+import { ObjectView } from "../components/ObjectView";
 import { PresenceSidebar } from "../components/PresenceSidebar";
+import { ProjectPrompt } from "../components/ProjectPrompt";
 import { ResultsPanel } from "../components/ResultsPanel";
+import { SidebarSections } from "../components/SidebarSections";
+import { StatusBar } from "../components/StatusBar";
+import { TableView } from "../components/TableView";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
 import { db, LOCAL_LAYOUT_ID } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
+import { useDatasourceStore } from "../stores/datasource";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
 import { usePresenceStore } from "../stores/presence";
 import {
@@ -39,6 +47,7 @@ import {
 	panelDocumentId,
 } from "./editorPanels";
 import { registerResultsOpener } from "./resultsPanel";
+import { registerViewPanelOpeners } from "./viewPanels";
 
 const LAYOUT_SAVE_DELAY_MS = 500;
 
@@ -61,7 +70,13 @@ function ensureHydrated(workspaceId: string | null): Promise<void> {
 	return promise;
 }
 
-const components = { editor: EditorView, results: ResultsPanel };
+const components = {
+	editor: EditorView,
+	results: ResultsPanel,
+	tableView: TableView,
+	objectView: ObjectView,
+	gripes: GripesPanel,
+};
 
 function persistLayout(api: DockviewApi): void {
 	void db.layouts.put({
@@ -117,7 +132,6 @@ export function Workspace() {
 	const [showMembers, setShowMembers] = useState(false);
 	const sessionUser = useSessionStore((state) => state.bootstrap?.user);
 	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
-	const workspaces = useSessionStore((state) => state.workspaces);
 	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
 	const followingUserId = usePresenceStore((state) => state.followingUserId);
@@ -153,6 +167,7 @@ export function Workspace() {
 		void useSessionStore.getState().loadWorkspaces();
 		const offOpen = wsClient.onOpen(() => {
 			useExplorerStore.getState().reset();
+			useDatasourceStore.getState().reset();
 			usePresenceStore.getState().reset();
 			useExecutionsStore.getState().reset();
 			void useConnectionsStore
@@ -297,6 +312,7 @@ export function Workspace() {
 				position: { direction: "below" },
 			});
 		});
+		registerViewPanelOpeners(api);
 
 		setDockApi(api);
 		dockApiRef.current = api;
@@ -327,39 +343,9 @@ export function Workspace() {
 
 	return (
 		<div className="dg-workspace">
+			<ActivityBar />
 			<header className="dg-header">
-				<span className="dg-brand">DataGripe</span>
-				<select
-					className="dg-workspace-select"
-					aria-label="Current workspace"
-					value={currentWorkspace?.id ?? ""}
-					onChange={(event) =>
-						useSessionStore.getState().switchWorkspace(event.target.value)
-					}
-				>
-					{currentWorkspace === null && (
-						<option value="" disabled>
-							…
-						</option>
-					)}
-					{workspaces.map((workspace) => (
-						<option key={workspace.id} value={workspace.id}>
-							{workspace.name}
-						</option>
-					))}
-				</select>
-				<button
-					type="button"
-					title="Create a new workspace"
-					onClick={() => {
-						const name = window.prompt("Workspace name");
-						if (name !== null && name.trim().length > 0) {
-							void useSessionStore.getState().createWorkspace(name.trim());
-						}
-					}}
-				>
-					+
-				</button>
+				<ProjectPrompt />
 				<button
 					type="button"
 					onClick={() => newDocument(false)}
@@ -404,36 +390,84 @@ export function Workspace() {
 					</span>
 				)}
 				{currentWorkspace !== null && (
-					<span className="dg-header-meta">
-						{currentWorkspace.name} · {currentWorkspace.role}
-					</span>
+					<span className="dg-header-meta">{currentWorkspace.role}</span>
 				)}
 				<button type="button" onClick={() => setShowMembers(true)}>
 					Members
 				</button>
 				<span className="dg-header-meta">{sessionUser?.email}</span>
 				<button type="button" onClick={() => void logout()}>
-					Logout
+					Log out
 				</button>
 			</header>
 			<div className="dg-body">
 				<aside className="dg-sidebar">
-					<Explorer />
-					<DocumentSidebar
-						onOpen={(documentId) => {
-							const doc = useDocumentsStore.getState().documents[documentId];
-							if (dockApi !== null && doc !== undefined) {
-								openEditorPanel(dockApi, doc);
-							}
-						}}
-						onDiscard={(documentId) => {
-							if (dockApi !== null) {
-								closeEditorPanels(dockApi, documentId);
-							}
-							void useDocumentsStore.getState().discardDocument(documentId);
-						}}
+					<SidebarSections
+						sections={[
+							{
+								id: "explorer",
+								title: "Explorer",
+								weight: 4,
+								body: <Explorer />,
+							},
+							{
+								id: "files",
+								title: "Workspace files",
+								weight: 1,
+								body: (
+									<DocumentSidebar
+										kind="shared"
+										onOpen={(documentId) => {
+											const doc =
+												useDocumentsStore.getState().documents[documentId];
+											if (dockApi !== null && doc !== undefined) {
+												openEditorPanel(dockApi, doc);
+											}
+										}}
+										onDiscard={(documentId) => {
+											if (dockApi !== null) {
+												closeEditorPanels(dockApi, documentId);
+											}
+											void useDocumentsStore
+												.getState()
+												.discardDocument(documentId);
+										}}
+									/>
+								),
+							},
+							{
+								id: "scratch",
+								title: "Scratchpads (local)",
+								weight: 1,
+								body: (
+									<DocumentSidebar
+										kind="scratch"
+										onOpen={(documentId) => {
+											const doc =
+												useDocumentsStore.getState().documents[documentId];
+											if (dockApi !== null && doc !== undefined) {
+												openEditorPanel(dockApi, doc);
+											}
+										}}
+										onDiscard={(documentId) => {
+											if (dockApi !== null) {
+												closeEditorPanels(dockApi, documentId);
+											}
+											void useDocumentsStore
+												.getState()
+												.discardDocument(documentId);
+										}}
+									/>
+								),
+							},
+							{
+								id: "online",
+								title: "Online",
+								weight: 1,
+								body: <PresenceSidebar />,
+							},
+						]}
 					/>
-					<PresenceSidebar />
 				</aside>
 				<div className="dg-dock-container">
 					{hydrated ? (
@@ -449,6 +483,7 @@ export function Workspace() {
 					)}
 				</div>
 			</div>
+			<StatusBar />
 			<ConnectionDialog />
 			{showMembers && <MembersDialog onClose={() => setShowMembers(false)} />}
 		</div>

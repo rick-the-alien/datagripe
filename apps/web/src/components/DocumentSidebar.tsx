@@ -3,6 +3,8 @@ import { useDocumentsStore } from "../stores/documents";
 import { useViewsStore } from "../stores/views";
 
 export type DocumentSidebarProps = {
+	/** Which list this section renders; the section frame owns the heading. */
+	kind: "shared" | "scratch";
 	onOpen: (documentId: string) => void;
 	onDiscard: (documentId: string) => void;
 };
@@ -80,33 +82,23 @@ export function DocumentSidebar(props: DocumentSidebarProps) {
 		);
 	};
 
+	const ids = props.kind === "shared" ? shared : scratch;
+
 	return (
 		<div className="dg-documents">
-			<div className="dg-sidebar-heading">Workspace files</div>
-			<ul className="dg-document-list">
-				{shared.map((id) => {
-					const doc = documents[id];
-					return doc === undefined ? null : renderRow(doc);
-				})}
-			</ul>
-			{shared.length === 0 && (
+			{ids.length === 0 ? (
 				<p className="dg-sidebar-empty">
-					No shared files. "New shared file" creates one every member sees.
+					{props.kind === "shared"
+						? 'No shared files. "New shared file" creates one every member sees.'
+						: "No scratchpads. These stay local to your browser — experiments and adhoc queries are never shared."}
 				</p>
-			)}
-
-			<div className="dg-sidebar-heading">Scratchpads (local)</div>
-			<ul className="dg-document-list">
-				{scratch.map((id) => {
-					const doc = documents[id];
-					return doc === undefined ? null : renderRow(doc);
-				})}
-			</ul>
-			{scratch.length === 0 && (
-				<p className="dg-sidebar-empty">
-					No scratchpads. These stay local to your browser — experiments and
-					adhoc queries are never shared.
-				</p>
+			) : (
+				<ul className="dg-document-list">
+					{ids.map((id) => {
+						const doc = documents[id];
+						return doc === undefined ? null : renderRow(doc);
+					})}
+				</ul>
 			)}
 		</div>
 	);

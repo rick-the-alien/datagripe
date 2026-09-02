@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — brand and interface system v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+body{margin:0;background:var(--dg-void);color:var(--dg-ink);font-family:var(--dg-font-sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+a{color:var(--dg-green);text-decoration:none;border-bottom:1px solid rgba(0,229,153,.28)}
+a:hover{border-bottom-color:var(--dg-green)}
+
+.shell{display:grid;grid-template-columns:228px minmax(0,1fr);max-width:1200px;margin:0 auto}
+.tree{border-right:1px solid var(--dg-rule);padding:26px 0 60px;position:sticky;top:0;align-self:start;
+  max-height:100vh;overflow-y:auto;font-family:var(--dg-font-mono);font-size:12.5px}
+.tree .src{display:flex;align-items:center;gap:7px;padding:6px 18px;color:var(--dg-ink);margin-bottom:4px}
+.tree .dot{width:9px;height:9px;border-radius:50%;background:var(--dg-green)}
+.tree a{display:block;padding:5px 18px 5px 34px;color:var(--dg-ink-mute);border:0;border-left:2px solid transparent}
+.tree a:hover{color:var(--dg-ink);background:var(--dg-panel);border-left-color:var(--dg-violet)}
+.tree .grp{padding:14px 18px 4px 26px;color:var(--dg-violet-text);font-size:11.5px}
+main{padding:26px 40px 100px;min-width:0}
+section{padding:52px 0;border-bottom:1px solid var(--dg-rule-soft)}
+h1{font-family:var(--dg-font-display);font-weight:700;font-size:clamp(36px,7vw,58px);line-height:1.02;
+  letter-spacing:-.025em;margin:0 0 14px}
+h2{font-family:var(--dg-font-display);font-weight:500;font-size:26px;letter-spacing:-.015em;margin:0 0 6px}
+h3{font-family:var(--dg-font-display);font-weight:500;font-size:16px;margin:30px 0 9px}
+p{max-width:64ch;margin:0 0 15px;color:var(--dg-ink-dim)}
+.lede{font-size:18px;color:var(--dg-ink);max-width:60ch}
+.sub{color:var(--dg-ink-mute);max-width:62ch;margin:0 0 28px;font-size:15px}
+code{font-family:var(--dg-font-mono);font-size:.87em;color:var(--dg-cyan)}
+.meta{font-family:var(--dg-font-mono);font-size:11.5px;color:var(--dg-ink-mute)}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(226px,1fr));gap:14px}
+.card{background:var(--dg-panel);border:1px solid var(--dg-rule);border-radius:10px;padding:17px 19px}
+.card h4{font-family:var(--dg-font-display);font-weight:500;font-size:14px;margin:0 0 6px;color:var(--dg-ink)}
+.card p{margin:0;font-size:14px}
+
+.swatch{border:1px solid var(--dg-rule);border-radius:10px;overflow:hidden;background:var(--dg-panel)}
+.swatch .chip{height:72px}
+.swatch .m2{padding:12px 14px}
+.swatch .nm{font-family:var(--dg-font-display);font-size:14px;font-weight:500}
+.swatch .hx{font-family:var(--dg-font-mono);font-size:12px;color:var(--dg-ink-mute);margin-top:2px}
+.swatch .rl{font-size:12.5px;color:var(--dg-ink-dim);margin-top:8px;line-height:1.5}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0}
+th{text-align:left;font-weight:500;color:var(--dg-ink-mute);font-size:12.5px;padding:8px 10px 8px 0;
+  border-bottom:1px solid var(--dg-rule)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--dg-rule-soft);color:var(--dg-ink-dim);vertical-align:top}
+td:first-child{color:var(--dg-ink);font-family:var(--dg-font-mono);font-size:12.5px;white-space:nowrap}
+.pass{color:var(--dg-green);font-family:var(--dg-font-mono);font-size:12px}
+.fail{color:var(--dg-magenta);font-family:var(--dg-font-mono);font-size:12px}
+
+.spec{background:var(--dg-panel);border:1px solid var(--dg-rule);border-radius:10px;padding:19px 21px;margin:14px 0}
+.spec .row{padding:11px 0;border-bottom:1px solid var(--dg-rule-soft)}
+.spec .row:last-child{border:0;padding-bottom:0}
+.spec .lbl{font-family:var(--dg-font-mono);font-size:11.5px;color:var(--dg-ink-mute);margin-top:5px}
+
+.gripe{border-left:3px solid var(--dg-magenta);padding:11px 15px;background:var(--dg-sev-blocker-bg);
+  margin:9px 0;font-size:14.5px;color:var(--dg-ink)}
+.gripe .who{font-family:var(--dg-font-mono);font-size:11.5px;color:var(--dg-ink-mute);margin-top:5px}
+.gripe.v{border-left-color:var(--dg-violet);background:var(--dg-sev-warning-bg)}
+.gripe.g{border-left-color:var(--dg-green);background:var(--dg-sev-style-bg)}
+.do{border-left:3px solid var(--dg-green);padding:11px 15px;background:var(--dg-sev-style-bg);margin:9px 0;font-size:14px}
+.dont{border-left:3px solid var(--dg-magenta);padding:11px 15px;background:var(--dg-sev-blocker-bg);margin:9px 0;font-size:14px}
+.note{border-left:3px solid var(--dg-violet);background:var(--dg-sev-warning-bg);padding:11px 15px;
+  margin:14px 0;font-size:14px;color:var(--dg-ink)}
+
+.tile{background:var(--dg-void);border:1px solid var(--dg-rule);border-radius:10px;padding:22px;
+  display:flex;align-items:center;gap:26px;flex-wrap:wrap}
+.wordmark{font-family:var(--dg-font-mono);font-weight:500;letter-spacing:-.03em}
+.wordmark span{color:var(--dg-green)}
+
+.att{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0 4px}
+button{font-family:var(--dg-font-mono);font-size:11.5px;color:var(--dg-ink-dim);background:transparent;
+  border:1px solid var(--dg-rule);border-radius:6px;padding:5px 11px;cursor:pointer}
+button:hover{background:var(--dg-raised);color:var(--dg-ink)}
+button[aria-pressed=true]{border-color:var(--dg-violet);background:#141026;color:#fff}
+
+.ascii{background:var(--dg-panel);border:1px solid var(--dg-rule);border-radius:10px;padding:16px 18px;
+  font-family:var(--dg-font-mono);font-size:12px;line-height:1.6;color:var(--dg-ink-dim);
+  white-space:pre;overflow-x:auto;margin:14px 0}
+.ascii b{color:var(--dg-ink);font-weight:400}
+.ascii i{color:var(--dg-violet-text);font-style:normal}
+.ascii u{color:var(--dg-ink-faint);text-decoration:none}
+
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:13px;margin:18px 0}
+.lk{background:var(--dg-panel);border:1px solid var(--dg-rule);border-radius:10px;padding:16px 18px;display:block}
+.lk:hover{border-color:#2E3A4E;background:var(--dg-raised)}
+.lk b{display:block;font-family:var(--dg-font-display);font-weight:500;font-size:14px;color:var(--dg-ink);margin-bottom:5px}
+.lk span{font-size:13px;color:var(--dg-ink-dim)}
+
+@media(max-width:840px){
+  .shell{grid-template-columns:1fr}
+  .tree{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--dg-rule);
+    padding:16px 0;display:flex;flex-wrap:wrap;gap:2px}
+  .tree .src,.tree .grp{width:100%}
+  .tree a{padding:5px 14px;border-left:0}
+  main{padding:20px 20px 70px}
+  section{padding:38px 0}
+}
+</style>
+</head>
+<body>
+<div class="dg-abar"><div class="dg-abar__colour"></div><div class="dg-abar__wave"></div><div class="dg-abar__wave2"></div></div>
+
+<div class="shell">
+<nav class="tree" aria-label="Contents">
+  <div class="src"><span class="dot"></span>datagripe@brand</div>
+  <div class="grp">identity</div>
+  <a href="#position">positioning</a><a href="#logo">logo and favicon</a><a href="#mascot">mascot</a>
+  <div class="grp">system</div>
+  <a href="#colour">colour</a><a href="#type">typography</a><a href="#motion">motion</a>
+  <div class="grp">product</div>
+  <a href="#prompt">projects and prompt</a><a href="#sidebar">sidebar</a><a href="#views">table and object view</a>
+  <a href="#danger">danger zone</a><a href="#ui">interface rules</a>
+  <div class="grp">language</div>
+  <a href="#voice">voice</a><a href="#attitude">attitude levels</a><a href="#gripes">writing gripes</a>
+  <div class="grp">limits</div>
+  <a href="#misuse">misuse</a><a href="#legal">parody boundary</a>
+</nav>
+
+<main>
+
+<div style="display:flex;align-items:center;gap:30px;flex-wrap:wrap;padding:32px 0 40px">
+  <svg width="118" height="118" viewBox="0 0 100 100" role="img" aria-label="Datagripe mascot, a green database cylinder with a scowl">
+    <ellipse cx="50" cy="24" rx="32" ry="10" fill="#34D399"/>
+    <path d="M18 24 V78 A32 10 0 0 0 82 78 V24 Z" fill="#00E599"/>
+    <ellipse cx="50" cy="24" rx="32" ry="10" fill="none" stroke="#5EEAD4" stroke-width="3"/>
+    <path d="M18 78 A32 10 0 0 0 82 78" fill="none" stroke="#0F9D6E" stroke-width="3"/>
+    <ellipse cx="36" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/><ellipse cx="64" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/>
+    <circle cx="37" cy="60" r="3.6" fill="#052E16"/><circle cx="63" cy="60" r="3.6" fill="#052E16"/>
+    <path d="M26 41 L46 50" stroke="#052E16" stroke-width="7" stroke-linecap="round"/>
+    <path d="M74 41 L54 50" stroke="#052E16" stroke-width="7" stroke-linecap="round"/>
+    <path d="M38 72 Q50 78 63 69" fill="none" stroke="#052E16" stroke-width="3.5" stroke-linecap="round"/>
+  </svg>
+  <div>
+    <h1 style="margin:0">Data<span style="color:var(--dg-green)">gripe</span></h1>
+    <p class="sub" style="margin:8px 0 0">Brand and interface system, version 3. The full spec is in <code>brand-system.md</code>.</p>
+  </div>
+</div>
+
+<div class="links">
+  <a class="lk" href="mocks/tree-interactions.html"><b>Sidebar prototype</b><span>Hover popover, object view, table view, context menu, danger zone. Authoritative for interaction behaviour.</span></a>
+  <a class="lk" href="mocks/drilldown.html"><b>Drilldown placement study</b><span>Why the object view is an editor tab, and what fields in the tree cost.</span></a>
+  <a class="lk" href="mocks/activity-bar.html"><b>Activity bar</b><span>Isolated, with controls and a before/after of the blend-mode bug.</span></a>
+</div>
+
+<section id="position">
+<h2>Positioning</h2>
+<p class="lede">A database client that does its job perfectly and resents you the entire time.</p>
+<p>A straight-faced developer tool with one twist: the linter has opinions and no manners. The chrome has to be credible enough that someone would work in it all day, because the joke only lands if the tool is real. Comedy lives in the copy. It never lives in the layout.</p>
+<div class="grid2" style="margin-top:22px">
+  <div class="card"><h4>Who it is for</h4><p>People who spend their working day in a database client and have strong opinions about it. They will notice if the syntax highlighting is wrong.</p></div>
+  <div class="card"><h4>What it must never be</h4><p>Zany. No comic fonts, no wacky illustrations. The mascot is deadpan. The humour is dry, specific, and technically correct.</p></div>
+</div>
+</section>
+
+<section id="logo">
+<h2>Logo and favicon</h2>
+<p class="sub">Three approved forms. There is no fourth.</p>
+<div class="tile">
+  <svg width="60" height="60" viewBox="0 0 100 100" role="img" aria-label="Datagripe mark">
+    <ellipse cx="50" cy="24" rx="32" ry="10" fill="#34D399"/>
+    <path d="M18 24 V78 A32 10 0 0 0 82 78 V24 Z" fill="#00E599"/>
+    <ellipse cx="50" cy="24" rx="32" ry="10" fill="none" stroke="#5EEAD4" stroke-width="3"/>
+    <ellipse cx="36" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/><ellipse cx="64" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/>
+    <circle cx="37" cy="60" r="3.6" fill="#052E16"/><circle cx="63" cy="60" r="3.6" fill="#052E16"/>
+    <path d="M26 41 L46 50" stroke="#052E16" stroke-width="7" stroke-linecap="round"/>
+    <path d="M74 41 L54 50" stroke="#052E16" stroke-width="7" stroke-linecap="round"/>
+    <path d="M38 72 Q50 78 63 69" fill="none" stroke="#052E16" stroke-width="3.5" stroke-linecap="round"/>
+  </svg>
+  <div class="wordmark" style="font-size:37px">Data<span>gripe</span></div>
+</div>
+<p class="meta" style="margin-top:8px">primary lockup — the caret and cursor belong to the interface, not the logo</p>
+
+<h3>Favicon</h3>
+<p>Features drop as the canvas shrinks. Eyes and mouth at 64, mouth goes at 32, and by 16 only the silhouette and the two brow strokes survive.</p>
+<div class="tile" style="gap:30px">
+  <div style="text-align:center">
+    <div style="width:64px;height:64px;border-radius:12px;background:#0F172A;display:flex;align-items:center;justify-content:center">
+      <svg width="46" height="46" viewBox="0 0 100 100" role="img" aria-label="64 pixel favicon">
+        <ellipse cx="50" cy="24" rx="32" ry="10" fill="#34D399"/>
+        <path d="M18 24 V78 A32 10 0 0 0 82 78 V24 Z" fill="#00E599"/>
+        <ellipse cx="50" cy="24" rx="32" ry="10" fill="none" stroke="#5EEAD4" stroke-width="3"/>
+        <ellipse cx="36" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/><ellipse cx="64" cy="58" rx="7.5" ry="9" fill="#F8FAFC"/>
+        <circle cx="37" cy="60" r="3.6" fill="#052E16"/><circle cx="63" cy="60" r="3.6" fill="#052E16"/>
+        <path d="M26 41 L46 50" stroke="#052E16" stroke-width="8" stroke-linecap="round"/>
+        <path d="M74 41 L54 50" stroke="#052E16" stroke-width="8" stroke-linecap="round"/>
+      </svg></div><p class="meta" style="margin:7px 0 0">64</p></div>
+  <div style="text-align:center">
+    <div style="width:32px;height:32px;border-radius:7px;background:#0F172A;display:flex;align-items:center;justify-content:center">
+      <svg width="24" height="24" viewBox="0 0 100 100" role="img" aria-label="32 pixel favicon">
+        <ellipse cx="50" cy="26" rx="32" ry="10" fill="#34D399"/>
+        <path d="M18 26 V78 A32 10 0 0 0 82 78 V26 Z" fill="#00E599"/>
+        <ellipse cx="36" cy="58" rx="8" ry="9.5" fill="#F8FAFC"/><ellipse cx="64" cy="58" rx="8" ry="9.5" fill="#F8FAFC"/>
+        <circle cx="37" cy="60" r="4" fill="#052E16"/><circle cx="63" cy="60" r="4" fill="#052E16"/>
+        <path d="M25 40 L46 50" stroke="#052E16" stroke-width="10" stroke-linecap="round"/>
+        <path d="M75 40 L54 50" stroke="#052E16" stroke-width="10" stroke-linecap="round"/>
+      </svg></div><p class="meta" style="margin:7px 0 0">32</p></div>
+  <div style="text-align:center">
+    <div style="width:16px;height:16px;border-radius:4px;background:#0F172A;display:flex;align-items:center;justify-content:center">
+      <svg width="14" height="14" viewBox="0 0 100 100" role="img" aria-label="16 pixel favicon">
+        <path d="M14 22 V76 A36 12 0 0 0 86 76 V22 Z" fill="#00E599"/>
+        <ellipse cx="50" cy="22" rx="36" ry="12" fill="#34D399"/>
+        <path d="M20 40 L46 54" stroke="#052E16" stroke-width="14" stroke-linecap="round"/>
+        <path d="M80 40 L54 54" stroke="#052E16" stroke-width="14" stroke-linecap="round"/>
+      </svg></div><p class="meta" style="margin:7px 0 0">16</p></div>
+</div>
+<div class="spec">
+  <div class="row"><strong>Clear space</strong><div class="lbl">all sides, equal to the cap height of the D</div></div>
+  <div class="row"><strong>Minimum widths</strong><div class="lbl">lockup 120px · wordmark alone 84px · mark alone 16px</div></div>
+  <div class="row"><strong>Backgrounds</strong><div class="lbl">Void, Panel, or pure white. Never a photo, gradient, or mid-tone.</div></div>
+  <div class="row"><strong>Shipping</strong><div class="lbl">favicon.svg plus hand-drawn 32 and 16 rasters — never let the browser downscale the full mark</div></div>
+</div>
+</section>
+
+<section id="mascot">
+<h2>Mascot</h2>
+<p class="lede">You should be pleased to see it. That only holds if it is rare.</p>
+<p>It has no name and does not get one. It is the database. A mascot that appears on every lint finding stops being funny within a day and makes the product feel like a toy to exactly the audience it needs to convince.</p>
+<table>
+<tr><th>Tier</th><th>Appears in</th><th>Roughly</th></tr>
+<tr><td>1 — chrome</td><td>Favicon, about, splash, empty states, error pages, onboarding, marketing</td><td>Never during normal work</td></tr>
+<tr><td>2 — rare events</td><td>Tier 1 plus first connection to a project, destructive confirmations, milestones</td><td>Once a week at most</td></tr>
+<tr><td>3 — gripes panel</td><td>Empty state only. Never per-gripe.</td><td>—</td></tr>
+</table>
+<p>Ship at tier 1. Tier 2 only once tier 1 has been lived with.</p>
+
+<h3>Two asset sets, not one</h3>
+<p>The painted illustrations are marketing assets — raster, with highlights, not riggable and not intended to be. Anything that animates in-app uses a separate flat SVG build with flat fills and layered parts. Trying to make one asset serve both jobs produces a mascot that is either too heavy to animate or too plain to sell.</p>
+<p>The character is about twelve parts: body, rim, face group, two two-bone arms, two two-bone legs, shadow. SVG with the Web Animations API is the lightest runtime; Rive is worth it if reactions become numerous and event-driven.</p>
+
+<h3>The waiting game</h3>
+<p>An easter-egg mini-game is approved in principle with one binding constraint: it must not be triggered by a slow query. A game that appears because the database is slow rewards the exact thing the product exists to complain about. Trigger it by interaction — clicking the mascot in an empty state, or a key sequence.</p>
+</section>
+
+<section id="colour">
+<h2>Colour</h2>
+<p class="sub">Four accents, one job each. An accent used decoratively is a bug.</p>
+<div class="grid2">
+  <div class="swatch"><div class="chip" style="background:var(--dg-green)"></div><div class="m2"><div class="nm">Gripe Green</div><div class="hx">#00E599</div><div class="rl">Primary brand. Mascot, wordmark split, healthy connection, positive values, local projects.</div></div></div>
+  <div class="swatch"><div class="chip" style="background:var(--dg-violet)"></div><div class="m2"><div class="nm">Focus Violet</div><div class="hx">#8B5CF6</div><div class="rl">Selection and focus. Active tab, selected row, keyboard focus, staging projects. Never text.</div></div></div>
+  <div class="swatch"><div class="chip" style="background:var(--dg-magenta)"></div><div class="m2"><div class="nm">Snark Magenta</div><div class="hx">#FF3EA5</div><div class="rl">Keywords, the complaint itself, destructive actions, production projects.</div></div></div>
+  <div class="swatch"><div class="chip" style="background:var(--dg-cyan)"></div><div class="m2"><div class="nm">Function Cyan</div><div class="hx">#5EEAD4</div><div class="rl">Functions in the tree, cylinder rim, inline code, analytics projects. Use #14D9C4 in motion.</div></div></div>
+</div>
+
+<h3>Contrast on Void</h3>
+<table>
+<tr><th>Colour</th><th>Ratio</th><th>Verdict</th></tr>
+<tr><td>#00E599</td><td>11.2:1</td><td class="pass">any text size</td></tr>
+<tr><td>#5EEAD4</td><td>12.6:1</td><td class="pass">any text size</td></tr>
+<tr><td>#FF3EA5</td><td>5.9:1</td><td class="pass">body and above, not 11px</td></tr>
+<tr><td>#8B5CF6</td><td>3.7:1</td><td class="fail">borders and fills only</td></tr>
+<tr><td>#A78BFA</td><td>6.3:1</td><td class="pass">the violet to use for text</td></tr>
+</table>
+<p>All four accents sit at similar lightness, so colour alone never distinguishes two states. Every colour-coded severity, status or category carries a second cue — an icon, a dash pattern, or a label. Full neutral scale in <code>tokens.css</code>.</p>
+</section>
+
+<section id="type">
+<h2>Typography</h2>
+<p class="sub">Monospace does the identity work, which is unusual and deliberate.</p>
+<table>
+<tr><th>Role</th><th>Size / line height</th><th>Family</th></tr>
+<tr><td>display</td><td>60 / 1.02, weight 700</td><td>Space Grotesk</td></tr>
+<tr><td>heading</td><td>27 / 1.25, weight 500</td><td>Space Grotesk</td></tr>
+<tr><td>body</td><td>16 / 1.65, weight 400</td><td>Plex Sans</td></tr>
+<tr><td>ui label</td><td>13 / 1.4, weight 400</td><td>Plex Sans</td></tr>
+<tr><td>gripe text</td><td>14 / 1.5, weight 400</td><td>Plex Sans</td></tr>
+<tr><td>editor</td><td>13 / 1.8, weight 400</td><td>Plex Mono</td></tr>
+<tr><td>tree, grid</td><td>12.5 / 1.5, weight 400</td><td>Plex Mono</td></tr>
+<tr><td>metadata</td><td>11.5 / 1.4, weight 400</td><td>Plex Mono</td></tr>
+</table>
+<p>Space Grotesk is website only. Weights 400 and 500 in the UI. Sentence case everywhere. Object names, types and values are always monospace; prose about them is sans.</p>
+</section>
+
+<section id="motion">
+<h2>Motion</h2>
+<p class="lede">A query takes 100ms or twenty minutes and the bar cannot know which, so it stops implying duration entirely.</p>
+<p>It is weather, not progress. Static while idle, drifting while a statement executes. Nothing starts, arrives, or completes.</p>
+<div style="margin:18px 0 6px;height:46px;border-radius:6px;overflow:hidden" class="dg-abar">
+  <div class="dg-abar__colour"></div><div class="dg-abar__wave"></div><div class="dg-abar__wave2"></div></div>
+<p class="meta">exaggerated height, production timings</p>
+
+<h3>Three invariants</h3>
+<div class="spec">
+  <div class="row"><strong>The cycle is a palindrome</strong><div class="lbl">first stop colour equals last stop colour and every stop has a twin at +50%, or a hard seam slides past every 17 seconds</div></div>
+  <div class="row"><strong>Plateaus, not pure blends</strong><div class="lbl">each colour holds a flat run at its true hex; all four end at 15% of the tile. Without this you only ever see blends, never the palette</div></div>
+  <div class="row"><strong>Colour layers never blend with each other</strong><div class="lbl">modulation layers are neutral and use multiply. Additive modes bleach overlapping hues toward white — that is what turned it pastel</div></div>
+</div>
+<p>17s, 11s and 23s share no common factor, so the pattern does not repeat for roughly 72 minutes. Interpolation is <code>in oklab</code> with an sRGB fallback. Long queries ease playback rate from 1.0 to 0.4 over ten minutes via <code>playbackRate</code> — rewriting <code>animation-duration</code> makes the bar jump.</p>
+<p>Hold idle for 200ms so fast queries do not flash. Never two indicators at once. Static rule on the marketing site. Everything collapses to the static gradient under reduced motion.</p>
+</section>
+
+<section id="prompt">
+<h2>Projects and the prompt</h2>
+<p class="lede">A project is the unit of context. Exactly one is active, and switching swaps everything.</p>
+<p>The switcher is a shell prompt, not a control. No border, no background, no highlight — it is the current context and needs no chrome to say so.</p>
+<div class="tile" style="padding:26px 22px">
+  <button class="dg-prompt" id="pr" style="--dg-project:#FF3EA5;font-size:19px">
+    <span class="dg-prompt__gt">&gt;</span><span class="dg-prompt__brand">Data<b>gripe</b></span><span class="dg-prompt__sep">:</span><span class="dg-prompt__project" id="prn">wallet-prod</span><span class="dg-prompt__cursor"></span>
+  </button>
+</div>
+<div class="att">
+  <button data-p="wallet-prod|#FF3EA5" aria-pressed="true">production</button>
+  <button data-p="wallet-staging|#8B5CF6" aria-pressed="false">staging</button>
+  <button data-p="wallet-local|#00E599" aria-pressed="false">local</button>
+  <button data-p="analytics-replica|#5EEAD4" aria-pressed="false">analytics</button>
+  <button id="busy" aria-pressed="false">simulate query</button>
+</div>
+<p><code>&gt;Datagripe</code> is stable brand and never mutates. Only the path segment and the cursor carry project identity, which keeps the lockup constant and stops a long project name dragging the wordmark across the toolbar. The cursor blinks when idle and goes solid while a query runs — a second, quieter activity signal that does not compete with the bar.</p>
+
+<h3>Colour is the safety mechanism</h3>
+<table>
+<tr><th>Class</th><th>Colour</th><th>Meaning</th></tr>
+<tr><td>production</td><td>Snark Magenta</td><td>Live data. Destructive statements require confirmation.</td></tr>
+<tr><td>staging</td><td>Focus Violet</td><td>Shared, disposable, safe to break.</td></tr>
+<tr><td>local</td><td>Gripe Green</td><td>Yours alone. No guards.</td></tr>
+<tr><td>analytics</td><td>Function Cyan</td><td>Read-only replicas. Write statements blocked.</td></tr>
+</table>
+<p>Production magenta is the only thing in the interface that is magenta and permanent, so peripheral vision learns it fast. The class is not decorative — it gates behaviour in the danger zone.</p>
+</section>
+
+<section id="sidebar">
+<h2>Sidebar</h2>
+<p class="sub">Five levels do not fit. The tree carries three; the rest is handled elsewhere.</p>
+<div class="ascii"><b>wallet-prod / public                    ▾</b>   <u>breadcrumb — datasource + schema</u>
+filter objects…                            <u>always present</u>
+──────────────────────────────────────────
+<i>▸ tables</i>                                <b>7</b>   <u>level 1 — category</u>
+  ▤ payments                             <b>⊞</b>   <u>level 2 — object, ⊞ on hover</u>
+  ▤ users
+  ▤ payouts
+<i>▸ views</i>                                 <b>2</b>
+  ◫ v_pending
+<i>▸ functions</i>                             <b>4</b>
+  ƒ fn_settle
+<i>▸ sequences</i>                             <b>0</b>
+    no sequences                             <u>synthetic empty row</u>
+<i>▸ materialized views</i>
+    loading…                                 <u>distinct loading row</u></div>
+
+<p><strong>Datasource and schema are a breadcrumb header</strong>, not tree rows, which buys back two levels of indentation exactly where object names are longest.</p>
+<p><strong>Fields are not in the tree.</strong> The tree navigates between objects; fields are the contents of one object. In the tree they cost a level of indent, push every sibling table below the fold, and duplicate the object view's columns tab. Field access is the hover popover and the object view instead.</p>
+
+<h3>Chevrons</h3>
+<p>The type icon swaps to a chevron on hover and on keyboard focus. Content visibility is the state signal — an expanded node is obviously expanded because you can see its children. The two cases where that fails get explicit rows: a synthetic empty row, and a distinct loading row so a fetching node never looks identical to an empty one.</p>
+
+<h3>Interactions</h3>
+<table>
+<tr><th>Action</th><th>Result</th></tr>
+<tr><td>single click</td><td>select only, no tab opens</td></tr>
+<tr><td>ctrl / cmd click</td><td>add to multi-selection</td></tr>
+<tr><td>double click</td><td>open table view</td></tr>
+<tr><td>click ⊞</td><td>open object view</td></tr>
+<tr><td>right click</td><td>context menu, structural entries deep-link</td></tr>
+<tr><td>hover 450ms</td><td>field popover — names and types</td></tr>
+</table>
+<p>Single click never opens a tab. Double-click gating exists so clicking around the tree does not fill the tab bar. The popover dismisses on <code>mousedown</code> so it does not fight drag-to-editor. Live in the <a href="mocks/tree-interactions.html">sidebar prototype</a>.</p>
+</section>
+
+<section id="views">
+<h2>Table view and object view</h2>
+<p class="sub">Two openable surfaces, deliberately different weights. Neither contains the other.</p>
+<div class="grid2">
+  <div class="card"><h4>Table view — the data</h4><p>Double click, middle click, or <code>view rows</code>. Gets the entire pane. One line of chrome at the top: refresh, a where filter, a limit selector defaulting to 100, export. Everything else is rows.</p></div>
+  <div class="card"><h4>Object view — the structure</h4><p>The ⊞ affordance or the context menu. Tabs for columns, indexes, constraints, triggers, grants, statistics, ddl, then danger zone. <strong>No data tab</strong> — that is the table view's job.</p></div>
+</div>
+<p>The object view is the natural home for incremental feature work. Partitions, dependencies, policies, comments, bloat estimates, and gripes scoped to this object all slot in as tabs without redesigning anything.</p>
+<h3>Tab identity</h3>
+<p>A table can have both views open at once, so the strip must distinguish them: green <code>▤ payments</code> for rows, cyan <code>⊞ payments · structure</code> for structure. Without the glyph and suffix, two tabs both reading <code>payments</code> is a coin flip.</p>
+</section>
+
+<section id="danger">
+<h2>Danger zone</h2>
+<p>Last tab in the object view, pushed to the right edge behind a divider, dimmed magenta until hovered. Every action is collapsed by default: reveal, then type the object name, then the button enables on an exact match.</p>
+<p>Typing the name is the point. Muscle memory cannot fire a destructive action, and it scales with the risk rather than adding a modal everyone learns to dismiss.</p>
+<table>
+<tr><th>Project class</th><th>Behaviour</th></tr>
+<tr><td>local, staging</td><td>Standard gating</td></tr>
+<tr><td>production</td><td>Confirmation requires the project name, not the table name</td></tr>
+<tr><td>analytics</td><td>Tab renders disabled with the reason — read-only replica</td></tr>
+</table>
+<div class="note">The colour class already knows what kind of environment this is. Using it to gate destructive actions costs nothing and makes the colour do a second job.</div>
+</section>
+
+<section id="ui">
+<h2>Interface rules</h2>
+<div class="spec">
+  <div class="row"><strong>Corner radius</strong><div class="lbl">10 panels and cards, 6 inputs and buttons, 10 pill on counts, 0 on anything with a single-sided accent border</div></div>
+  <div class="row"><strong>Borders</strong><div class="lbl">1px Rule between regions, 1px Rule soft between rows, 2px accent on tabs, 3px accent on gripe rows</div></div>
+  <div class="row"><strong>Spacing</strong><div class="lbl">4px base. Component padding 6, 9, 12, 18. Section rhythm 24, 40, 56</div></div>
+  <div class="row"><strong>Elevation</strong><div class="lbl">No shadows. Depth is a background step: Void, Panel, Raised</div></div>
+  <div class="row"><strong>Motion</strong><div class="lbl">120ms ease-out, only to confirm a user action. Nothing on load, nothing pulsing, nothing glowing</div></div>
+</div>
+<p>Object categories carry the accent, individual objects stay neutral. Selection is a 2px violet left border and a step to Raised, never a filled background. Results grids right-align numerics and colour only the value column.</p>
+</section>
+
+<section id="voice">
+<h2>Voice</h2>
+<p class="lede">Dry, specific, technically correct, and quite rude. A senior engineer who has reviewed this query before and is tired.</p>
+<p>The criticism is always accurate. A gripe that is merely rude is noise and users disable it within a week. A gripe that is correct and rude is a feature they screenshot into the team channel.</p>
+<div class="grid2" style="margin-top:20px">
+  <div class="card"><h4>It is</h4><p>Deadpan. Specific. Brief. Right. Sweary when the situation has earned it. Occasionally resigned.</p></div>
+  <div class="card"><h4>It is not</h4><p>Cruel, personal, or edgy for its own sake. It criticises the query, never the person who wrote it.</p></div>
+</div>
+<h3>Everything that is not a gripe</h3>
+<p>Written plainly. If the whole interface is sarcastic then nothing is, and the gripes stop landing.</p>
+<div class="do">Couldn't reach wallet-prod. Check the host and port.</div>
+<div class="dont">Well, that didn't work. Have you tried turning it off and on again?</div>
+</section>
+
+<section id="attitude">
+<h2>Attitude levels</h2>
+<p class="lede">Snark is configurable, and the levels are Postgres severities because of course they are.</p>
+<div class="spec" style="font-family:var(--dg-font-mono);font-size:13px;color:var(--dg-ink)">
+  <span style="color:var(--dg-magenta)">set</span> datagripe.attitude <span style="color:var(--dg-ink-dim)">=</span> <span style="color:#C4A6FF">'notice'</span>;
+</div>
+<p>Set per project, so a local sandbox can be feral while the shared production project stays presentable. Also a session setting, so it can be dropped before a screen share without opening preferences.</p>
+<div class="att" role="group" aria-label="Attitude level">
+  <button data-a="notice" aria-pressed="false">notice</button>
+  <button data-a="warning" aria-pressed="true">warning</button>
+  <button data-a="fatal" aria-pressed="false">fatal</button>
+  <button data-a="panic" aria-pressed="false">panic</button>
+</div>
+<div id="gbox"></div>
+<table style="margin-top:22px">
+<tr><th>Level</th><th>Behaviour</th><th>Use</th></tr>
+<tr><td>notice</td><td>No profanity. Dry and still critical.</td><td>Screen shares, workshops, demos.</td></tr>
+<tr><td>warning</td><td><strong>Default.</strong> Quirky, blunt, swears when earned.</td><td>Normal working use.</td></tr>
+<tr><td>fatal</td><td>Unfiltered. Swears freely.</td><td>Local projects, opted in.</td></tr>
+<tr><td>panic</td><td>Deliberately excessive. A joke.</td><td>Nothing. It is exhausting by design.</td></tr>
+</table>
+<p>The technical content never changes between levels — only the register. Attitude is a presentation layer over a fixed set of correct observations, never a different analysis.</p>
+<div class="note">Default is <code>warning</code> and stays <code>warning</code>. <code>panic</code> can never be the default, cannot be set organisation-wide, and resets on upgrade. A joke that cannot be escaped is not a joke.</div>
+</section>
+
+<section id="gripes">
+<h2>Writing gripes</h2>
+<p class="sub">The highest-risk surface in the product.</p>
+<p>One sentence, or two short ones. Under 90 characters at <code>notice</code> and <code>warning</code>. Name the actual construct. Attach a factual footer with severity, line, and rule id so the complaint is auditable.</p>
+<table>
+<tr><th>Rule</th><th>Why</th></tr>
+<tr><td>be correct</td><td>A wrong gripe destroys trust in every other gripe.</td></tr>
+<tr><td>be specific</td><td>Name the table, the column, the row count. Generic snark is filler.</td></tr>
+<tr><td>never personal</td><td>Target the query. Never the author's competence, effort, or intelligence.</td></tr>
+<tr><td>no slurs, ever</td><td>Nothing touching race, gender, sexuality, disability or religion at any level, including panic. Swearing at a query is funny; punching downward is not, and it is the one thing that would follow the product around.</td></tr>
+<tr><td>profanity is earned</td><td>It lands because it is rare and proportionate. A gripe that swears at a missing semicolon has spent the currency for nothing.</td></tr>
+<tr><td>no repetition</td><td>The same rule firing twice uses the same wording.</td></tr>
+<tr><td>always dismissible</td><td>Per rule and per file, at every attitude level.</td></tr>
+</table>
+<div class="do">This join has no condition. I'll allow it. I won't forget it.</div>
+<p class="sub" style="margin:6px 0 16px">Correct, specific, dry, one beat of personality.</p>
+<div class="dont">lol did you even look at this before running it??</div>
+<p class="sub" style="margin:6px 0 16px">Personal, unspecific, no technical content, wrong register.</p>
+<div class="dont">Hmm, this query might be a little slow, maybe?</div>
+<p class="sub" style="margin:6px 0 0">Hedged into uselessness. If the tool is not sure, it says nothing.</p>
+</section>
+
+<section id="misuse">
+<h2>Misuse</h2>
+<p class="sub">The mascot has prepared some notes.</p>
+<div class="gripe">You stretched the wordmark to fill a box. Type has proportions. They were chosen.<div class="who">blocker · logo · scale</div></div>
+<div class="gripe">Focus Violet is carrying 12px body text at 3.7:1. Someone will not be able to read that.<div class="who">blocker · colour · contrast</div></div>
+<div class="gripe v">You added a second colour layer with a screen blend. That is how the bar went pastel last time.<div class="who">blocker · motion · blend</div></div>
+<div class="gripe v">The gradient ramp no longer starts and ends on the same colour. Enjoy your seam.<div class="who">blocker · motion · palindrome</div></div>
+<div class="gripe v">A gradient behind a paragraph. The gradient is a rule, not a wallpaper.<div class="who">warning · colour · gradient</div></div>
+<div class="gripe g">You put the mascot on every gripe row. It was funny for a day.<div class="who">warning · mascot · frequency</div></div>
+<div class="gripe g">You recoloured <code>gripe</code> to match a client palette. That word is the entire product.<div class="who">blocker · logo · colour</div></div>
+<div class="gripe g">Title Case On A Button. Sentence case, everywhere, always.<div class="who">style · type · case</div></div>
+</section>
+
+<section id="legal" style="border-bottom:0">
+<h2>Parody boundary</h2>
+<p>Datagripe is an independent parody. The name, the mascot, the wordmark and this entire visual system are original work and must stay that way.</p>
+<p>Neon accents on a dark interface are a broad convention across developer tooling and are not owned by anyone. Composition is different. Do not reproduce, adapt, or evoke another vendor's logo geometry — overlapping offset squares, knocked-out two-letter monograms, or any recognisable mark lockup. Do not use another company's screenshots, icon set, or brand assets in marketing.</p>
+<p>Every public surface carries a footer disclaimer stating that Datagripe is not affiliated with, endorsed by, or connected to any other software vendor.</p>
+<p class="sub" style="margin-top:26px">Version 3. Build order and open items are in <code>brand-system.md</code>.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var G={
+    notice:[['','Unqualified <code>select *</code> across 41M rows, and <code>status</code> has no index.','blocker · line 1 · seq scan'],
+            ['v','This join has no condition. That is a cross product.','warning · line 2 · cartesian'],
+            ['g','You named a column <code>data</code>, inside a database.','style · line 3 · naming']],
+    warning:[['','<code>select *</code> across 41M rows and sod all in the way of an index. This is a denial of service with extra steps.','blocker · line 1 · seq scan'],
+            ['v',"This join has no condition. I'll allow it. I won't forget it.",'warning · line 2 · cartesian'],
+            ['g','You named a column <code>data</code>. In a database. Genuinely, what the hell.','style · line 3 · naming']],
+    fatal:[['','41M rows, <code>select *</code>, and no bloody index on <code>status</code>. Kill it before on-call works out it was you.','blocker · line 1 · seq scan'],
+            ['v',"No join condition. You've asked for every row times every row. Absolute state of this.",'warning · line 2 · cartesian'],
+            ['g','A column called <code>data</code>. In a database. Christ.','style · line 3 · naming']],
+    panic:[['','Forty-one million rows. No index. <code>select *</code>. What in the absolute hell is this. Cancel it. Cancel it now.','blocker · line 1 · seq scan'],
+            ['v','NO JOIN CONDITION. Every row. Times every row. I want you to sit and think about what that number is.','warning · line 2 · cartesian'],
+            ['g','<code>data</code>. You called it <code>data</code>. In the database. The thing that stores data. Incredible.','style · line 3 · naming']]
+  };
+  var box=document.getElementById('gbox');
+  function render(a){
+    box.innerHTML=G[a].map(function(g){
+      return '<div class="gripe '+g[0]+'">'+g[1]+'<div class="who">'+g[2]+'</div></div>';
+    }).join('');
+  }
+  document.querySelectorAll('[data-a]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-a]').forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      render(b.getAttribute('data-a'));
+    });
+  });
+  render('warning');
+
+  var pr=document.getElementById('pr'), prn=document.getElementById('prn');
+  document.querySelectorAll('[data-p]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-p]').forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      var v=b.getAttribute('data-p').split('|');
+      prn.textContent=v[0]; pr.style.setProperty('--dg-project',v[1]);
+    });
+  });
+  var busy=document.getElementById('busy'), bars=document.querySelectorAll('.dg-abar');
+  busy.addEventListener('click',function(){
+    pr.classList.add('is-busy'); busy.setAttribute('aria-pressed','true');
+    setTimeout(function(){ pr.classList.remove('is-busy'); busy.setAttribute('aria-pressed','false'); },2600);
+  });
+})();
+</script>
+</body>
+</html>

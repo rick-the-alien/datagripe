@@ -1,0 +1,265 @@
+/* ============================================================
+   Datagripe — design tokens
+   Version 3. Drop this in as-is; everything else references it.
+   Dark theme only. A light theme is an open item, not an omission.
+   ============================================================ */
+
+:root {
+
+  /* ---- brand accents -------------------------------------- */
+  /* Four accents, one job each. An accent used decoratively is a bug. */
+
+  --dg-green:        #00E599;  /* primary brand, healthy state, local projects   */
+  --dg-cyan:         #5EEAD4;  /* functions, inline code, analytics projects     */
+  --dg-cyan-deep:    #14D9C4;  /* use in motion — plain cyan reads pale at speed */
+  --dg-violet:       #8B5CF6;  /* selection + focus, staging projects. NOT text  */
+  --dg-violet-text:  #A78BFA;  /* the violet that passes contrast for text       */
+  --dg-magenta:      #FF3EA5;  /* keywords, the complaint, production projects   */
+
+  /* ---- neutrals -------------------------------------------- */
+
+  --dg-void:         #0B0E14;  /* app background, editor canvas                  */
+  --dg-panel:        #0E1220;  /* toolbars, sidebar, status bar, tab strip       */
+  --dg-raised:       #161C29;  /* selected rows, menus, popovers                 */
+  --dg-rule:         #212A3A;  /* borders between regions                        */
+  --dg-rule-soft:    #161C29;  /* row dividers within a region                   */
+
+  --dg-ink:          #E2E8F0;  /* primary text                                   */
+  --dg-ink-dim:      #9AA5B6;  /* secondary text                                 */
+  --dg-ink-mute:     #6B7688;  /* metadata, timestamps                           */
+  --dg-ink-faint:    #3D4759;  /* line numbers, disabled                         */
+
+  /* ---- project classes ------------------------------------- */
+  /* Colour is the safety mechanism. Production magenta is the only
+     permanent magenta in the interface — peripheral vision learns it. */
+
+  --dg-proj-production: var(--dg-magenta);
+  --dg-proj-staging:    var(--dg-violet);
+  --dg-proj-local:      var(--dg-green);
+  --dg-proj-analytics:  var(--dg-cyan);
+
+  /* ---- syntax ---------------------------------------------- */
+
+  --dg-syn-keyword:  var(--dg-magenta);
+  --dg-syn-table:    var(--dg-green);
+  --dg-syn-type:     var(--dg-cyan);
+  --dg-syn-string:   #C4A6FF;
+  --dg-syn-ident:    var(--dg-ink-mute);
+  --dg-syn-comment:  var(--dg-ink-faint);
+
+  /* ---- severity -------------------------------------------- */
+  /* Always paired with an icon. Colour alone never carries meaning. */
+
+  --dg-sev-blocker:  var(--dg-magenta);
+  --dg-sev-warning:  var(--dg-violet);
+  --dg-sev-style:    var(--dg-green);
+  --dg-sev-blocker-bg: #12101A;   /* ~4% accent over void */
+  --dg-sev-warning-bg: #100E1C;
+  --dg-sev-style-bg:   #0C1618;
+
+  /* ---- type ------------------------------------------------ */
+
+  --dg-font-mono:    "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --dg-font-sans:    "IBM Plex Sans", system-ui, sans-serif;
+  --dg-font-display: "Space Grotesk", system-ui, sans-serif;  /* website only */
+
+  --dg-fs-display:   60px;   --dg-lh-display: 1.02;  /* weight 700 */
+  --dg-fs-heading:   27px;   --dg-lh-heading: 1.25;  /* weight 500 */
+  --dg-fs-body:      16px;   --dg-lh-body:    1.65;
+  --dg-fs-ui:        13px;   --dg-lh-ui:      1.4;
+  --dg-fs-gripe:     14px;   --dg-lh-gripe:   1.5;
+  --dg-fs-editor:    13px;   --dg-lh-editor:  1.8;
+  --dg-fs-tree:      12.5px; --dg-lh-tree:    1.5;
+  --dg-fs-meta:      11.5px; --dg-lh-meta:    1.4;
+
+  /* Weights 400 and 500 only inside the application.
+     Sentence case everywhere, including buttons, menus and tabs. */
+
+  /* ---- structure ------------------------------------------- */
+
+  --dg-radius-panel: 10px;
+  --dg-radius-input: 6px;
+  --dg-radius-pill:  10px;
+  /* radius 0 on anything with a single-sided accent border */
+
+  --dg-border:       1px;    /* between regions            */
+  --dg-border-accent-tab: 2px;
+  --dg-border-accent-row: 3px;
+
+  --dg-space-1: 4px;  --dg-space-2: 6px;  --dg-space-3: 9px;
+  --dg-space-4: 12px; --dg-space-5: 18px; --dg-space-6: 24px;
+  --dg-space-7: 40px; --dg-space-8: 56px;
+
+  /* No shadows anywhere. Depth is a background step:
+     void -> panel -> raised. */
+
+  --dg-motion-fast: 120ms;
+  --dg-motion-ease: cubic-bezier(.2,0,0,1);
+  --dg-hover-delay: 450ms;   /* field popover                */
+  --dg-busy-delay:  200ms;   /* hold idle before bar animates */
+
+  /* ---- activity bar ramp ----------------------------------- */
+  /* Palindromic cycle with plateaus. Do not edit casually — see
+     brand-system.md "Motion" for the three invariants. sRGB fallback. */
+
+  --dg-ramp: linear-gradient(90deg,
+    #00E599 0%,     #00E599 3.75%,  #5EEAD4 7.08%,  #5EEAD4 10.83%,
+    #8B5CF6 14.17%, #8B5CF6 17.92%, #FF3EA5 21.25%, #FF3EA5 28.75%,
+    #8B5CF6 32.08%, #8B5CF6 35.83%, #5EEAD4 39.17%, #5EEAD4 42.92%,
+    #00E599 46.25%, #00E599 53.75%, #5EEAD4 57.08%, #5EEAD4 60.83%,
+    #8B5CF6 64.17%, #8B5CF6 67.92%, #FF3EA5 71.25%, #FF3EA5 78.75%,
+    #8B5CF6 82.08%, #8B5CF6 85.83%, #5EEAD4 89.17%, #5EEAD4 92.92%,
+    #00E599 96.25%, #00E599 100%);
+
+  --dg-ramp-static: linear-gradient(90deg,
+    #00E599 0%, #5EEAD4 26%, #8B5CF6 58%, #FF3EA5 100%);
+}
+
+@supports (background: linear-gradient(90deg in oklab, red, blue)) {
+  :root {
+    --dg-ramp: linear-gradient(90deg in oklab,
+      #00E599 0%,     #00E599 3.75%,  #5EEAD4 7.08%,  #5EEAD4 10.83%,
+      #8B5CF6 14.17%, #8B5CF6 17.92%, #FF3EA5 21.25%, #FF3EA5 28.75%,
+      #8B5CF6 32.08%, #8B5CF6 35.83%, #5EEAD4 39.17%, #5EEAD4 42.92%,
+      #00E599 46.25%, #00E599 53.75%, #5EEAD4 57.08%, #5EEAD4 60.83%,
+      #8B5CF6 64.17%, #8B5CF6 67.92%, #FF3EA5 71.25%, #FF3EA5 78.75%,
+      #8B5CF6 82.08%, #8B5CF6 85.83%, #5EEAD4 89.17%, #5EEAD4 92.92%,
+      #00E599 96.25%, #00E599 100%);
+  }
+}
+
+
+/* ============================================================
+   Activity bar
+   Sits at the top edge of the window. Static while idle, drifts
+   while a statement executes. Never implies duration.
+
+   THREE INVARIANTS — breaking any of them is a visible regression:
+   1. First stop colour == last stop colour, and every stop has a
+      twin exactly 50% along. Otherwise a seam slides past.
+   2. Each colour holds a flat plateau at its true hex. Without
+      plateaus you only ever see blends, never the palette.
+   3. Colour layers NEVER blend with each other. The modulation
+      layers are neutral and use multiply. Additive modes (screen,
+      plus-lighter) bleach overlapping hues toward white.
+   ============================================================ */
+
+.dg-abar {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  background: var(--dg-void);
+  filter: saturate(1.22);
+  animation: dg-hue 31s ease-in-out infinite;
+}
+.dg-abar > * {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 200%;
+}
+
+.dg-abar__colour {
+  background: var(--dg-ramp);
+  animation: dg-drift 17s linear infinite;
+}
+
+.dg-abar__wave {
+  mix-blend-mode: multiply;
+  background: linear-gradient(90deg,
+    rgba(11,14,20,.50) 0%,  rgba(11,14,20,0) 25%,
+    rgba(11,14,20,.40) 50%, rgba(11,14,20,0) 75%,
+    rgba(11,14,20,.50) 100%);
+  animation: dg-drift-back 11s linear infinite;
+}
+
+.dg-abar__wave2 {
+  mix-blend-mode: multiply;
+  background: linear-gradient(90deg,
+    rgba(11,14,20,0) 0%,   rgba(11,14,20,.34) 33%,
+    rgba(11,14,20,0) 50%,  rgba(11,14,20,.24) 83%,
+    rgba(11,14,20,0) 100%);
+  animation: dg-drift 23s linear infinite;
+}
+
+/* 17s / 11s / 23s share no common factor: the combined pattern does
+   not repeat for ~72 minutes, so there is no loop to perceive. */
+
+.dg-abar.is-idle > * { animation-play-state: paused; }
+
+@keyframes dg-drift      { from { transform: translateX(0)    } to { transform: translateX(-50%) } }
+@keyframes dg-drift-back { from { transform: translateX(-50%) } to { transform: translateX(0)    } }
+@keyframes dg-hue {
+  0%, 100% { filter: saturate(1.22) hue-rotate(-7deg) }
+  50%      { filter: saturate(1.22) hue-rotate(7deg)  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dg-abar, .dg-abar > * { animation: none !important; transform: none; }
+  .dg-abar__wave, .dg-abar__wave2 { display: none; }
+  .dg-abar__colour { width: 100%; background: var(--dg-ramp-static); }
+}
+
+/* Long queries calm down rather than escalate. Ease playbackRate from
+   1.0 to 0.4 across the first ten minutes, via the Web Animations API —
+   rewriting animation-duration on a running animation recomputes its
+   position and the bar visibly jumps.
+
+   function dgCalm(el, elapsedSeconds) {
+     const t = Math.min(elapsedSeconds, 600) / 600;
+     const rate = 1 - 0.6 * (t * t * (3 - 2 * t));   // smoothstep
+     el.querySelectorAll('*').forEach(n =>
+       n.getAnimations().forEach(a => { a.playbackRate = rate; }));
+   }
+*/
+
+
+/* ============================================================
+   Prompt / project switcher
+   ">Datagripe:wallet-prod_"  — brand fixed, project takes the
+   accent, cursor blinks idle and goes solid while a query runs.
+   No border, no chrome. A prompt needs none.
+   ============================================================ */
+
+.dg-prompt {
+  font-family: var(--dg-font-mono);
+  font-size: 13px;
+  letter-spacing: -.01em;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+.dg-prompt__gt      { color: var(--dg-magenta); }
+.dg-prompt__brand   { color: var(--dg-ink); }
+.dg-prompt__brand b { color: var(--dg-green); font-weight: inherit; }
+.dg-prompt__sep     { color: var(--dg-ink-faint); }
+.dg-prompt__project { color: var(--dg-project, var(--dg-green)); }
+.dg-prompt:hover .dg-prompt__project,
+.dg-prompt:focus-visible .dg-prompt__project { text-decoration: underline; }
+
+.dg-prompt__cursor {
+  display: inline-block;
+  width: 8px; height: 15px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--dg-project, var(--dg-green));
+  animation: dg-blink 1.1s steps(1) infinite;
+}
+.dg-prompt.is-busy .dg-prompt__cursor { animation: none; opacity: 1; }
+
+@keyframes dg-blink { 0%,50% { opacity: 1 } 50.01%,100% { opacity: 0 } }
+@media (prefers-reduced-motion: reduce) {
+  .dg-prompt__cursor { animation: none; opacity: 1; }
+}
+
+
+/* ============================================================
+   Focus
+   ============================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--dg-violet-text);
+  outline-offset: 2px;
+  border-radius: 2px;
+}

@@ -1,13 +1,27 @@
-import type { HistoryEntry, HistoryListResult } from "@datagripe/contracts";
+import type {
+	ColumnDescriptor,
+	ConnectionMetadata,
+	HistoryEntry,
+	HistoryListResult,
+} from "@datagripe/contracts";
 import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { wsClient } from "../api/ws";
+import { ENGINE_CHIPS } from "../stores/datasource";
 import { type DocumentsState, useDocumentsStore } from "../stores/documents";
 import { refToConnectionId } from "../stores/executions";
 import { useConnectionsStore, useExecutionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
-import { downloadText, toCsv, toJson } from "../utils/export";
+import {
+	downloadText,
+	EXPORT_FORMATS,
+	type ExportFormat,
+	toCsv,
+	toJson,
+	toMarkdown,
+	toTsv,
+} from "../utils/export";
 
 function documentsTitle(
 	state: DocumentsState,
@@ -16,6 +30,144 @@ function documentsTitle(
 	return documentId === undefined
 		? undefined
 		: state.documents[documentId]?.title.replace(/\.sql$/, "");
+}
+
+/** One format drives both download and clipboard (mocks/results-tab.html "Export and
+ * copy"): csv, json, tsv, markdown. sql inserts are dropped — the table name is not
+ * derivable from an ad-hoc result set. */
+const FORMAT_STORAGE_KEY = "dg.exportFormat";
+
+/**
+ * Results target selector styled after the sidebar breadcrumb's datasource popover (docs/brand/mocks/
+ * datasource-selector.html): engine chip + name + chevron, popover with neutral engine monograms.
+ */
+function TargetSelect(props: {
+	connections: ConnectionMetadata[];
+	value: string | undefined;
+	disabled: boolean;
+	onChange: (connectionId: string) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const rootRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
+		const close = () => setOpen(false);
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setOpen(false);
+			}
+		};
+		window.addEventListener("mousedown", close);
+		window.addEventListener("keydown", onKeyDown);
+		return () => {
+			window.removeEventListener("mousedown", close);
+			window.removeEventListener("keydown", onKeyDown);
+		};
+	}, [open]);
+
+	const current = props.connections.find(
+		(connection) => connection.id === props.value,
+	);
+	const anchor = rootRef.current?.getBoundingClientRect();
+
+	return (
+		<div ref={rootRef} className="dg-tgt">
+			<button
+				type="button"
+				className="dg-crumb-seg"
+				disabled={props.disabled}
+				aria-expanded={open}
+				aria-haspopup="true"
+				aria-label="Execution target"
+				onClick={() => setOpen((value) => !value)}
+			>
+				{current !== undefined && (
+					<span className="dg-crumb-chip">{ENGINE_CHIPS[current.adapter]}</span>
+				)}
+				<span className="dg-crumb-name">
+					{current?.name ?? "choose connection…"}
+				</span>
+				<span className="dg-crumb-chev">▾</span>
+			</button>
+			{open && anchor !== undefined && (
+				<div
+					className="dg-crumb-pop dg-scroll"
+					role="menu"
+					style={{
+						position: "fixed",
+						top: anchor.bottom + 4,
+						left: anchor.left,
+					}}
+				>
+					{props.connections.map((connection) => (
+						<button
+							key={connection.id}
+							type="button"
+							role="menuitem"
+							className={`dg-crumb-item dg-crumb-item-main${
+								connection.id === props.value ? " dg-crumb-item-cur" : ""
+							}`}
+							onClick={() => {
+								setOpen(false);
+								props.onChange(connection.id);
+							}}
+						>
+							<span className="dg-crumb-chip">
+								{ENGINE_CHIPS[connection.adapter]}
+							</span>
+							{connection.name}
+							<span className="dg-crumb-sub">{connection.adapter}</span>
+						</button>
+					))}
+				</div>
+			)}
+		</div>
+	);
+}
+
+const FORMAT_EXTENSIONS: Record<ExportFormat, string> = {
+	csv: "csv",
+	json: "json",
+	tsv: "tsv",
+	markdown: "md",
+};
+
+const FORMAT_MIMES: Record<ExportFormat, string> = {
+	csv: "text/csv",
+	json: "application/json",
+	tsv: "text/tab-separated-values",
+	markdown: "text/markdown",
+};
+
+function formatResultSet(
+	format: ExportFormat,
+	columns: ColumnDescriptor[],
+	rows: unknown[][],
+): string {
+	switch (format) {
+		case "json":
+			return toJson(columns, rows);
+		case "tsv":
+			return toTsv(columns, rows);
+		case "markdown":
+			return toMarkdown(columns, rows);
+		default:
+			return toCsv(columns, rows);
+	}
+}
+
+function readFormat(): ExportFormat {
+	try {
+		const value = localStorage.getItem(FORMAT_STORAGE_KEY);
+		return EXPORT_FORMATS.includes(value as ExportFormat)
+			? (value as ExportFormat)
+			: "csv";
+	} catch {
+		return "csv";
+	}
 }
 
 /**
@@ -160,6 +312,8 @@ export function ResultsPanel() {
 	);
 	const defaultConnectionId = docConnectionId ?? workspaceDefaultId;
 	const [showHistory, setShowHistory] = useState(false);
+	const [exportFormat, setExportFormat] = useState<ExportFormat>(readFormat);
+	const [formatMenuOpen, setFormatMenuOpen] = useState(false);
 
 	const executions = useExecutionsStore.getState();
 	const documents = useDocumentsStore.getState();
@@ -184,28 +338,38 @@ export function ResultsPanel() {
 			? execution.resultSets[execution.resultSets.length - 1]
 			: undefined;
 
+	// Format menu dismisses on outside click / Escape.
+	useEffect(() => {
+		if (!formatMenuOpen) {
+			return;
+		}
+		const close = () => setFormatMenuOpen(false);
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setFormatMenuOpen(false);
+			}
+		};
+		window.addEventListener("mousedown", close, true);
+		window.addEventListener("keydown", onKeyDown);
+		return () => {
+			window.removeEventListener("mousedown", close);
+			window.removeEventListener("keydown", onKeyDown);
+		};
+	}, [formatMenuOpen]);
+
 	return (
 		<div className="dg-results">
 			<div className="dg-results-toolbar">
-				<select
-					className="dg-connection-select"
-					value={defaultConnectionId ?? ""}
+				<TargetSelect
+					connections={connections}
+					value={defaultConnectionId}
 					disabled={documentId === undefined}
-					onChange={(event) => {
-						if (documentId !== undefined && event.target.value !== "") {
-							documents.setDefaultConnection(documentId, event.target.value);
+					onChange={(connectionId) => {
+						if (documentId !== undefined) {
+							documents.setDefaultConnection(documentId, connectionId);
 						}
 					}}
-				>
-					<option value="" disabled>
-						Choose connection…
-					</option>
-					{connections.map((connection) => (
-						<option key={connection.id} value={connection.id}>
-							{connection.name}
-						</option>
-					))}
-				</select>
+				/>
 				{docConnectionId === undefined && workspaceDefaultId !== undefined && (
 					<span className="dg-header-meta">workspace default</span>
 				)}
@@ -245,8 +409,10 @@ export function ResultsPanel() {
 							⧉ workspace
 						</button>
 					)}
+				<span className="dg-vsep" />
 				<button
 					type="button"
+					className="dg-run-icon"
 					disabled={lastEditorViewId === null || !canExecute}
 					title={
 						canExecute
@@ -259,10 +425,11 @@ export function ResultsPanel() {
 						}
 					}}
 				>
-					Run
+					▶
 				</button>
 				<button
 					type="button"
+					className="dg-run-icon"
 					disabled={lastEditorViewId === null || !canExecute}
 					title={
 						canExecute
@@ -275,8 +442,9 @@ export function ResultsPanel() {
 						}
 					}}
 				>
-					Run all
+					⏭
 				</button>
+				<span className="dg-vsep" />
 				{canCancel &&
 					(execution?.status === "running" ||
 						execution?.status === "queued") && (
@@ -288,6 +456,23 @@ export function ResultsPanel() {
 							Cancel
 						</button>
 					)}
+				<fieldset className="dg-seg" aria-label="Output">
+					<legend className="dg-visually-hidden">Output mode</legend>
+					<button
+						type="button"
+						aria-pressed={!showHistory}
+						onClick={() => setShowHistory(false)}
+					>
+						table
+					</button>
+					<button
+						type="button"
+						aria-pressed={showHistory}
+						onClick={() => setShowHistory(true)}
+					>
+						history
+					</button>
+				</fieldset>
 				<span className="dg-results-status">
 					{execution === undefined && runError === undefined && "No results"}
 					{viewingExecutionId !== null && (
@@ -314,51 +499,89 @@ export function ResultsPanel() {
 				</span>
 				<span className="dg-modal-actions-spacer" />
 				{resultSet !== undefined && resultSet.columns.length > 0 && (
-					<>
+					<div className="dg-exp">
 						<button
 							type="button"
-							title="Download result set as CSV"
+							className="dg-exp-eb"
+							title={`Download ${exportFormat}`}
 							onClick={() => {
 								const title =
 									documentsTitle(useDocumentsStore.getState(), documentId) ??
 									"result";
 								downloadText(
-									`${title}.csv`,
-									toCsv(resultSet.columns, resultSet.rows),
-									"text/csv",
+									`${title}.${FORMAT_EXTENSIONS[exportFormat]}`,
+									formatResultSet(
+										exportFormat,
+										resultSet.columns,
+										resultSet.rows,
+									),
+									FORMAT_MIMES[exportFormat],
 								);
 							}}
 						>
-							CSV
+							⬇
 						</button>
 						<button
 							type="button"
-							title="Download result set as JSON"
+							className="dg-exp-eb"
+							title={`Copy ${exportFormat}`}
 							onClick={() => {
-								const title =
-									documentsTitle(useDocumentsStore.getState(), documentId) ??
-									"result";
-								downloadText(
-									`${title}.json`,
-									toJson(resultSet.columns, resultSet.rows),
-									"application/json",
+								void navigator.clipboard.writeText(
+									formatResultSet(
+										exportFormat,
+										resultSet.columns,
+										resultSet.rows,
+									),
 								);
 							}}
 						>
-							JSON
+							⧉
 						</button>
-					</>
+						<div className="dg-exp-ec-wrap">
+							<button
+								type="button"
+								className="dg-exp-ec"
+								aria-expanded={formatMenuOpen}
+								aria-label="Format"
+								title={`Format: ${exportFormat}`}
+								onClick={() => setFormatMenuOpen((current) => !current)}
+							>
+								▾
+							</button>
+							{formatMenuOpen && (
+								<div className="dg-exp-fmt dg-scroll" role="menu">
+									<div className="dg-exp-fmt-hd">format for both</div>
+									{EXPORT_FORMATS.map((format) => (
+										<button
+											key={format}
+											type="button"
+											role="menuitem"
+											className="dg-exp-fmt-it"
+											onClick={() => {
+												setExportFormat(format);
+												setFormatMenuOpen(false);
+												try {
+													localStorage.setItem(FORMAT_STORAGE_KEY, format);
+												} catch {
+													// Storage blocked — format stays per-session.
+												}
+											}}
+										>
+											<span className="dg-exp-fmt-tick">
+												{format === exportFormat ? "✓" : ""}
+											</span>
+											{format}
+										</button>
+									))}
+								</div>
+							)}
+						</div>
+					</div>
 				)}
-				<button
-					type="button"
-					onClick={() => setShowHistory((current) => !current)}
-				>
-					{showHistory ? "Results" : "History"}
-				</button>
 			</div>
 
 			{showHistory ? (
-				<div className="dg-results-body">
+				<div className="dg-results-body dg-scroll">
 					<HistoryView
 						onOpenExecution={(executionId) => {
 							void executions.openSharedExecution(executionId);
@@ -367,7 +590,7 @@ export function ResultsPanel() {
 					/>
 				</div>
 			) : (
-				<div className="dg-results-body">
+				<div className="dg-results-body dg-scroll">
 					{runError !== undefined && (
 						<div className="dg-results-error">{runError}</div>
 					)}
@@ -404,6 +627,7 @@ export function ResultsPanel() {
 								<table className="dg-grid">
 									<thead>
 										<tr>
+											<th className="dg-grid-rn" aria-label="Row number" />
 											{resultSet.columns.map((column) => (
 												<th key={column.name}>{column.name}</th>
 											))}
@@ -415,6 +639,7 @@ export function ResultsPanel() {
 											.map((row, rowIndex) => (
 												// biome-ignore lint/suspicious/noArrayIndexKey: append-only grid rows have no stable identity
 												<tr key={rowIndex}>
+													<td className="dg-grid-rn">{rowIndex + 1}</td>
 													{row.map((value, columnIndex) => {
 														const cell = cellText(value);
 														// Brand: numerics right-aligned and coloured,

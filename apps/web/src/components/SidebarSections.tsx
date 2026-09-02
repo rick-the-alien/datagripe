@@ -69,10 +69,12 @@ export function SidebarSections(props: { sections: SidebarSection[] }) {
 				<section
 					key={section.id}
 					className="dg-sidebar-section"
-					style={{ flexGrow: section.weight, flexBasis: 0 }}
+					style={{ flexGrow: section.weight, flexBasis: "auto" }}
 				>
 					{header(section, true)}
-					<div className="dg-sidebar-section-body">{section.body}</div>
+					<div className="dg-sidebar-section-body dg-scroll">
+						{section.body}
+					</div>
 				</section>
 			))}
 			{docked.length > 0 && (

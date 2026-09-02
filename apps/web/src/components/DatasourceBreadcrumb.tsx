@@ -121,9 +121,10 @@ export function DatasourceBreadcrumb() {
 
 	const [popover, setPopover] = useState<PopoverState>(null);
 	const [dsFilter, setDsFilter] = useState("");
-	const [popAnchor, setPopAnchor] = useState<{ top: number; left: number } | null>(
-		null,
-	);
+	const [popAnchor, setPopAnchor] = useState<{
+		top: number;
+		left: number;
+	} | null>(null);
 	const rootRef = useDismiss(popover, () => setPopover(null));
 
 	const openPopover = (which: Exclude<PopoverState, null>) => {
@@ -221,7 +222,7 @@ export function DatasourceBreadcrumb() {
 
 			{popover === "datasource" && (
 				<div
-					className="dg-crumb-pop"
+					className="dg-crumb-pop dg-scroll"
 					role="menu"
 					style={
 						popAnchor === null
@@ -332,7 +333,7 @@ export function DatasourceBreadcrumb() {
 
 			{popover === "namespace" && (
 				<div
-					className="dg-crumb-pop"
+					className="dg-crumb-pop dg-scroll"
 					role="menu"
 					style={
 						popAnchor === null

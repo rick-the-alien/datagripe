@@ -395,7 +395,7 @@ function FieldPopover(props: {
 	return (
 		<div
 			ref={ref}
-			className="dg-popover"
+			className="dg-popover dg-scroll"
 			role="tooltip"
 			style={{ top, left: props.anchor.right + 8 }}
 			onMouseLeave={props.onClose}
@@ -970,7 +970,7 @@ export function Explorer() {
 	}, [active, rootPath, rootChildren, ensure]);
 
 	return (
-		<div className="dg-explorer">
+		<div className="dg-explorer dg-scroll">
 			<DatasourceBreadcrumb />
 			<div className="dg-tree-filter">
 				<input

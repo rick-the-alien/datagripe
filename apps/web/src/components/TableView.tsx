@@ -26,7 +26,7 @@ export function TableView(props: IDockviewPanelProps) {
 				</button>
 				<MockBadge />
 			</div>
-			<div className="dg-mockview-body">
+			<div className="dg-mockview-body dg-scroll">
 				<p>
 					Table view for <code>{params.name}</code>.
 				</p>

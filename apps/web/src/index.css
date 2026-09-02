@@ -161,6 +161,21 @@ button:disabled {
 /* ---- collapsible sections (VSCode-style: expanded share by weight,
    collapsed headers dock at the bottom) --------------------------- */
 
+/* Explorer is never collapsible: no section header, the breadcrumb is its
+   chrome. It takes the real estate the collapsed sections leave behind. */
+.dg-explorer-region {
+	display: flex;
+	flex-direction: column;
+	flex: 4 1 0;
+	min-height: 0;
+}
+
+.dg-explorer-region .dg-explorer {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+}
+
 .dg-sidebar-section {
 	display: flex;
 	flex-direction: column;
@@ -536,11 +551,46 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	color: var(--dg-ink-dim);
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: base rule intentionally follows the explorer-region variant */
 .dg-explorer {
 	padding-bottom: 6px;
 }
 
 /* ---- document + presence lists ------------------------------- */
+
+/* Create affordance in each documents section: centered button under the help text when empty,
+   left-aligned string row under the items otherwise. */
+.dg-documents {
+	display: flex;
+	flex-direction: column;
+}
+
+.dg-doc-new-empty {
+	align-self: center;
+	margin: 0 10px 12px;
+}
+
+.dg-doc-new {
+	align-self: flex-start;
+	background: none;
+	border: none;
+	border-radius: 0;
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 3px 4px 3px 10px;
+	text-align: left;
+}
+
+.dg-doc-new:hover:not(:disabled) {
+	background: none;
+	color: var(--dg-green);
+}
+
+.dg-doc-new-empty {
+	align-self: center;
+	margin: 0 10px 12px;
+}
 
 .dg-document-list {
 	list-style: none;
@@ -602,9 +652,167 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	color: var(--dg-magenta);
 }
 
+.dg-vsep {
+	width: 1px;
+	height: 16px;
+	background: var(--dg-rule);
+	margin: 0 6px;
+	flex: none;
+}
+
+.dg-run-icon {
+	width: 25px;
+	height: 22px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border-radius: 5px;
+	color: var(--dg-ink-mute);
+	background: none;
+	border: none;
+}
+
+.dg-run-icon:hover:not(:disabled) {
+	background: var(--dg-raised);
+	color: var(--dg-green);
+}
+
+.dg-seg {
+	display: flex;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	overflow: hidden;
+	flex: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dg-seg button {
+	background: none;
+	border: none;
+	border-radius: 0;
+	padding: 3px 10px;
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-seg button:hover:not(:disabled) {
+	background: none;
+	color: var(--dg-ink-dim);
+}
+
+.dg-seg button[aria-pressed="true"] {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
+}
+
+/* ---- export group (mocks/results-tab.html) ---------------------------------- */
+
+.dg-exp {
+	display: flex;
+	align-items: stretch;
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	background: var(--dg-void);
+	overflow: visible;
+}
+
+.dg-exp-eb {
+	width: 27px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	border-radius: 0;
+	color: var(--dg-ink-mute);
+	padding: 3px 7px;
+}
+
+.dg-exp-eb:hover:not(:disabled) {
+	background: var(--dg-raised);
+	color: var(--dg-cyan);
+}
+
+.dg-exp-eb + .dg-exp-eb {
+	border-left: 1px solid var(--dg-rule);
+}
+
+.dg-exp-ec-wrap {
+	position: relative;
+	display: flex;
+}
+
+.dg-exp-ec {
+	width: 20px;
+	background: none;
+	border: none;
+	border-left: 1px solid var(--dg-rule);
+	border-radius: 0;
+	color: var(--dg-ink-faint);
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.dg-exp-ec:hover:not(:disabled),
+.dg-exp-ec[aria-expanded="true"] {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
+}
+
+.dg-exp-fmt {
+	position: absolute;
+	z-index: 70;
+	right: 0;
+	top: 27px;
+	background: var(--dg-raised);
+	border: 1px solid var(--dg-rule);
+	border-radius: 8px;
+	padding: 5px;
+	min-width: 176px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-exp-fmt-hd {
+	padding: 5px 9px 4px;
+	color: var(--dg-ink-faint);
+	font-size: 10.5px;
+}
+
+.dg-exp-fmt-it {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 5px 9px;
+	border-radius: 5px;
+	background: none;
+	border: none;
+	color: var(--dg-ink-dim);
+	font: inherit;
+	text-align: left;
+}
+
+.dg-exp-fmt-it:hover:not(:disabled) {
+	background: #1d2537;
+	color: var(--dg-ink);
+}
+
+.dg-exp-fmt-tick {
+	width: 11px;
+	color: var(--dg-cyan);
+}
+
 .dg-sidebar-empty {
 	padding: 8px 10px;
 	color: var(--dg-ink-mute);
+	text-align: center;
 }
 
 /* ---- dock ----------------------------------------------------- */
@@ -620,21 +828,65 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	inset: 0;
 }
 
-/* Dockview chrome onto the brand steps: void canvas, panel chrome,
-   raised active tab. */
+/* Dockview chrome (mocks/results-tab.html): tabs are borderless, the selected tab is a 2px bottom accent —
+ * violet for files, cyan for the results tab — and the strip carries the rule. */
+/* Dockview chrome (mocks/results-tab.html): tabs are borderless and transparent, the selected tab is a
+ * 2px bottom accent — violet for files, cyan for the results tab — and the strip carries the rule. */
 .dockview-theme-abyss {
 	--dv-background-color: var(--dg-void);
 	--dv-group-view-background-color: var(--dg-void);
 	--dv-tabs-and-actions-container-background-color: var(--dg-panel);
-	--dv-active-tab-background-color: var(--dg-raised);
-	--dv-active-tab-visible-color: var(--dg-ink);
-	--dv-inactive-tab-background-color: var(--dg-panel);
-	--dv-inactive-tab-visible-color: var(--dg-ink-mute);
+	--dv-tabs-and-actions-container-height: 29px;
 	--dv-separator-border: var(--dg-rule);
 	--dv-paneview-active-outline-color: var(--dg-violet);
-	--dv-tab-divider-color: var(--dg-rule);
+	--dv-tab-divider-color: transparent;
 	--dv-drag-over-background-color: rgba(139, 92, 246, 0.18);
 	--dv-drag-over-border-color: var(--dg-violet);
+	/* Tab backgrounds: transparent, active or not. */
+	--dv-activegroup-visiblepanel-tab-background-color: transparent;
+	--dv-activegroup-hiddenpanel-tab-background-color: transparent;
+	--dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+	--dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+	/* Tab text: active tab of a split stays bright even when its group loses focus. */
+	--dv-activegroup-visiblepanel-tab-color: var(--dg-ink);
+	--dv-activegroup-hiddenpanel-tab-color: var(--dg-ink-mute);
+	--dv-inactivegroup-visiblepanel-tab-color: var(--dg-ink);
+	--dv-inactivegroup-hiddenpanel-tab-color: var(--dg-ink-mute);
+}
+
+.dockview-theme-abyss .dv-tabs-and-actions-container {
+	border-bottom: 1px solid var(--dg-rule);
+	min-height: 29px;
+}
+
+.dockview-theme-abyss .dv-tabs-and-actions-container .dv-tab {
+	border: none;
+	background: transparent;
+	padding: 0;
+}
+
+/* Tab content spacing per results-tab mock: 6px 10px 4px, 11.5px mono, 6px gaps. */
+.dockview-theme-abyss .dg-tab {
+	padding: 6px 10px 4px;
+	gap: 6px;
+}
+
+.dockview-theme-abyss .dg-tab-close {
+	padding: 0 2px;
+	font-size: 10px;
+}
+
+/* biome-ignore lint/style/noDescendingSpecificity: base border for all tabs intentionally follows the strip-scoped rules above */
+.dockview-theme-abyss .dv-tab {
+	border-bottom: 2px solid transparent;
+}
+
+.dockview-theme-abyss .dv-tab.dv-active-tab {
+	border-bottom: 2px solid var(--dg-violet);
+}
+
+.dockview-theme-abyss .dv-tab:has(.dg-tab-results).dv-active-tab {
+	border-bottom-color: var(--dg-cyan);
 }
 
 .dg-loading {
@@ -647,13 +899,14 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 /* ---- tabs ------------------------------------------------------ */
 
+/* biome-ignore lint/style/noDescendingSpecificity: base rule intentionally follows the dockview-scoped override */
 .dg-tab {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	max-width: 220px;
 	font-family: var(--dg-font-mono);
-	font-size: var(--dg-fs-tree);
+	font-size: var(--dg-fs-meta);
 }
 
 .dg-tab-title {
@@ -683,6 +936,7 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	flex: none;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: base rule intentionally follows the dockview-scoped override */
 .dg-tab-close {
 	background: none;
 	border: none;
@@ -1196,10 +1450,14 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-results-error {
-	color: var(--dg-magenta);
-	padding: 8px 10px;
+	color: var(--dg-ink);
+	background: var(--dg-sev-blocker-bg);
+	border-left: 3px solid var(--dg-magenta);
+	margin: 12px;
+	padding: 11px 14px;
 	font-family: var(--dg-font-mono);
 	font-size: var(--dg-fs-tree);
+	line-height: 1.7;
 	white-space: pre-wrap;
 }
 
@@ -1233,7 +1491,13 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 .dg-grid-num {
 	text-align: right;
-	color: var(--dg-cyan);
+	color: var(--dg-green);
+}
+
+.dg-grid-rn {
+	color: var(--dg-ink-faint);
+	width: 32px;
+	text-align: right;
 }
 
 .dg-grid-null {

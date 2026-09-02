@@ -21,8 +21,9 @@ export function EditorTab(props: IDockviewPanelHeaderProps) {
 
 	// Tab identity (brand-system.md): table view gets ▤ in green, object
 	// view ⊞ in cyan, so two tabs named `payments` are not a coin flip.
+	const isResults = viewKind === "results" || props.api.id === "results";
 	return (
-		<div className="dg-tab">
+		<div className={isResults ? "dg-tab dg-tab-results" : "dg-tab"}>
 			{viewKind === "table" && (
 				<span className="dg-tab-glyph dg-tab-glyph-table">▤</span>
 			)}

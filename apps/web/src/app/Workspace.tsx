@@ -140,16 +140,6 @@ export function Workspace() {
 	const followingEmail = presenceUsers.find(
 		(u) => u.userId === followingUserId,
 	)?.email;
-	const activeDocumentId = useViewsStore((state) =>
-		state.activeViewId !== null
-			? state.views[state.activeViewId]?.documentId
-			: undefined,
-	);
-	const activeDirty = useDocumentsStore((state) =>
-		activeDocumentId === undefined
-			? false
-			: (state.documents[activeDocumentId]?.dirty ?? false),
-	);
 
 	const currentWorkspaceId = useSessionStore(
 		(state) => state.currentWorkspaceId,
@@ -309,6 +299,7 @@ export function Workspace() {
 				id: "results",
 				component: "results",
 				title: "Results",
+				params: { view: "results" },
 				position: { direction: "below" },
 			});
 		});
@@ -346,30 +337,6 @@ export function Workspace() {
 			<ActivityBar />
 			<header className="dg-header">
 				<ProjectPrompt />
-				<button
-					type="button"
-					onClick={() => newDocument(false)}
-					disabled={dockApi === null}
-					title="New local scratchpad (never shared)"
-				>
-					New scratchpad
-				</button>
-				<button
-					type="button"
-					onClick={() => newDocument(true)}
-					disabled={dockApi === null}
-					title="New shared file (every workspace member)"
-				>
-					New shared file
-				</button>
-				<button
-					type="button"
-					onClick={saveActiveDocument}
-					disabled={!activeDirty}
-					title="Save (Ctrl+S)"
-				>
-					Save
-				</button>
 				<span className="dg-modal-actions-spacer" />
 				{followingUserId !== null && (
 					<span className="dg-follow-chip">
@@ -402,14 +369,11 @@ export function Workspace() {
 			</header>
 			<div className="dg-body">
 				<aside className="dg-sidebar">
+					<div className="dg-explorer-region">
+						<Explorer />
+					</div>
 					<SidebarSections
 						sections={[
-							{
-								id: "explorer",
-								title: "Explorer",
-								weight: 4,
-								body: <Explorer />,
-							},
 							{
 								id: "files",
 								title: "Workspace files",
@@ -417,6 +381,7 @@ export function Workspace() {
 								body: (
 									<DocumentSidebar
 										kind="shared"
+										onCreate={newDocument}
 										onOpen={(documentId) => {
 											const doc =
 												useDocumentsStore.getState().documents[documentId];
@@ -442,6 +407,7 @@ export function Workspace() {
 								body: (
 									<DocumentSidebar
 										kind="scratch"
+										onCreate={newDocument}
 										onOpen={(documentId) => {
 											const doc =
 												useDocumentsStore.getState().documents[documentId];

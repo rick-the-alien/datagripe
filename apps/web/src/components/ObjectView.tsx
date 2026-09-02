@@ -165,7 +165,7 @@ export function ObjectView(props: IDockviewPanelProps) {
 					danger zone
 				</button>
 			</div>
-			<div className="dg-mockview-body">
+			<div className="dg-mockview-body dg-scroll">
 				{tab !== "danger" ? (
 					<>
 						<p>

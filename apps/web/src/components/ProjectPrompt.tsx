@@ -83,7 +83,7 @@ export function ProjectPrompt() {
 			</button>
 			{open && menuAnchor !== undefined && (
 				<div
-					className="dg-prompt-menu"
+					className="dg-prompt-menu dg-scroll"
 					role="menu"
 					style={{ top: menuAnchor.bottom + 6, left: menuAnchor.left }}
 				>

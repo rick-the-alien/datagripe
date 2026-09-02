@@ -41,12 +41,20 @@ export type ExplorerState = {
 	/** Fetched keyspace values keyed by node key. */
 	keyValues: Record<string, KeyValueState>;
 	toggle: (connectionId: string, path: SchemaPathSegment[]) => Promise<void>;
+	/** Load children without expanding — the field popover peeks. */
+	ensure: (connectionId: string, path: SchemaPathSegment[]) => Promise<void>;
 	toggleKeyValue: (
 		connectionId: string,
 		path: SchemaPathSegment[],
 		key: string,
 	) => Promise<void>;
-	refresh: (connectionId: string) => Promise<void>;
+	/** Re-request every expanded path plus the given tree root (the
+	 * breadcrumb's datasource+namespace root is never "expanded", it is
+	 * the base the tree hangs from). */
+	refresh: (
+		connectionId: string,
+		rootPath?: SchemaPathSegment[] | null,
+	) => Promise<void>;
 	reset: () => void;
 };
 
@@ -108,6 +116,13 @@ export function createExplorerStore(request: WsRequestFn) {
 				}
 			},
 
+			async ensure(connectionId, path) {
+				const key = nodeKey(connectionId, path);
+				if (get().children[key] === undefined) {
+					await fetchChildren(connectionId, path, false);
+				}
+			},
+
 			async toggleKeyValue(connectionId, path, keyName) {
 				const key = nodeKey(connectionId, path);
 				if (get().expanded[key] !== undefined) {
@@ -148,9 +163,12 @@ export function createExplorerStore(request: WsRequestFn) {
 				}
 			},
 
-			async refresh(connectionId) {
+			async refresh(connectionId, rootPath) {
 				const targets = new Map<string, SchemaPathSegment[]>();
 				targets.set(nodeKey(connectionId, []), []);
+				if (rootPath != null) {
+					targets.set(nodeKey(connectionId, rootPath), rootPath);
+				}
 				for (const entry of Object.values(get().expanded)) {
 					if (entry.connectionId === connectionId) {
 						targets.set(nodeKey(entry.connectionId, entry.path), entry.path);

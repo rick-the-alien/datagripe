@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — scrollbars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#00E599;--cyan:#5EEAD4;--violet:#8B5CF6;--violet-text:#A78BFA;--magenta:#FF3EA5;
+  --void:#0B0E14;--panel:#0E1220;--raised:#161C29;--rule:#212A3A;--rule-soft:#161C29;
+  --ink:#E2E8F0;--ink-dim:#9AA5B6;--ink-mute:#6B7688;--ink-faint:#3D4759;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Space Grotesk",system-ui,sans-serif;
+  /* scrollbar scale — neutral only, never an accent */
+  --sb-rest:#2A3448; --sb-hover:#3B4A66; --sb-active:#4C5D7E; --sb-track:transparent;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 90px}
+h1{font-family:var(--display);font-weight:500;font-size:27px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:40px 0 6px}
+p{color:var(--ink-dim);max-width:66ch;margin:0 0 13px;font-size:14.5px}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+code{font-family:var(--mono);font-size:.87em;color:var(--cyan)}
+
+/* ============ THE SCROLLBAR ============ */
+.dgs{
+  scrollbar-width:thin;
+  scrollbar-color:var(--sb-rest) var(--sb-track);
+}
+.dgs::-webkit-scrollbar{width:12px;height:12px;background:transparent}
+.dgs::-webkit-scrollbar-track{background:var(--sb-track)}
+.dgs::-webkit-scrollbar-thumb{
+  background-color:var(--sb-rest);
+  background-clip:padding-box;
+  border:4px solid transparent;   /* thumb reads as 4px, track stays 12px */
+  border-radius:8px;
+  min-height:34px;min-width:34px;
+}
+.dgs:hover{scrollbar-color:var(--sb-hover) var(--sb-track)}
+.dgs:hover::-webkit-scrollbar-thumb{background-color:var(--sb-hover);border-width:3px}
+.dgs::-webkit-scrollbar-thumb:active{background-color:var(--sb-active);border-width:3px}
+.dgs::-webkit-scrollbar-corner{background:var(--panel)}
+.dgs::-webkit-scrollbar-button{display:none}
+
+/* native comparison */
+.native{scrollbar-width:auto;scrollbar-color:auto}
+.native::-webkit-scrollbar{width:initial;height:initial}
+.native::-webkit-scrollbar-thumb{background-color:initial;border:0;border-radius:0}
+
+/* fat variant */
+.fat::-webkit-scrollbar{width:15px;height:15px}
+.fat::-webkit-scrollbar-thumb{border-width:4px;border-radius:9px}
+.fat:hover::-webkit-scrollbar-thumb{border-width:3px}
+
+@media (prefers-reduced-motion:reduce){.dgs{scroll-behavior:auto}}
+/* ======================================= */
+
+.ctl{display:flex;gap:9px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--rule);
+  border-radius:10px;padding:13px 15px;margin:16px 0}
+.ctl button{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);background:transparent;
+  border:1px solid var(--rule);border-radius:6px;padding:5px 11px;cursor:pointer}
+.ctl button:hover{background:var(--raised);color:var(--ink)}
+.ctl button[aria-pressed=true]{border-color:var(--violet);background:#141026;color:#fff}
+.ctl .lbl{font-size:12.5px;color:var(--ink-mute)}
+.ctl .bar{width:1px;height:22px;background:var(--rule)}
+
+.demos{display:grid;grid-template-columns:212px minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:760px){.demos{grid-template-columns:1fr}}
+
+.frame{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--void)}
+.fhead{padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--rule);
+  font-family:var(--mono);font-size:11px;color:var(--ink-mute)}
+
+/* tree */
+.tree{height:330px;overflow-y:auto;background:var(--panel);font-family:var(--mono);font-size:11.5px;padding:5px 0}
+.n{display:flex;align-items:center;gap:5px;padding:3.5px 9px;color:var(--ink-dim);white-space:nowrap}
+.n:hover{background:#141A2C;color:var(--ink)}
+.n.d2{padding-left:22px}
+.n .cnt{color:var(--ink-faint);margin-left:auto;padding-left:8px}
+.n.grp{color:var(--violet-text)}
+
+/* grid */
+.gridwrap{position:relative}
+.grid{height:330px;overflow:auto;background:var(--void)}
+.dt{border-collapse:collapse;font-family:var(--mono);font-size:11.5px;min-width:940px}
+.dt th{text-align:left;font-weight:400;color:var(--ink-mute);padding:5px 10px;background:#12182A;
+  border-bottom:1px solid var(--rule);position:sticky;top:0;font-size:11px;white-space:nowrap;z-index:2}
+.dt td{padding:4.5px 10px;border-bottom:1px solid var(--rule-soft);color:#C7D0DC;white-space:nowrap}
+.dt tr:hover td{background:#101725}
+.dt tr.bad td{background:#12101A}
+.dt tr.hit td{background:#0C1618}
+.dt td.rn{color:var(--ink-faint);width:44px;position:sticky;left:0;background:var(--void);z-index:1}
+.dt tr:hover td.rn{background:#101725}
+.dt tr.bad td.rn{background:#12101A}
+.dt tr.hit td.rn{background:#0C1618}
+.dt td.k{color:var(--green)}.dt td.m{color:var(--ink-mute)}.dt td.pk{color:var(--magenta)}
+
+/* annotation rail */
+.rail{position:absolute;top:0;right:0;width:12px;bottom:12px;pointer-events:none;z-index:3}
+.rail .tick{position:absolute;right:2px;width:8px;height:2px;border-radius:1px}
+.rail .tick.err{background:var(--magenta)}
+.rail .tick.hit{background:var(--green)}
+.rail.off{display:none}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:16px 0}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:16px 18px}
+.card h4{font-family:var(--display);font-weight:500;font-size:14px;margin:0 0 6px;color:var(--ink)}
+.card p{margin:0;font-size:13.5px}
+
+pre{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;
+  overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--ink-dim);margin:14px 0}
+pre b{color:var(--cyan);font-weight:400}
+pre i{color:var(--ink-faint);font-style:normal}
+.callout{border-left:3px solid var(--violet);background:#100E1C;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+.warncall{border-left:3px solid var(--magenta);background:#12101A;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+table.doc{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0}
+table.doc th{text-align:left;font-weight:500;color:var(--ink-mute);font-size:12.5px;padding:8px 10px 8px 0;border-bottom:1px solid var(--rule)}
+table.doc td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule-soft);color:var(--ink-dim);vertical-align:top}
+table.doc td:first-child{color:var(--ink);font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+.sw{display:inline-block;width:26px;height:9px;border-radius:5px;vertical-align:middle;margin-right:7px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<h1>Scrollbars</h1>
+<p>One rule, two places it matters: a tree that outgrows its pane, and a grid that scrolls both ways. Scroll both below.</p>
+
+<div class="ctl">
+  <span class="lbl">style</span>
+  <button data-v="dgs" aria-pressed="true">datagripe</button>
+  <button data-v="fat" aria-pressed="false">wider</button>
+  <button data-v="native" aria-pressed="false">browser default</button>
+  <span class="bar"></span>
+  <button id="bRail" aria-pressed="false">annotation rail</button>
+</div>
+
+<div class="demos">
+  <div class="frame">
+    <div class="fhead">tree · vertical only</div>
+    <div class="tree dgs" id="tree"></div>
+  </div>
+  <div class="frame">
+    <div class="fhead">results · both axes, sticky header, sticky row number</div>
+    <div class="gridwrap">
+      <div class="grid dgs" id="grid"></div>
+      <div class="rail off" id="rail"></div>
+    </div>
+  </div>
+</div>
+
+<h2>The trick</h2>
+<p>The track stays 12px and the thumb wears a 4px transparent border with <code>background-clip: padding-box</code>. It reads as a 4px hairline at rest and thickens to 6px on hover, with no change in track width — so nothing reflows and the content never shifts sideways as you move the pointer over it.</p>
+<div class="callout">Animating <code>::-webkit-scrollbar</code> width directly is the obvious approach and it is wrong. The track is part of layout, so widening it on hover reflows the content underneath and the text you were reading jumps. The border trick moves only paint.</div>
+
+<h2>Colours</h2>
+<table class="doc">
+<tr><th>State</th><th>Value</th><th>Note</th></tr>
+<tr><td><span class="sw" style="background:#2A3448"></span>rest</td><td>#2A3448</td><td>One step above Rule. Visible enough to signal overflow, quiet enough to ignore.</td></tr>
+<tr><td><span class="sw" style="background:#3B4A66"></span>hover</td><td>#3B4A66</td><td>Container hover, not thumb hover — you should see it thicken before you reach it.</td></tr>
+<tr><td><span class="sw" style="background:#4C5D7E"></span>dragging</td><td>#4C5D7E</td><td>Confirms the grab.</td></tr>
+<tr><td>track</td><td>transparent</td><td>Corner fills with Panel so the two bars meet cleanly.</td></tr>
+</table>
+<p>No accents. A scrollbar carries no meaning in this system, and the four accents are spoken for — a green thumb would read as a status.</p>
+
+<h2>The one place an accent belongs</h2>
+<p>Turn on <b>annotation rail</b>. Marks sit alongside the vertical scrollbar showing where the interesting rows are in the full set, not just the visible window — magenta for rows that failed a constraint, green for filter matches. This is the scrollbar earning an accent by carrying information the viewport cannot show.</p>
+<div class="warncall">Keep it sparse. A rail with two hundred marks is a gradient, not a map. Cap it — cluster nearby marks into one and stop drawing past roughly forty.</div>
+
+<h2>Sticky corners</h2>
+<p>The grid has a sticky header row and a sticky row-number column, so three things converge at the bottom-right: horizontal bar, vertical bar, and the corner between them. <code>::-webkit-scrollbar-corner</code> fills with Panel — leave it transparent and you get a void-coloured notch that looks like a rendering bug.</p>
+<p>The sticky row-number cell needs its own background at every row state, or content scrolls visibly underneath it. That is three extra rules and it is the thing most often missed.</p>
+
+<h2>Firefox and the rest</h2>
+<div class="grid2">
+  <div class="card"><h4>Chromium, Safari</h4><p>Full control through the <code>::-webkit-scrollbar</code> pseudo-elements. Everything above applies.</p></div>
+  <div class="card"><h4>Firefox</h4><p><code>scrollbar-width: thin</code> and <code>scrollbar-color</code> only. Two colours, no hover thickening, no corner control. It degrades to a thin quiet bar, which is fine.</p></div>
+</div>
+<p>Both are specified, so the same class works everywhere and Firefox simply gets less. That is the whole compatibility story.</p>
+
+<h2>What not to do</h2>
+<p>Do not build JavaScript scrollbars. Restyled native overflow keeps momentum scrolling, trackpad behaviour, keyboard paging, screen reader semantics, and every platform convention for free. A custom implementation gives up all of it to gain a hover animation.</p>
+<p>Do not auto-hide. A scrollbar that appears only while scrolling removes the single best signal that there is more content — which in a four-hundred-table tree is exactly the thing you need to know before you start hunting.</p>
+
+<h2>The CSS</h2>
+<pre><b>:root</b>{
+  --sb-rest:#2A3448; --sb-hover:#3B4A66; --sb-active:#4C5D7E; --sb-track:transparent;
+}
+
+<b>.dgs</b>{                                    <i>/* Firefox */</i>
+  scrollbar-width:thin;
+  scrollbar-color:var(--sb-rest) var(--sb-track);
+}
+
+<b>.dgs::-webkit-scrollbar</b>{ width:12px; height:12px; background:transparent }
+<b>.dgs::-webkit-scrollbar-track</b>{ background:var(--sb-track) }
+
+<b>.dgs::-webkit-scrollbar-thumb</b>{
+  background-color:var(--sb-rest);
+  background-clip:padding-box;              <i>/* border shows track through */</i>
+  border:4px solid transparent;             <i>/* thumb paints 4px inside a 12px track */</i>
+  border-radius:8px;
+  min-height:34px; min-width:34px;          <i>/* grabbable at any content length */</i>
+}
+
+<b>.dgs:hover::-webkit-scrollbar-thumb</b>{
+  background-color:var(--sb-hover); border-width:3px;
+}
+<b>.dgs::-webkit-scrollbar-thumb:active</b>{
+  background-color:var(--sb-active); border-width:3px;
+}
+
+<b>.dgs::-webkit-scrollbar-corner</b>{ background:var(--panel) }
+<b>.dgs::-webkit-scrollbar-button</b>{ display:none }   <i>/* no arrow buttons */</i></pre>
+
+<p>Apply <code>.dgs</code> to any scroll container: the tree, the results grid, the object view body, popover lists, the history table. It is one class and it is the only scrollbar styling in the product.</p>
+</div>
+
+<script>
+(function(){
+  var TREE=[
+    ['grp','tables','43'],['n','payments'],['n','payment_attempts'],['n','payment_providers'],
+    ['n','payouts'],['n','payout_batches'],['n','users'],['n','user_sessions'],['n','user_kyc'],
+    ['n','wallets'],['n','wallet_ledger'],['n','wallet_holds'],['n','currencies'],['n','fx_rates'],
+    ['n','idempotency_keys'],['n','webhooks'],['n','webhook_deliveries'],['n','audit_log'],
+    ['n','schema_migrations'],['n','feature_flags'],['n','rate_limits'],
+    ['grp','views','9'],['n','v_pending_deposits'],['n','v_settled_daily'],['n','v_provider_health'],
+    ['n','v_user_balances'],['n','v_failed_payouts'],
+    ['grp','functions','17'],['n','fn_settle'],['n','fn_reverse'],['n','fn_touch_updated_at'],
+    ['n','fn_audit_write'],['n','fn_fx_convert'],
+    ['grp','sequences','6'],['n','payments_id_seq'],['n','payouts_id_seq'],['n','audit_log_id_seq']
+  ];
+  var COLS=['id','user_id','amount','currency','status','provider','reference_id','attempts','created_at','updated_at'];
+  var ROWS=[];
+  var sts=['pending','settled','failed','settled','pending','settled','reversed','pending'];
+  for(var i=0;i<58;i++){
+    var s=sts[i%sts.length];
+    ROWS.push({
+      bad:(i%13===4), hit:(s==='pending'),
+      c:[ (0x4e4b67a2+i*7919).toString(16).slice(0,8), (0xa91f00+i*13).toString(16).slice(0,6),
+          ((i*37.5)%2400+12).toFixed(2), ['EUR','GBP','USD'][i%3], s,
+          ['payram','stripe','payram','wise'][i%4], (0xf05288+i*31).toString(16).slice(0,6),
+          String(1+i%4), '2026-09-0'+(1+i%3)+' 1'+(i%10)+':2'+(i%6), '2026-09-0'+(1+i%3)+' 1'+(i%10)+':4'+(i%6) ]
+    });
+  }
+
+  document.getElementById('tree').innerHTML=TREE.map(function(r){
+    if(r[0]==='grp') return '<div class="n grp">▸ '+r[1]+'<span class="cnt">'+r[2]+'</span></div>';
+    return '<div class="n d2">▤ '+r[1]+'</div>';
+  }).join('');
+
+  document.getElementById('grid').innerHTML='<table class="dt"><thead><tr><th></th>'+
+    COLS.map(function(c){return '<th>'+c+'</th>'}).join('')+'</tr></thead><tbody>'+
+    ROWS.map(function(r,i){
+      return '<tr class="'+(r.bad?'bad':r.hit?'hit':'')+'"><td class="rn">'+(i+1)+'</td>'+
+        r.c.map(function(v,j){
+          var cls=j===0?'pk':j===2?'k':(j>=5?'m':'');
+          return '<td class="'+cls+'">'+v+'</td>';
+        }).join('')+'</tr>';
+    }).join('')+'</tbody></table>';
+
+  var rail=document.getElementById('rail');
+  rail.innerHTML=ROWS.map(function(r,i){
+    if(!r.bad&&!r.hit) return '';
+    return '<div class="tick '+(r.bad?'err':'hit')+'" style="top:'+((i+.5)/ROWS.length*100).toFixed(2)+'%"></div>';
+  }).join('');
+
+  var targets=[document.getElementById('tree'),document.getElementById('grid')];
+  document.querySelectorAll('[data-v]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-v]').forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      var v=b.getAttribute('data-v');
+      targets.forEach(function(t){
+        t.classList.remove('dgs','fat','native');
+        if(v==='native'){t.classList.add('dgs','native')}
+        else if(v==='fat'){t.classList.add('dgs','fat')}
+        else t.classList.add('dgs');
+      });
+    });
+  });
+  var br=document.getElementById('bRail');
+  br.addEventListener('click',function(){
+    var on=br.getAttribute('aria-pressed')!=='true';
+    br.setAttribute('aria-pressed',on);
+    rail.classList.toggle('off',!on);
+  });
+})();
+</script>
+</body>
+</html>

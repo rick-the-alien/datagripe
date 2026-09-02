@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — datasource and schema selector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#00E599;--cyan:#5EEAD4;--violet:#8B5CF6;--violet-text:#A78BFA;--magenta:#FF3EA5;
+  --void:#0B0E14;--panel:#0E1220;--raised:#161C29;--rule:#212A3A;--rule-soft:#161C29;
+  --ink:#E2E8F0;--ink-dim:#9AA5B6;--ink-mute:#6B7688;--ink-faint:#3D4759;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Space Grotesk",system-ui,sans-serif;
+  --ramp:linear-gradient(90deg,#00E599 0%,#00E599 3.75%,#5EEAD4 7.08%,#5EEAD4 10.83%,#8B5CF6 14.17%,#8B5CF6 17.92%,
+    #FF3EA5 21.25%,#FF3EA5 28.75%,#8B5CF6 32.08%,#8B5CF6 35.83%,#5EEAD4 39.17%,#5EEAD4 42.92%,
+    #00E599 46.25%,#00E599 53.75%,#5EEAD4 57.08%,#5EEAD4 60.83%,#8B5CF6 64.17%,#8B5CF6 67.92%,
+    #FF3EA5 71.25%,#FF3EA5 78.75%,#8B5CF6 82.08%,#8B5CF6 85.83%,#5EEAD4 89.17%,#5EEAD4 92.92%,
+    #00E599 96.25%,#00E599 100%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 80px}
+h1{font-family:var(--display);font-weight:500;font-size:27px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:38px 0 6px}
+p{color:var(--ink-dim);max-width:66ch;margin:0 0 13px;font-size:14.5px}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+code{font-family:var(--mono);font-size:.87em;color:var(--cyan)}
+
+.abar{position:relative;overflow:hidden;height:3px;filter:saturate(1.22)}
+.abar .l{position:absolute;top:0;bottom:0;left:0;width:200%}
+.colour{background:var(--ramp);animation:drift 17s linear infinite}
+.wave{mix-blend-mode:multiply;background:linear-gradient(90deg,rgba(11,14,20,.5),rgba(11,14,20,0) 25%,
+  rgba(11,14,20,.4) 50%,rgba(11,14,20,0) 75%,rgba(11,14,20,.5));animation:back 11s linear infinite}
+@keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes back{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.abar .l{animation:none;transform:none}.wave{display:none}
+  .colour{width:100%;background:linear-gradient(90deg,#00E599,#5EEAD4 26%,#8B5CF6 58%,#FF3EA5)}}
+
+.hint{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:13px 16px;margin:14px 0 16px;
+  font-size:13.5px;color:var(--ink-dim);display:flex;gap:20px;flex-wrap:wrap}
+.hint b{color:var(--ink);font-weight:500}
+
+.scroller{overflow-x:auto;border-radius:10px}
+.ide{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--void);min-width:900px;position:relative}
+
+.top{display:flex;align-items:center;gap:12px;padding:9px 13px;background:var(--panel);border-bottom:1px solid var(--rule)}
+.prompt{font-family:var(--mono);font-size:13px;display:flex;align-items:center}
+.prompt .gt{color:var(--magenta)}
+.prompt .br em{color:var(--green);font-style:normal}
+.prompt .sep{color:var(--ink-faint)}
+.prompt .pj{color:#FF3EA5}
+.cur{display:inline-block;width:8px;height:15px;background:#FF3EA5;margin-left:2px;
+  animation:blink 1.1s steps(1) infinite;vertical-align:-2px}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+.body{display:flex;align-items:stretch;height:392px}
+.side{width:230px;flex:none;border-right:1px solid var(--rule);background:var(--panel);
+  font-family:var(--mono);font-size:11.5px;display:flex;flex-direction:column}
+
+/* breadcrumb */
+.crumb{display:flex;align-items:center;padding:6px 8px;border-bottom:1px solid var(--rule);gap:2px;
+  font-size:11.5px;position:relative}
+.seg{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;cursor:pointer;
+  color:var(--ink);white-space:nowrap;min-width:0}
+.seg:hover{background:#1A2133}
+.seg[aria-expanded=true]{background:#1D2537}
+.seg .nm{overflow:hidden;text-overflow:ellipsis}
+.seg .ch{color:var(--ink-faint);font-size:9px}
+.crumb .slash{color:var(--ink-faint);padding:0 1px}
+.chip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;
+  background:#232C3E;color:var(--ink-dim);font-size:9px;flex:none;font-weight:500}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.on{background:var(--green)}
+.dot.off{border:1.5px solid var(--ink-faint)}
+.dot.err{border:1.5px solid var(--magenta);background:#2A0F1C}
+
+.filter{padding:7px 9px;border-bottom:1px solid var(--rule);color:var(--ink-faint);font-size:11px}
+.tr{flex:1;overflow-y:auto;padding:5px 0}
+.n{display:flex;align-items:center;gap:5px;padding:3.5px 9px;color:var(--ink-dim);cursor:pointer;
+  border-left:2px solid transparent;white-space:nowrap}
+.n:hover{background:#141A2C;color:var(--ink)}
+.n .ic{width:13px;flex:none;text-align:center;font-size:10px}
+.n .cnt{color:var(--ink-faint);margin-left:auto;padding-left:8px}
+.d1{padding-left:9px}.d2{padding-left:22px}
+.empty{color:var(--ink-faint);font-style:italic;padding:3px 9px 3px 35px;font-size:11px}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.tabs{display:flex;border-bottom:1px solid var(--rule);background:var(--panel);overflow-x:auto}
+.tabs .tb{padding:7px 10px 5px;font-size:11.5px;color:#5A6478;font-family:var(--mono);
+  border-bottom:2px solid transparent;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tabs .tb.on{color:var(--ink);border-bottom-color:var(--violet)}
+.tabs .tb .x{color:var(--ink-faint);margin-left:3px}
+.pane{flex:1;min-height:0;overflow:auto}
+.ed{padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.85}
+.ln{color:var(--ink-faint);display:inline-block;width:15px}
+.kw{color:var(--magenta)}.tb2{color:var(--green)}.st{color:#C4A6FF}.idn{color:var(--ink-mute)}
+.status{display:flex;align-items:center;gap:10px;padding:7px 13px;border-top:1px solid var(--rule);
+  background:var(--panel);font-family:var(--mono);font-size:11px}
+
+/* popovers */
+.pop{position:absolute;z-index:60;background:var(--raised);border:1px solid var(--rule);border-radius:9px;
+  padding:5px;min-width:266px;font-family:var(--mono);font-size:11.5px}
+.pop .srch{padding:6px 9px;margin:2px 2px 5px;background:var(--void);border:1px solid var(--rule);
+  border-radius:5px;color:var(--ink-faint);font-size:11px}
+.pop .hd{padding:5px 9px 4px;color:var(--ink-faint);font-size:10.5px}
+.pop .it{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:5px;color:var(--ink-dim);cursor:pointer}
+.pop .it:hover{background:#1D2537;color:var(--ink)}
+.pop .it.cur{background:#141A2C;color:var(--ink)}
+.pop .it .sub{margin-left:auto;color:var(--ink-faint);font-size:10.5px;padding-left:10px}
+.pop .div{height:1px;background:var(--rule);margin:5px 0}
+.pop .act{display:flex;align-items:center;gap:8px;padding:6px 9px;border-radius:5px;color:var(--cyan);cursor:pointer}
+.pop .act:hover{background:#0F2028}
+.pop .act .plus{width:15px;text-align:center}
+.pop .act.mut{color:var(--ink-mute)}
+.pop .act.mut:hover{background:#1D2537;color:var(--ink-dim)}
+
+/* new datasource form */
+.form{padding:16px 18px;max-width:620px}
+.form h3{font-family:var(--display);font-weight:500;font-size:15px;margin:0 0 3px;color:var(--ink)}
+.form .lead{font-size:12.5px;color:var(--ink-mute);margin:0 0 16px;font-family:var(--sans)}
+.eng{display:flex;gap:7px;margin-bottom:18px;flex-wrap:wrap}
+.eng button{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-dim);background:transparent;border:1px solid var(--rule);border-radius:7px;
+  padding:7px 12px;cursor:pointer}
+.eng button:hover{background:var(--raised);color:var(--ink)}
+.eng button[aria-pressed=true]{border-color:var(--violet);background:#141026;color:#fff}
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:11px;margin-bottom:12px}
+.f label{display:block;font-size:11px;color:var(--ink-mute);font-family:var(--mono);margin-bottom:4px}
+.f .in{background:var(--void);border:1px solid var(--rule);border-radius:6px;padding:6px 9px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+.f .in.ph{color:var(--ink-faint)}
+.cls{display:flex;gap:7px;flex-wrap:wrap;margin-top:5px}
+.cls button{font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:6px;cursor:pointer;
+  background:transparent;border:1px solid var(--rule);color:var(--ink-mute);display:flex;align-items:center;gap:6px}
+.cls button:hover{color:var(--ink)}
+.cls button[aria-pressed=true]{color:var(--ink);border-color:var(--cc)}
+.cls .sw{width:8px;height:8px;border-radius:50%;background:var(--cc)}
+.frow{display:flex;gap:9px;align-items:center;margin-top:18px;padding-top:15px;border-top:1px solid var(--rule)}
+.btn{font-family:var(--mono);font-size:11.5px;padding:6px 14px;border-radius:6px;cursor:pointer;
+  background:transparent;border:1px solid var(--rule);color:var(--ink-dim)}
+.btn:hover{background:var(--raised);color:var(--ink)}
+.btn.pri{border-color:var(--green);color:var(--green)}
+.btn.pri:hover{background:#0C1618}
+.testline{font-family:var(--mono);font-size:11px;color:var(--ink-mute);margin-left:auto}
+
+.hide{display:none!important}
+.callout{border-left:3px solid var(--violet);background:#100E1C;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+.warncall{border-left:3px solid var(--magenta);background:#12101A;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0}
+th{text-align:left;font-weight:500;color:var(--ink-mute);font-size:12.5px;padding:8px 10px 8px 0;border-bottom:1px solid var(--rule)}
+td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule-soft);color:var(--ink-dim);vertical-align:top}
+td:first-child{color:var(--ink);font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="abar"><div class="l colour"></div><div class="l wave"></div></div>
+
+<div class="wrap">
+<h1>Datasource and schema selector</h1>
+<p>Two independent breadcrumb segments below the prompt. Click either one. The second segment relabels itself per engine, and the tree rebuilds — switch to the Redis or SQLite datasource to see why that matters.</p>
+
+<div class="hint">
+  <span><b>Click segment one</b> — datasource list</span>
+  <span><b>Click segment two</b> — schema, database, or keyspace</span>
+  <span><b>New datasource</b> — opens as a tab, not a modal</span>
+</div>
+
+<div class="scroller"><div class="ide" id="ide">
+  <div class="abar"><div class="l colour"></div><div class="l wave"></div></div>
+  <div class="top">
+    <div class="prompt"><span class="gt">&gt;</span><span class="br">Data<em>gripe</em></span><span class="sep">:</span><span class="pj">wallet-prod</span><span class="cur"></span></div>
+    <span class="meta" style="margin-left:auto" id="conn">—</span>
+  </div>
+
+  <div class="body">
+    <div class="side">
+      <div class="crumb">
+        <div class="seg" id="segDs" role="button" tabindex="0" aria-expanded="false" aria-haspopup="true">
+          <span class="chip" id="dsChip">P</span><span class="nm" id="dsName">wallet-primary</span><span class="ch">▾</span>
+        </div>
+        <span class="slash">/</span>
+        <div class="seg" id="segSc" role="button" tabindex="0" aria-expanded="false" aria-haspopup="true">
+          <span class="nm" id="scName">public</span><span class="ch">▾</span>
+        </div>
+      </div>
+      <div class="filter">filter objects…</div>
+      <div class="tr" id="tree"></div>
+    </div>
+
+    <div class="main">
+      <div class="tabs" id="tabs"></div>
+      <div class="pane" id="pane"></div>
+    </div>
+  </div>
+
+  <div class="status">
+    <span id="stDot" style="color:var(--green)">connected</span>
+    <span style="color:var(--ink-mute)" id="stEng">—</span>
+    <span style="margin-left:auto;color:var(--magenta)">3 gripes</span>
+  </div>
+
+  <div class="pop hide" id="pop"></div>
+</div></div>
+
+<h2>Why the second segment is not called "schema"</h2>
+<p>A project holds datasources of different engines. Postgres has schemas, MySQL calls the same level a database, Redis has numbered keyspaces, SQLite has one namespace and a file path. A breadcrumb hard-coded to "schema" is wrong three times out of four, so the segment takes its label from the active engine and the tree rebuilds to match — categories are <code>tables / views / functions / sequences</code> on Postgres and <code>keys by prefix</code> on Redis.</p>
+
+<h2>Engine identity stays neutral</h2>
+<p>Engine chips are neutral monograms on Raised, never accent colours. The four accents are already spoken for by project class, and production magenta is meant to be the only permanent magenta in the interface. If MySQL were orange and Redis were red, the safety colour would be competing with decoration within a few connections.</p>
+<p>Connection status uses shape as well as colour, per the accessibility rule: filled dot connected, hollow ring disconnected, magenta ring errored.</p>
+
+<h2>New datasource is a tab</h2>
+<p>Consistent with table view and object view. It survives you going off to find credentials, you can have two open while comparing settings, and it does not trap focus the way a modal does. The form asks for the project class explicitly rather than inferring it, because that field decides whether the danger zone gates on the table name or the project name.</p>
+
+<div class="warncall">The class field is where a real question surfaces. If a project can contain both a production and a local datasource, the project-level safety colour is a lie — statements run against a <em>datasource</em>, not a project.</div>
+
+<h2>Three ways to resolve that</h2>
+<table>
+<tr><th>Option</th><th>What it means</th><th>Cost</th></tr>
+<tr><td>class on project</td><td>A project may not mix classes. Adding a local datasource to <code>wallet-prod</code> is rejected.</td><td>Simplest and safest. Forces more projects, which is arguably correct — a project is the unit of context.</td></tr>
+<tr><td>class on datasource</td><td>The prompt becomes <code>&gt;Datagripe:wallet-prod/wallet-primary_</code> and the cursor takes the datasource colour.</td><td>Accurate, but a longer prompt and two things to read before you trust the colour.</td></tr>
+<tr><td>project takes the worst</td><td>Class stays on the datasource; the project displays the highest-risk class it contains.</td><td>Never under-warns, but over-warns constantly — every project with one prod connection goes magenta.</td></tr>
+</table>
+<div class="callout">My recommendation is the first. It keeps one colour in one place, and "this project is production" is a cleaner mental model than "this project is production right now depending on which connection is selected". The cost is more projects, and projects are cheap.</div>
+
+<h2>Details worth keeping</h2>
+<p>Selecting a disconnected datasource connects it — the activity bar drifts and the status line says so rather than silently failing. The datasource popover lists disconnected entries normally rather than hiding or greying them out, because "connect to the thing I have not used today" is the common case, not an error.</p>
+<p>Both popovers get a filter box above about eight entries. Switching datasource resets the second segment to that engine's default namespace rather than trying to preserve <code>public</code> across engines where it may not exist.</p>
+</div>
+
+<script>
+(function(){
+  var DS=[
+    {id:'wallet-primary',eng:'pg',chip:'P',ver:'PostgreSQL 16.2',st:'on',label:'schema',
+     ns:['public','crypto','audit'],def:'public'},
+    {id:'wallet-replica',eng:'pg',chip:'P',ver:'PostgreSQL 16.2',st:'on',label:'schema',
+     ns:['public','analytics'],def:'public'},
+    {id:'session-cache',eng:'redis',chip:'R',ver:'Redis 7.2',st:'on',label:'keyspace',
+     ns:['db0','db1','db2'],def:'db0'},
+    {id:'legacy-billing',eng:'mysql',chip:'M',ver:'MySQL 8.0',st:'off',label:'database',
+     ns:['billing','billing_archive'],def:'billing'},
+    {id:'local-fixtures',eng:'sqlite',chip:'S',ver:'SQLite 3.45',st:'err',label:'file',
+     ns:['main'],def:'main'}
+  ];
+  var TREES={
+    pg:[['grp','▸','tables','7'],['obj','▤','payments',''],['obj','▤','users',''],['obj','▤','payouts',''],
+        ['grp','▸','views','2'],['obj','◫','v_pending',''],
+        ['grp','▸','functions','4'],['obj','ƒ','fn_settle',''],
+        ['grp','▸','sequences','0'],['empty','','no sequences','']],
+    mysql:[['grp','▸','tables','12'],['obj','▤','invoices',''],['obj','▤','line_items',''],
+        ['grp','▸','views','1'],['obj','◫','v_unpaid',''],
+        ['grp','▸','procedures','3'],['obj','ƒ','sp_rebill','']],
+    redis:[['grp','▸','keys','2.4k'],['obj','⌗','session:*','1.9k'],['obj','⌗','rate:*','412'],
+        ['obj','⌗','lock:*','63'],
+        ['grp','▸','streams','2'],['obj','≋','events',''],
+        ['grp','▸','pub/sub','0'],['empty','','no channels','']],
+    sqlite:[['grp','▸','tables','3'],['obj','▤','fixtures',''],['obj','▤','seeds',''],
+        ['grp','▸','indexes','4'],['obj','⌁','idx_fixtures_key','']]
+  };
+  var cur=DS[0], ns=DS[0].def, tabs=[{id:'sql',n:'payouts.sql'}], active='sql';
+
+  function renderTree(){
+    document.getElementById('tree').innerHTML=TREES[cur.eng].map(function(r){
+      if(r[0]==='empty') return '<div class="empty">'+r[2]+'</div>';
+      var d=r[0]==='grp'?'d1':'d2';
+      var col=r[0]==='grp'?(r[2]==='tables'||r[2]==='keys'?'var(--violet-text)':
+              r[2]==='views'||r[2]==='streams'?'var(--magenta)':'var(--cyan)'):'';
+      return '<div class="n '+d+'"'+(col?' style="color:'+col+'"':'')+'><span class="ic">'+r[1]+'</span>'+r[2]+
+             (r[3]?'<span class="cnt">'+r[3]+'</span>':'')+'</div>';
+    }).join('');
+  }
+  function renderHead(){
+    document.getElementById('dsChip').textContent=cur.chip;
+    document.getElementById('dsName').textContent=cur.id;
+    document.getElementById('scName').textContent=ns;
+    document.getElementById('conn').textContent=cur.ver+' · production';
+    document.getElementById('stEng').textContent=cur.label+' '+ns;
+    var d=document.getElementById('stDot');
+    d.textContent=cur.st==='on'?'connected':cur.st==='off'?'not connected':'connection failed';
+    d.style.color=cur.st==='on'?'var(--green)':cur.st==='off'?'var(--ink-faint)':'var(--magenta)';
+  }
+  function renderTabs(){
+    document.getElementById('tabs').innerHTML=tabs.map(function(t){
+      return '<div class="tb'+(t.id===active?' on':'')+'" data-t="'+t.id+'">'+
+        (t.id==='new'?'<span style="color:var(--cyan);font-size:9px">＋</span>':'')+t.n+
+        (t.id==='sql'?'':'<span class="x" data-x="'+t.id+'">×</span>')+'</div>';
+    }).join('');
+    document.querySelectorAll('[data-t]').forEach(function(e){
+      e.addEventListener('click',function(ev){
+        if(ev.target.hasAttribute('data-x')){
+          tabs=tabs.filter(function(t){return t.id!==ev.target.getAttribute('data-x')});
+          active=tabs[tabs.length-1].id;
+        } else active=e.getAttribute('data-t');
+        renderTabs(); renderPane();
+      });
+    });
+  }
+  function renderPane(){
+    var p=document.getElementById('pane');
+    if(active==='sql'){
+      p.innerHTML='<div class="ed"><div><span class="ln">1</span><span class="kw">select</span> <span class="idn">id, amount</span> '+
+        '<span class="kw">from</span> <span class="tb2">payments</span></div>'+
+        '<div><span class="ln">2</span><span class="kw">where</span> <span class="idn">status</span> = <span class="st">\'pending\'</span></div></div>';
+      return;
+    }
+    p.innerHTML='<div class="form"><h3>New datasource</h3>'+
+      '<p class="lead">Added to <b style="color:var(--ink)">wallet-prod</b>. Credentials are stored in the project, not globally.</p>'+
+      '<div class="eng" role="group" aria-label="Engine">'+
+        ['PostgreSQL','MySQL','Redis','SQLite','MongoDB'].map(function(e,i){
+          return '<button data-e="'+e+'" aria-pressed="'+(i===0)+'"><span class="chip">'+e[0]+'</span>'+e+'</button>'}).join('')+
+      '</div>'+
+      '<div class="fg">'+
+        f('name','wallet-secondary')+f('host','db2.internal')+f('port','5432')+
+      '</div><div class="fg">'+
+        f('database','wallet')+f('user','app_rw')+f('password','••••••••••')+
+      '</div><div class="fg">'+
+        f('ssl mode','require')+f('connect timeout','10s')+
+      '</div>'+
+      '<div class="f" style="margin-top:14px"><label>project class</label>'+
+      '<div class="cls" role="group" aria-label="Class">'+
+        [['production','#FF3EA5'],['staging','#8B5CF6'],['local','#00E599'],['analytics','#5EEAD4']].map(function(c,i){
+          return '<button style="--cc:'+c[1]+'" aria-pressed="'+(i===0)+'" data-c><span class="sw"></span>'+c[0]+'</button>'}).join('')+
+      '</div>'+
+      '<p class="lead" style="margin:9px 0 0;font-size:11.5px">Decides whether destructive actions confirm on the table name or the project name.</p></div>'+
+      '<div class="frow"><button class="btn">test connection</button><button class="btn pri">save and connect</button>'+
+      '<span class="testline" id="tl">not tested</span></div></div>';
+    p.querySelectorAll('[data-e],[data-c]').forEach(function(b){
+      b.addEventListener('click',function(){
+        var sel=b.hasAttribute('data-e')?'[data-e]':'[data-c]';
+        p.querySelectorAll(sel).forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      });
+    });
+    p.querySelector('.btn').addEventListener('click',function(){
+      var tl=p.querySelector('#tl'); tl.textContent='testing…'; tl.style.color='var(--violet-text)';
+      setTimeout(function(){ tl.textContent='connected · 41ms'; tl.style.color='var(--green)'; },1200);
+    });
+  }
+  function f(l,v){ return '<div class="f"><label>'+l+'</label><div class="in ph">'+v+'</div></div>'; }
+
+  var pop=document.getElementById('pop');
+  function place(seg){
+    var ide=document.getElementById('ide').getBoundingClientRect(), r=seg.getBoundingClientRect();
+    pop.classList.remove('hide');
+    var left=r.left-ide.left;
+    if(left+pop.offsetWidth>ide.width-10) left=ide.width-pop.offsetWidth-10;
+    pop.style.left=Math.max(8,left)+'px'; pop.style.top=(r.bottom-ide.top+5)+'px';
+  }
+  function closeAll(){
+    pop.classList.add('hide');
+    document.getElementById('segDs').setAttribute('aria-expanded','false');
+    document.getElementById('segSc').setAttribute('aria-expanded','false');
+  }
+  function dsPop(){
+    pop.innerHTML='<div class="srch">filter datasources…</div><div class="hd">wallet-prod · 5 datasources</div>'+
+      DS.map(function(d){
+        return '<div class="it'+(d.id===cur.id?' cur':'')+'" data-ds="'+d.id+'">'+
+          '<span class="dot '+(d.st==='on'?'on':d.st==='off'?'off':'err')+'"></span>'+
+          '<span class="chip">'+d.chip+'</span>'+d.id+'<span class="sub">'+d.ver+'</span></div>';
+      }).join('')+
+      '<div class="div"></div><div class="act" data-new><span class="plus">＋</span>new datasource…</div>'+
+      '<div class="act mut"><span class="plus">⚙</span>manage datasources…</div>';
+    pop.querySelectorAll('[data-ds]').forEach(function(e){
+      e.addEventListener('click',function(){
+        cur=DS.filter(function(d){return d.id===e.getAttribute('data-ds')})[0];
+        ns=cur.def; closeAll(); renderHead(); renderTree();
+      });
+    });
+    pop.querySelector('[data-new]').addEventListener('click',function(){
+      if(!tabs.some(function(t){return t.id==='new'})) tabs.push({id:'new',n:'new datasource'});
+      active='new'; closeAll(); renderTabs(); renderPane();
+    });
+  }
+  function scPop(){
+    pop.innerHTML='<div class="hd">'+cur.id+' · '+cur.ns.length+' '+cur.label+(cur.ns.length>1?'s':'')+'</div>'+
+      cur.ns.map(function(n){
+        return '<div class="it'+(n===ns?' cur':'')+'" data-ns="'+n+'">'+n+'</div>';
+      }).join('')+
+      (cur.eng==='pg'?'<div class="div"></div><div class="act"><span class="plus">＋</span>new schema…</div>':'');
+    pop.querySelectorAll('[data-ns]').forEach(function(e){
+      e.addEventListener('click',function(){ ns=e.getAttribute('data-ns'); closeAll(); renderHead(); renderTree(); });
+    });
+  }
+  function wire(id,build){
+    var seg=document.getElementById(id);
+    function toggle(){
+      var open=seg.getAttribute('aria-expanded')==='true';
+      closeAll();
+      if(!open){ build(); seg.setAttribute('aria-expanded','true'); place(seg); }
+    }
+    seg.addEventListener('click',toggle);
+    seg.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();} });
+  }
+  wire('segDs',dsPop); wire('segSc',scPop);
+  document.addEventListener('click',function(e){
+    if(!pop.contains(e.target)&&!e.target.closest('.seg')) closeAll();
+  });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeAll(); });
+
+  renderHead(); renderTree(); renderTabs(); renderPane();
+})();
+</script>
+</body>
+</html>

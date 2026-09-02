@@ -12,6 +12,10 @@ Datagripe is a database client that does its job perfectly and resents you the e
 | `brand-system.html` | The visual companion. Live swatches, logo and favicon at real sizes, running activity bar, the prompt switcher. Open in a browser. |
 | `tokens.css` | Drop-in design tokens plus the activity bar and prompt implementations. Commented with the invariants that must not be broken. |
 | `mocks/tree-interactions.html` | **The important one.** Working prototype of the sidebar: hover popover, `⊞` object view, double-click table view, context menu, multi-select, danger zone gating. |
+| `mocks/datasource-selector.html` | Datasource and schema breadcrumb, engine-aware namespace segment, new-datasource tab. |
+| `mocks/document-target.html` | Per-document target binding, the chip group, split panes on two datasources, unset and broken states. |
+| `mocks/results-tab.html` | Results as an ordinary tab in any split position, gutter run buttons, table/history modes, joined export group. Supersedes the tab-strip chip group. |
+| `mocks/scrollbars.html` | Scrollbar treatment for the tree and the results grid, plus the annotation rail. |
 | `mocks/drilldown.html` | Why the object view is an editor tab rather than an inspector or bottom panel. Switchable, with the tree-depth toggle that shows the overlap. |
 | `mocks/activity-bar.html` | The activity bar in isolation, with saturation and wave-depth controls, and a before/after of the blend-mode bug. |
 

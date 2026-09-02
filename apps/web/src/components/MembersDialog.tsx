@@ -44,7 +44,11 @@ export function MembersDialog(props: { onClose: () => void }) {
 
 	return (
 		<div className="dg-modal-backdrop" role="presentation">
-			<div className="dg-modal" role="dialog" aria-label="Workspace members">
+			<div
+				className="dg-modal dg-scroll"
+				role="dialog"
+				aria-label="Workspace members"
+			>
 				<div className="dg-modal-title">Workspace members</div>
 				{error !== null && <p className="dg-test-failed">{error}</p>}
 				{members === null ? (

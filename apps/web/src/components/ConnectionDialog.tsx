@@ -98,7 +98,11 @@ export function ConnectionDialog() {
 
 	return (
 		<div className="dg-modal-backdrop" role="presentation">
-			<div className="dg-modal" role="dialog" aria-label="Connection settings">
+			<div
+				className="dg-modal dg-scroll"
+				role="dialog"
+				aria-label="Connection settings"
+			>
 				<div className="dg-modal-title">
 					{editing === null ? "New connection" : `Edit ${editing.name}`}
 				</div>

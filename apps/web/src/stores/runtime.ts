@@ -11,6 +11,7 @@ export const useExecutionsStore = createExecutionsStore(wsClient.request);
 export const useExplorerStore = createExplorerStore(wsClient.request);
 
 export type { ConnectionDraft } from "./connections";
+export type { ChildrenState } from "./explorer";
 export { nodeKey } from "./explorer";
 
 // Dev-only inspection seam for browser-driven debugging.

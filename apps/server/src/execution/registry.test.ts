@@ -36,7 +36,9 @@ const TARGET: ResolvedConnection & { source: "managed" | "predefined" } = {
 	adapter: "postgres",
 	host: "localhost",
 	port: 5432,
-	database: "demo",
+	// Queries run against the scratch database below (seeded in beforeAll),
+	// so the suite needs nothing beyond a reachable postgres.
+	database: "datagripe_execution_test",
 	username: "datagripe",
 	password: "datagripe",
 	tlsMode: "disable",
@@ -73,27 +75,20 @@ beforeAll(async () => {
 	if (existing.length === 0) {
 		await admin.unsafe(`CREATE DATABASE ${SCRATCH_DB}`);
 	}
-	// Seed the demo target database the queries below run against; any
-	// machine with a reachable postgres can then run this suite.
-	const demoExisting =
-		await admin`SELECT 1 FROM pg_database WHERE datname = 'demo'`;
-	if (demoExisting.length === 0) {
-		await admin.unsafe(`CREATE DATABASE demo`);
-	}
-	await admin.close();
-	const demo = new SQL("postgres://datagripe:datagripe@localhost:5432/demo");
-	await demo.unsafe(`
-		CREATE SCHEMA IF NOT EXISTS shop;
-		DROP TABLE IF EXISTS shop.products;
+	// Seed the shop schema the queries below run against, inside the
+	// scratch database this suite owns.
+	appDb = new SQL(
+		`postgres://datagripe:datagripe@localhost:5432/${SCRATCH_DB}`,
+	);
+	await appDb.unsafe(`
+		DROP SCHEMA IF EXISTS shop CASCADE;
+		CREATE SCHEMA shop;
 		CREATE TABLE shop.products (id int PRIMARY KEY, sku text NOT NULL, title text NOT NULL);
 		INSERT INTO shop.products (id, sku, title) VALUES
 			(1, 'SKU-1', 'First product'),
 			(2, 'SKU-2', 'Second product')
 	`);
-	await demo.close();
-	appDb = new SQL(
-		`postgres://datagripe:datagripe@localhost:5432/${SCRATCH_DB}`,
-	);
+	await admin.close();
 	await migrate(appDb);
 	await appDb.unsafe("TRUNCATE query_executions, idempotency_keys CASCADE");
 	USER_ID = (await ensureLocalWorkspace(appDb)).user.id;

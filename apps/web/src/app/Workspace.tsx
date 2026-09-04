@@ -131,6 +131,9 @@ export function Workspace() {
 	const dockApiRef = useRef<DockviewApi | null>(null);
 	const [showMembers, setShowMembers] = useState(false);
 	const sessionUser = useSessionStore((state) => state.bootstrap?.user);
+	const authDisabled = useSessionStore(
+		(state) => state.bootstrap?.authDisabled ?? false,
+	);
 	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
 	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
@@ -359,13 +362,17 @@ export function Workspace() {
 				{currentWorkspace !== null && (
 					<span className="dg-header-meta">{currentWorkspace.role}</span>
 				)}
-				<button type="button" onClick={() => setShowMembers(true)}>
-					Members
-				</button>
+				{!authDisabled && (
+					<button type="button" onClick={() => setShowMembers(true)}>
+						Members
+					</button>
+				)}
 				<span className="dg-header-meta">{sessionUser?.email}</span>
-				<button type="button" onClick={() => void logout()}>
-					Log out
-				</button>
+				{!authDisabled && (
+					<button type="button" onClick={() => void logout()}>
+						Log out
+					</button>
+				)}
 			</header>
 			<div className="dg-body">
 				<aside className="dg-sidebar">

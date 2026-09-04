@@ -1,6 +1,7 @@
 import { openGripesPanel } from "../app/viewPanels";
 import { PROJECT_CLASS_COLORS, useBrandingStore } from "../stores/branding";
 import { NAMESPACE_LABELS, useDatasourceStore } from "../stores/datasource";
+import { usePwaStore } from "../stores/pwa";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { MockBadge } from "./MockBadge";
@@ -28,6 +29,8 @@ export function StatusBar() {
 	const projectClass = useBrandingStore((state) =>
 		state.classFor(currentWorkspace?.id ?? null),
 	);
+	const updateAvailable = usePwaStore((state) => state.updateAvailable);
+	const applyUpdate = usePwaStore((state) => state.applyUpdate);
 
 	const active = connections.find(
 		(connection) => connection.id === activeConnectionId,
@@ -51,6 +54,16 @@ export function StatusBar() {
 				{currentWorkspace?.name ?? "…"} · {projectClass} <MockBadge />
 			</span>
 			<span className="dg-statusbar-spacer" />
+			{updateAvailable && applyUpdate !== null && (
+				<button
+					type="button"
+					className="dg-statusbar-button dg-statusbar-update"
+					title="A new version is available — refresh to apply"
+					onClick={applyUpdate}
+				>
+					update available · refresh
+				</button>
+			)}
 			<button
 				type="button"
 				className="dg-statusbar-button"

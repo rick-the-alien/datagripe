@@ -129,6 +129,37 @@ button:disabled {
 	padding: 1px 2px;
 }
 
+.dg-statusbar button.dg-statusbar-button.dg-statusbar-update {
+	color: var(--dg-green);
+}
+
+/* ---- frameless window drag region --------------------------- */
+/* The header doubles as the window drag region wherever app-region is
+   honored: PWA window-controls-overlay installs and the Electrobun
+   desktop shell (titleBarStyle "hidden"). Plain browser tabs ignore it. */
+.dg-header {
+	app-region: drag;
+}
+
+.dg-header button,
+.dg-header a,
+.dg-header input,
+.dg-header select {
+	app-region: no-drag;
+}
+
+/* Installed with display-override "window-controls-overlay" the OS title
+   bar collapses to floating window controls; keep header content clear of
+   them and fill the titlebar height. */
+@media (display-mode: window-controls-overlay) {
+	.dg-header {
+		/* Keep content clear of the window controls (left side on macOS). */
+		padding-left: calc(10px + env(titlebar-area-x, 0px));
+		height: env(titlebar-area-height, 33px);
+		box-sizing: border-box;
+	}
+}
+
 /* ---- MOCK badge --------------------------------------------- */
 /* Marks surfaces that are branding placeholders until the real
    implementation lands (see docs/brand/brand-system.md). */

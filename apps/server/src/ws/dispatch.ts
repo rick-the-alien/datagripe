@@ -19,6 +19,7 @@ import {
 	viewBroadcastRequestSchema,
 	viewFollowRequestSchema,
 	workspaceCreateRequestSchema,
+	workspaceRenameRequestSchema,
 	workspaceSetDefaultConnectionRequestSchema,
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
@@ -38,6 +39,7 @@ import { addMember, listMembers, removeMember } from "../workspaces/members";
 import {
 	createWorkspace,
 	listWorkspaces,
+	renameWorkspace,
 	setDefaultConnection,
 } from "../workspaces/service";
 import type { SocketHub } from "./hub";
@@ -87,6 +89,7 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"execution.start": "editor",
 	"execution.cancel": "editor",
 	"workspace.set-default-connection": "editor",
+	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
 };
@@ -328,6 +331,12 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					(ref) => connections.hasConnectionRef(workspace, ref),
 				);
 				return {};
+			}
+
+			case "workspace.rename": {
+				const request = workspaceRenameRequestSchema.parse(payload);
+				await renameWorkspace(appDb, workspace.id, request.name);
+				return { workspace: { id: workspace.id, name: request.name } };
 			}
 
 			case "workspace.member.add": {

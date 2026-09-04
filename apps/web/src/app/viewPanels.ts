@@ -1,9 +1,16 @@
+import type { ConnectionMetadata } from "@datagripe/contracts";
 import type { DockviewApi } from "dockview-react";
 
 /**
  * Opener seam for the non-editor surfaces (same pattern as
  * resultsPanel.ts): the Workspace registers Dockview-aware openers;
- * the Explorer calls them without knowing Dockview.
+ * callers (Explorer, breadcrumb, header, prompt) use them without
+ * knowing Dockview.
+ *
+ * Forms (new/edit datasource, new project, project settings) are tabs,
+ * not modals — they survive navigation, can sit side by side, and don't
+ * trap focus (docs/brand/mocks/datasource-selector.html "New datasource
+ * is a tab").
  *
  * Table view, object view and the gripes panel are currently MOCK
  * implementations — see docs/brand/brand-system.md "Table view and
@@ -21,6 +28,23 @@ let tableViewOpener: ((target: ObjectTarget) => void) | null = null;
 let objectViewOpener: ((target: ObjectTarget, tab?: string) => void) | null =
 	null;
 let gripesOpener: (() => void) | null = null;
+let connectionFormOpener:
+	| ((connection: ConnectionMetadata | null) => void)
+	| null = null;
+let newProjectOpener: (() => void) | null = null;
+let projectSettingsOpener: (() => void) | null = null;
+
+function focusOrAdd(
+	api: DockviewApi,
+	panel: Parameters<DockviewApi["addPanel"]>[0],
+): void {
+	const existing = api.getPanel(panel.id ?? "");
+	if (existing !== undefined) {
+		existing.focus();
+		return;
+	}
+	api.addPanel(panel);
+}
 
 export function registerViewPanelOpeners(api: DockviewApi): void {
 	tableViewOpener = (target) => {
@@ -67,6 +91,40 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 			position: { direction: "below" },
 		});
 	};
+
+	connectionFormOpener = (connection) => {
+		if (connection === null) {
+			focusOrAdd(api, {
+				id: "datasource:new",
+				component: "connectionForm",
+				title: "New datasource",
+				params: { view: "connection" },
+			});
+			return;
+		}
+		focusOrAdd(api, {
+			id: `datasource:edit:${connection.id}`,
+			component: "connectionForm",
+			title: `Edit ${connection.name}`,
+			params: { view: "connection", connectionId: connection.id },
+		});
+	};
+	newProjectOpener = () => {
+		focusOrAdd(api, {
+			id: "project:new",
+			component: "newProject",
+			title: "New project",
+			params: { view: "newProject" },
+		});
+	};
+	projectSettingsOpener = () => {
+		focusOrAdd(api, {
+			id: "project:settings",
+			component: "projectSettings",
+			title: "Project settings",
+			params: { view: "projectSettings" },
+		});
+	};
 }
 
 export function openTableView(target: ObjectTarget): void {
@@ -79,6 +137,35 @@ export function openObjectView(target: ObjectTarget, tab?: string): void {
 
 export function openGripesPanel(): void {
 	gripesOpener?.();
+}
+
+/** `null` opens the create form; a connection opens it for editing. */
+export function openConnectionForm(
+	connection: ConnectionMetadata | null,
+): void {
+	connectionFormOpener?.(connection);
+}
+
+export function openNewProject(): void {
+	newProjectOpener?.();
+}
+
+export function openProjectSettings(): void {
+	projectSettingsOpener?.();
+}
+
+/** Connection form panel params: absent connectionId means "create". */
+export function readConnectionFormParams(params: unknown): {
+	connectionId: string | undefined;
+} {
+	if (params === null || typeof params !== "object") {
+		return { connectionId: undefined };
+	}
+	const connectionId =
+		"connectionId" in params && typeof params.connectionId === "string"
+			? params.connectionId
+			: undefined;
+	return { connectionId };
 }
 
 /** Panel params for the mock table/object views, narrowed without casts. */

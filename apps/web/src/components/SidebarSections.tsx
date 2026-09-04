@@ -1,16 +1,15 @@
 import { type ReactNode, useState } from "react";
 
 /**
- * VSCode-style sidebar sections: expanded sections share the pane by
- * weight; collapsing one docks its header at the bottom, leaving the
- * real estate to the rest.
+ * VSCode-style sidebar sections: expanded sections size to their
+ * content (capped — see .dg-sidebar-section in index.css) and shrink
+ * when space runs out; the explorer tree absorbs whatever is left.
+ * Collapsing a section docks its header at the bottom.
  */
 
 export interface SidebarSection {
 	id: string;
 	title: ReactNode;
-	/** Flex weight when expanded (the tree wants the most). */
-	weight: number;
 	body: ReactNode;
 }
 
@@ -66,11 +65,7 @@ export function SidebarSections(props: { sections: SidebarSection[] }) {
 	return (
 		<>
 			{expanded.map((section) => (
-				<section
-					key={section.id}
-					className="dg-sidebar-section"
-					style={{ flexGrow: section.weight, flexBasis: "auto" }}
-				>
+				<section key={section.id} className="dg-sidebar-section">
 					{header(section, true)}
 					<div className="dg-sidebar-section-body dg-scroll">
 						{section.body}

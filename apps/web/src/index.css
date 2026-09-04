@@ -180,7 +180,7 @@ button:disabled {
 /* ---- sidebar ------------------------------------------------- */
 
 .dg-sidebar {
-	width: 240px;
+	/* Width is set inline from the user's drag; see Workspace.tsx. */
 	flex: none;
 	background: var(--dg-panel);
 	border-right: 1px solid var(--dg-rule);
@@ -189,16 +189,32 @@ button:disabled {
 	overflow: hidden;
 }
 
-/* ---- collapsible sections (VSCode-style: expanded share by weight,
-   collapsed headers dock at the bottom) --------------------------- */
+.dg-sidebar-resizer {
+	flex: none;
+	width: 5px;
+	margin: 0 0 0 -3px;
+	border: none;
+	cursor: col-resize;
+	z-index: 5;
+}
+
+.dg-sidebar-resizer:hover,
+.dg-sidebar-resizer:active {
+	background: var(--dg-violet);
+}
+
+/* ---- collapsible sections: expanded sections size to content, capped
+   so a long file list can't crush the tree; when space runs out they
+   shrink proportionally and their bodies scroll. Collapsed headers dock
+   at the bottom. ---------------------------------------------- */
 
 /* Explorer is never collapsible: no section header, the breadcrumb is its
-   chrome. It takes the real estate the collapsed sections leave behind. */
+   chrome. It absorbs the real estate the content-sized sections leave. */
 .dg-explorer-region {
 	display: flex;
 	flex-direction: column;
-	flex: 4 1 0;
-	min-height: 0;
+	flex: 1 1 0;
+	min-height: 120px;
 }
 
 .dg-explorer-region .dg-explorer {
@@ -210,9 +226,10 @@ button:disabled {
 .dg-sidebar-section {
 	display: flex;
 	flex-direction: column;
+	flex: 0 1 auto;
 	min-height: 0;
+	max-height: 50%;
 	border-top: 1px solid var(--dg-rule);
-	flex-shrink: 1;
 }
 
 .dg-sidebar-section:first-child {
@@ -1332,31 +1349,8 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 /* ---- modals ------------------------------------------------------- */
 
-.dg-modal-backdrop {
-	position: fixed;
-	inset: 0;
-	background: rgba(4, 6, 10, 0.6);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	z-index: 100;
-}
-
-.dg-modal {
-	background: var(--dg-panel);
-	border: 1px solid var(--dg-rule);
-	border-radius: var(--dg-radius-panel);
-	padding: 18px;
-	width: 420px;
-	max-height: 85vh;
-	overflow-y: auto;
-}
-
-.dg-modal-title {
-	font-weight: 500;
-	font-size: var(--dg-fs-body);
-	margin-bottom: 12px;
-}
+/* Backdrop/modal chrome is gone — forms are dock tabs (see below).
+   .dg-modal-hint survives for the auth screen and mock panels. */
 
 .dg-modal-hint {
 	color: var(--dg-ink-mute);
@@ -1420,14 +1414,219 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	font-size: 12px;
 }
 
-.dg-modal-actions {
-	display: flex;
-	gap: 8px;
-	margin-top: 14px;
-}
-
 .dg-modal-actions-spacer {
 	flex: 1;
+}
+
+/* ---- tab forms (datasource, project) — style per
+   docs/brand/mocks/datasource-selector.html ------------------------- */
+
+.dg-form {
+	height: 100%;
+	overflow-y: auto;
+}
+
+.dg-form-body {
+	padding: 16px 18px;
+	max-width: 640px;
+}
+
+.dg-form-title {
+	font-weight: 500;
+	font-size: 15px;
+	margin: 0 0 3px;
+}
+
+.dg-form-lead {
+	font-size: 12.5px;
+	color: var(--dg-ink-mute);
+	margin: 0 0 16px;
+}
+
+.dg-form-lead b {
+	color: var(--dg-ink);
+	font-weight: 500;
+}
+
+.dg-form-note {
+	font-size: 11.5px;
+	color: var(--dg-ink-mute);
+	margin: 6px 0 0;
+}
+
+.dg-form-section {
+	margin-top: 20px;
+	padding-top: 14px;
+	border-top: 1px solid var(--dg-rule);
+}
+
+.dg-form-section-title {
+	display: block;
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-mute);
+	margin-bottom: 10px;
+}
+
+.dg-form fieldset.dg-eng {
+	margin-bottom: 18px;
+}
+
+/* Engine picker and class picker use fieldset/legend; reset the UA
+   chrome so they compose with .dg-field. */
+.dg-form fieldset {
+	border: none;
+	padding: 0;
+	margin: 0 0 10px;
+	min-width: 0;
+}
+
+.dg-form legend {
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-mute);
+	padding: 0;
+	margin-bottom: 4px;
+}
+
+.dg-eng {
+	display: flex;
+	gap: 7px;
+	flex-wrap: wrap;
+	margin-bottom: 18px;
+}
+
+.dg-eng button {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-family: var(--dg-font-mono);
+	font-size: 11.5px;
+	color: var(--dg-ink-dim);
+	background: transparent;
+	border: 1px solid var(--dg-rule);
+	border-radius: 7px;
+	padding: 7px 12px;
+}
+
+.dg-eng button:hover:not(:disabled) {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
+}
+
+.dg-eng button[aria-pressed="true"] {
+	border-color: var(--dg-violet);
+	background: var(--dg-sev-warning-bg);
+	color: var(--dg-ink);
+}
+
+.dg-fgrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+	gap: 11px;
+	margin-bottom: 12px;
+}
+
+.dg-fgrid .dg-field {
+	margin-bottom: 0;
+}
+
+.dg-cls {
+	display: flex;
+	gap: 7px;
+	flex-wrap: wrap;
+	margin-top: 5px;
+}
+
+.dg-cls button {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	padding: 5px 11px;
+	border-radius: 6px;
+	background: transparent;
+	border: 1px solid var(--dg-rule);
+	color: var(--dg-ink-mute);
+}
+
+.dg-cls button:hover:not(:disabled) {
+	color: var(--dg-ink);
+}
+
+.dg-cls button[aria-pressed="true"] {
+	color: var(--dg-ink);
+	border-color: var(--cc);
+}
+
+.dg-cls-sw {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--cc);
+}
+
+.dg-frow {
+	display: flex;
+	gap: 9px;
+	align-items: center;
+	margin-top: 18px;
+	padding-top: 15px;
+	border-top: 1px solid var(--dg-rule);
+}
+
+.dg-btn {
+	font-family: var(--dg-font-mono);
+	font-size: 11.5px;
+	padding: 6px 14px;
+	border-radius: 6px;
+	background: transparent;
+	border: 1px solid var(--dg-rule);
+	color: var(--dg-ink-dim);
+}
+
+.dg-btn:hover:not(:disabled) {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
+}
+
+.dg-btn-pri {
+	border-color: var(--dg-green);
+	color: var(--dg-green);
+}
+
+.dg-btn-pri:hover:not(:disabled) {
+	background: var(--dg-sev-style-bg);
+	color: var(--dg-green);
+}
+
+.dg-testline {
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-mute);
+	margin-left: auto;
+}
+
+.dg-testline.is-ok {
+	color: var(--dg-green);
+}
+
+.dg-testline.is-err {
+	color: var(--dg-magenta);
+}
+
+.dg-header-cog {
+	background: none;
+	border: none;
+	padding: 2px 6px;
+	color: var(--dg-ink-dim);
+	font-size: 14px;
+}
+
+.dg-header-cog:hover:not(:disabled) {
+	background: none;
+	color: var(--dg-ink);
 }
 
 /* ---- results ------------------------------------------------------- */

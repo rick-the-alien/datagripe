@@ -45,6 +45,18 @@ export async function listWorkspaces(
 	return rows;
 }
 
+export async function renameWorkspace(
+	appDb: AppDb,
+	workspaceId: string,
+	name: string,
+): Promise<void> {
+	await appDb`
+		UPDATE workspaces SET name = ${name}
+		WHERE id = ${workspaceId}
+	`;
+	log.audit("workspace.rename", { workspaceId, name });
+}
+
 export async function setDefaultConnection(
 	appDb: AppDb,
 	workspaceId: string,

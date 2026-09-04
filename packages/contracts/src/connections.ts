@@ -28,6 +28,9 @@ export const connectionMetadataSchema = z.object({
 	username: z.string().max(255).nullable(),
 	tlsMode: tlsModeSchema.nullable(),
 	readOnly: z.boolean(),
+	/** Tree shows every schema as an expandable level instead of scoping
+	 * to the single namespace picked in the breadcrumb. */
+	showAllSchemas: z.boolean(),
 	source: connectionSourceSchema,
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
@@ -45,6 +48,7 @@ const connectionBaseFields = z.object({
 	password: z.string().max(1024),
 	tlsMode: tlsModeSchema.optional(),
 	readOnly: z.boolean().default(true),
+	showAllSchemas: z.boolean().default(false),
 });
 
 function checkAdapterFields(ctx: {
@@ -98,6 +102,7 @@ export const connectionUpdateRequestSchema = z.object({
 	password: z.string().max(1024).optional(),
 	tlsMode: tlsModeSchema.optional(),
 	readOnly: z.boolean().optional(),
+	showAllSchemas: z.boolean().optional(),
 	idempotencyKey: z.string().min(8).max(128),
 });
 

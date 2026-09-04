@@ -9,9 +9,10 @@ import { create } from "zustand";
 import type { WsRequestFn } from "../api/ws";
 
 /**
- * Connection metadata state (never secrets) plus the connection dialog's
- * open/editing state. Loaded via `workspace.open` after the socket
- * connects; mutations go through WS actions and refresh the list.
+ * Connection metadata state (never secrets). Loaded via `workspace.open`
+ * after the socket connects; mutations go through WS actions and refresh
+ * the list. The create/edit form lives in a dock tab (ConnectionForm)
+ * which keeps its own draft/test UI state.
  */
 
 /** Only fields the adapter actually uses — nothing phantom is stored. */
@@ -27,6 +28,7 @@ function scopedPayload(draft: ConnectionDraft) {
 		password: draft.password,
 		...(caps.fields.includes("tlsMode") ? { tlsMode: draft.tlsMode } : {}),
 		readOnly: draft.readOnly,
+		showAllSchemas: draft.showAllSchemas,
 	};
 }
 
@@ -41,34 +43,25 @@ export type ConnectionDraft = {
 	password: string;
 	tlsMode: "disable" | "require" | "verify-full";
 	readOnly: boolean;
+	/** Tree shows every schema as an expandable level. */
+	showAllSchemas: boolean;
 };
-
-export type DialogState =
-	| { mode: "closed" }
-	| { mode: "create" }
-	| { mode: "edit"; connection: ConnectionMetadata };
 
 export type ConnectionsState = {
 	connections: ConnectionMetadata[];
 	loaded: boolean;
 	workspaceName: string | null;
-	dialog: DialogState;
-	saving: boolean;
-	testing: boolean;
-	testResult: ConnectionTestResult | null;
 	load: () => Promise<WorkspaceOpenResult>;
-	openCreateDialog: () => void;
-	openEditDialog: (connection: ConnectionMetadata) => void;
-	closeDialog: () => void;
+	/** Returns the saved connection's id (managed connections only). */
 	saveDraft: (
 		draft: ConnectionDraft,
 		editingId: string | null,
-	) => Promise<void>;
+	) => Promise<string | null>;
 	remove: (id: string) => Promise<void>;
 	testDraft: (
 		draft: ConnectionDraft,
 		editingId: string | null,
-	) => Promise<void>;
+	) => Promise<ConnectionTestResult>;
 };
 
 export function createConnectionsStore(request: WsRequestFn) {
@@ -76,10 +69,6 @@ export function createConnectionsStore(request: WsRequestFn) {
 		connections: [],
 		loaded: false,
 		workspaceName: null,
-		dialog: { mode: "closed" },
-		saving: false,
-		testing: false,
-		testResult: null,
 
 		async load() {
 			const result = await request<WorkspaceOpenResult>("workspace.open", {});
@@ -91,41 +80,26 @@ export function createConnectionsStore(request: WsRequestFn) {
 			return result;
 		},
 
-		openCreateDialog() {
-			set({ dialog: { mode: "create" }, testResult: null });
-		},
-
-		openEditDialog(connection) {
-			set({ dialog: { mode: "edit", connection }, testResult: null });
-		},
-
-		closeDialog() {
-			set({ dialog: { mode: "closed" }, testResult: null });
-		},
-
 		async saveDraft(draft, editingId) {
-			set({ saving: true });
-			try {
-				const scoped = scopedPayload(draft);
-				if (editingId === null) {
-					await request("connection.create", {
-						...scoped,
-						idempotencyKey: crypto.randomUUID(),
-					});
-				} else {
-					const { password: _password, ...withoutPassword } = scoped;
-					await request("connection.update", {
-						id: editingId,
-						...withoutPassword,
-						...(draft.password.length > 0 ? { password: draft.password } : {}),
-						idempotencyKey: crypto.randomUUID(),
-					});
-				}
-				set({ dialog: { mode: "closed" }, testResult: null });
-				await get().load();
-			} finally {
-				set({ saving: false });
+			const scoped = scopedPayload(draft);
+			let id: string | null = editingId;
+			if (editingId === null) {
+				const created = await request<ConnectionMetadata>("connection.create", {
+					...scoped,
+					idempotencyKey: crypto.randomUUID(),
+				});
+				id = created.id;
+			} else {
+				const { password: _password, ...withoutPassword } = scoped;
+				await request("connection.update", {
+					id: editingId,
+					...withoutPassword,
+					...(draft.password.length > 0 ? { password: draft.password } : {}),
+					idempotencyKey: crypto.randomUUID(),
+				});
 			}
+			await get().load();
+			return id;
 		},
 
 		async remove(id) {
@@ -137,30 +111,21 @@ export function createConnectionsStore(request: WsRequestFn) {
 		},
 
 		async testDraft(draft, editingId) {
-			set({ testing: true, testResult: null });
+			// Editing with an untouched (empty) password tests the saved
+			// connection so the stored secret is exercised.
+			const payload =
+				editingId !== null && draft.password.length === 0
+					? { connectionId: editingId }
+					: { draft: scopedPayload(draft) };
 			try {
-				// Editing with an untouched (empty) password tests the saved
-				// connection so the stored secret is exercised.
-				const payload =
-					editingId !== null && draft.password.length === 0
-						? { connectionId: editingId }
-						: { draft: scopedPayload(draft) };
-				const result = await request<ConnectionTestResult>(
-					"connection.test",
-					payload,
-				);
-				set({ testResult: result });
+				return await request<ConnectionTestResult>("connection.test", payload);
 			} catch (error) {
-				set({
-					testResult: {
-						ok: false,
-						error: {
-							message: error instanceof Error ? error.message : "Test failed",
-						},
+				return {
+					ok: false,
+					error: {
+						message: error instanceof Error ? error.message : "Test failed",
 					},
-				});
-			} finally {
-				set({ testing: false });
+				};
 			}
 		},
 	}));

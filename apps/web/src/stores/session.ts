@@ -34,7 +34,8 @@ export type SessionState = {
 	load: () => Promise<void>;
 	loadWorkspaces: () => Promise<void>;
 	switchWorkspace: (id: string) => void;
-	createWorkspace: (name: string) => Promise<void>;
+	createWorkspace: (name: string) => Promise<WorkspaceListEntry>;
+	renameWorkspace: (name: string) => Promise<void>;
 	confirmWorkspace: (workspace: CurrentWorkspace) => void;
 	login: (email: string, password: string) => Promise<boolean>;
 	signup: (email: string, password: string) => Promise<boolean>;
@@ -110,6 +111,24 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 		);
 		await get().loadWorkspaces();
 		get().switchWorkspace(result.workspace.id);
+		return result.workspace;
+	},
+
+	async renameWorkspace(name) {
+		const result = await wsClient.request<{
+			workspace: { id: string; name: string };
+		}>("workspace.rename", { name });
+		const current = get().currentWorkspace;
+		if (current !== null && current.id === result.workspace.id) {
+			set({ currentWorkspace: { ...current, name: result.workspace.name } });
+		}
+		set({
+			workspaces: get().workspaces.map((entry) =>
+				entry.id === result.workspace.id
+					? { ...entry, name: result.workspace.name }
+					: entry,
+			),
+		});
 	},
 
 	/** Called with every workspace.open result: confirms the actual bound

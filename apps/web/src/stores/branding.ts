@@ -18,6 +18,13 @@ export const PROJECT_CLASS_COLORS: Record<ProjectClass, string> = {
 	analytics: "var(--dg-proj-analytics)",
 };
 
+export const PROJECT_CLASSES: ProjectClass[] = [
+	"local",
+	"staging",
+	"production",
+	"analytics",
+];
+
 export type AttitudeLevel = "notice" | "warning" | "fatal" | "panic";
 
 const CLASS_STORAGE_KEY = "dg.mock.workspaceClass";

@@ -717,12 +717,16 @@ function TreeNode(props: {
 	);
 
 	// While filtering, categories self-load so their objects can match.
+	// Schema/db levels do the same — with "show all schemas" a match can
+	// live in any schema, not just the expanded ones.
+	const selfLoads =
+		isCategory || props.node.kind === "schema" || props.node.kind === "db";
 	// biome-ignore lint/correctness/useExhaustiveDependencies: path is rebuilt per render; keyed on its stable string form instead
 	useEffect(() => {
-		if (filtering && isCategory && children === undefined) {
+		if (filtering && selfLoads && children === undefined) {
 			void ensure(props.connectionId, path);
 		}
-	}, [filtering, isCategory, children, ensure, props.connectionId, key]);
+	}, [filtering, selfLoads, children, ensure, props.connectionId, key]);
 
 	// In filter mode a node with matches opens for the duration without
 	// touching the stored expansion state.

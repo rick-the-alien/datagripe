@@ -51,6 +51,7 @@ const PREDEFINED: PredefinedEntry = {
 		passwordEnv: "DEV_PG_PASSWORD",
 		tlsMode: "disable",
 		readOnly: true,
+		showAllSchemas: false,
 		workspaces: ["*"],
 	},
 	resolved: {
@@ -118,6 +119,7 @@ const CREATE_REQUEST = {
 	password: "super-secret-pw",
 	tlsMode: "disable" as const,
 	readOnly: true,
+	showAllSchemas: false,
 	idempotencyKey: "test-key-0001",
 };
 
@@ -168,9 +170,11 @@ describe("connections service", () => {
 			id: target.id,
 			name: "Renamed PG",
 			password: "new-secret-pw-2",
+			showAllSchemas: true,
 			idempotencyKey: "test-key-0002",
 		});
 		expect(updated.name).toBe("Renamed PG");
+		expect(updated.showAllSchemas).toBe(true);
 		expect(updated.host).toBe(target?.host ?? null);
 
 		const newSecret = await appDb<{ ciphertext: Buffer }[]>`
@@ -210,8 +214,8 @@ describe("connections service", () => {
 					databaseName: "postgres",
 					username: "datagripe",
 					password: "datagripe",
-					tlsMode: "disable",
 					readOnly: true,
+					showAllSchemas: false,
 				},
 			});
 			expect(draft.ok).toBe(true);

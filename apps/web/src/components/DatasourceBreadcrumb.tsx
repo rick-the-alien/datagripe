@@ -1,5 +1,6 @@
 import type { ConnectionMetadata } from "@datagripe/contracts";
 import { useEffect, useRef, useState } from "react";
+import { openConnectionForm } from "../app/viewPanels";
 import {
 	defaultNamespace,
 	ENGINE_CHIPS,
@@ -65,10 +66,6 @@ export function DatasourceBreadcrumb() {
 	const setNamespace = useDatasourceStore((state) => state.setNamespace);
 	const ensure = useExplorerStore((state) => state.ensure);
 	const refresh = useExplorerStore((state) => state.refresh);
-	const openCreateDialog = useConnectionsStore(
-		(state) => state.openCreateDialog,
-	);
-	const openEditDialog = useConnectionsStore((state) => state.openEditDialog);
 	const removeConnection = useConnectionsStore((state) => state.remove);
 
 	const active =
@@ -151,7 +148,7 @@ export function DatasourceBreadcrumb() {
 					type="button"
 					className="dg-crumb-action"
 					title="New datasource"
-					onClick={openCreateDialog}
+					onClick={() => openConnectionForm(null)}
 				>
 					＋
 				</button>
@@ -277,7 +274,7 @@ export function DatasourceBreadcrumb() {
 										aria-label={`${connection.source === "predefined" ? "View" : "Edit"} ${connection.name}`}
 										onClick={() => {
 											setPopover(null);
-											openEditDialog(connection);
+											openConnectionForm(connection);
 										}}
 									>
 										✎
@@ -312,7 +309,7 @@ export function DatasourceBreadcrumb() {
 						className="dg-crumb-act"
 						onClick={() => {
 							setPopover(null);
-							openCreateDialog();
+							openConnectionForm(null);
 						}}
 					>
 						<span className="dg-crumb-plus">＋</span>new datasource…
@@ -323,7 +320,7 @@ export function DatasourceBreadcrumb() {
 						className="dg-crumb-act dg-crumb-act-mut"
 						onClick={() => {
 							setPopover(null);
-							openEditDialog(active);
+							openConnectionForm(active);
 						}}
 					>
 						<span className="dg-crumb-plus">⚙</span>manage datasource…
@@ -367,12 +364,17 @@ export function DatasourceBreadcrumb() {
 	);
 }
 
-/** Tree root path for the selected datasource + namespace: `[schema]` on
+/** Tree root path for the selected datasource + namespace: `[]` when the
+ * datasource shows every schema as a tree level (the namespace stays the
+ * query default but no longer scopes the tree), otherwise `[schema]` on
  * SQL engines, `[db]` on Redis. Exported for the Explorer. */
 export function treeRootPath(
 	connection: ConnectionMetadata,
 	namespace: string | undefined,
 ): { kind: "schema" | "db"; name: string }[] | null {
+	if (connection.showAllSchemas) {
+		return [];
+	}
 	if (namespace === undefined) {
 		return null;
 	}

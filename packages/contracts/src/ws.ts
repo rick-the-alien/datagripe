@@ -14,6 +14,7 @@ export const clientActionSchema = z.enum([
 	"workspace.create",
 	"workspace.list",
 	"workspace.set-default-connection",
+	"workspace.rename",
 	"workspace.members",
 	"workspace.member.add",
 	"workspace.member.remove",

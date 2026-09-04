@@ -24,6 +24,8 @@ export const predefinedConnectionSchema = z
 		password: z.string().max(1024).optional(),
 		tlsMode: tlsModeSchema.default("disable"),
 		readOnly: z.boolean().default(true),
+		/** Tree shows every schema as an expandable level. */
+		showAllSchemas: z.boolean().default(false),
 		/** Workspace names, or ["*"] for every workspace. */
 		workspaces: z.array(z.string().min(1)).min(1),
 	})

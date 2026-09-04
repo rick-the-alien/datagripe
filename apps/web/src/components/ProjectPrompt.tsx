@@ -1,33 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { openNewProject } from "../app/viewPanels";
 import { useQueryBusy } from "../hooks/useQueryBusy";
-import {
-	PROJECT_CLASS_COLORS,
-	type ProjectClass,
-	useBrandingStore,
-} from "../stores/branding";
+import { PROJECT_CLASS_COLORS, useBrandingStore } from "../stores/branding";
 import { useSessionStore } from "../stores/session";
-import { MockBadge } from "./MockBadge";
-
-const PROJECT_CLASSES: ProjectClass[] = [
-	"local",
-	"staging",
-	"production",
-	"analytics",
-];
 
 /**
  * The project switcher is a shell prompt, not a control
  * (brand-system.md "Projects and the prompt"): `>Datagripe:<project>_`.
  * Brand fixed, project name takes the class accent, cursor blinks idle
- * and goes solid while a statement runs. Click opens the switcher.
+ * and goes solid while a statement runs. Click opens the switcher;
+ * "New project…" opens the form tab.
  */
 export function ProjectPrompt() {
 	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
 	const workspaces = useSessionStore((state) => state.workspaces);
 	const switchWorkspace = useSessionStore((state) => state.switchWorkspace);
-	const createWorkspace = useSessionStore((state) => state.createWorkspace);
 	const classFor = useBrandingStore((state) => state.classFor);
-	const setClass = useBrandingStore((state) => state.setClass);
 	const busy = useQueryBusy();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLSpanElement | null>(null);
@@ -119,37 +107,11 @@ export function ProjectPrompt() {
 						role="menuitem"
 						onClick={() => {
 							setOpen(false);
-							const name = window.prompt("Project name");
-							if (name !== null && name.trim().length > 0) {
-								void createWorkspace(name.trim());
-							}
+							openNewProject();
 						}}
 					>
 						New project…
 					</button>
-					{currentWorkspace !== null && (
-						<div className="dg-prompt-class-picker">
-							<span>
-								Class <MockBadge />
-							</span>
-							<select
-								aria-label="Project class (mock)"
-								value={projectClass}
-								onChange={(event) =>
-									setClass(
-										currentWorkspace.id,
-										event.target.value as ProjectClass,
-									)
-								}
-							>
-								{PROJECT_CLASSES.map((value) => (
-									<option key={value} value={value}>
-										{value}
-									</option>
-								))}
-							</select>
-						</div>
-					)}
 				</div>
 			)}
 		</span>

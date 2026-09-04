@@ -48,6 +48,7 @@ type ConnectionRow = {
 	username: string | null;
 	tls_mode: "disable" | "require" | "verify-full" | null;
 	read_only: boolean;
+	show_all_schemas: boolean;
 	created_at: string;
 	updated_at: string;
 };
@@ -123,6 +124,7 @@ function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
 		username: row.username,
 		tlsMode: row.tls_mode,
 		readOnly: row.read_only,
+		showAllSchemas: row.show_all_schemas,
 		source: "managed",
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
@@ -155,6 +157,7 @@ export function createConnectionsService(
 			username: definition.username ?? null,
 			tlsMode: definition.tlsMode,
 			readOnly: definition.readOnly,
+			showAllSchemas: definition.showAllSchemas,
 			source: "predefined",
 			createdAt: entry.loadedAt,
 			updatedAt: entry.loadedAt,
@@ -255,11 +258,12 @@ export function createConnectionsService(
 				const inserted = await tx<ConnectionRow[]>`
 					INSERT INTO connections (
 						workspace_id, name, adapter, host, port,
-						database_name, username, tls_mode, read_only
+						database_name, username, tls_mode, read_only, show_all_schemas
 					) VALUES (
 						${workspace.id}, ${request.name}, ${request.adapter},
 						${request.host ?? null}, ${request.port ?? null}, ${request.databaseName},
-						${request.username ?? null}, ${request.tlsMode ?? null}, ${request.readOnly}
+						${request.username ?? null}, ${request.tlsMode ?? null}, ${request.readOnly},
+						${request.showAllSchemas}
 					)
 					RETURNING *
 				`;
@@ -307,6 +311,8 @@ export function createConnectionsService(
 				username: request.username ?? existing[0].username,
 				tls_mode: request.tlsMode ?? existing[0].tls_mode,
 				read_only: request.readOnly ?? existing[0].read_only,
+				show_all_schemas:
+					request.showAllSchemas ?? existing[0].show_all_schemas,
 			};
 			const rows = await appDb.begin(async (tx) => {
 				const updated = await tx<ConnectionRow[]>`
@@ -318,6 +324,7 @@ export function createConnectionsService(
 						username = ${merged.username},
 						tls_mode = ${merged.tls_mode},
 						read_only = ${merged.read_only},
+						show_all_schemas = ${merged.show_all_schemas},
 						updated_at = now()
 					WHERE id = ${request.id}
 					RETURNING *

@@ -10,18 +10,24 @@ import {
 	type DockviewReadyEvent,
 	type SerializedDockview,
 } from "dockview-react";
-import { useEffect, useRef, useState } from "react";
+import {
+	type PointerEvent as ReactPointerEvent,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { wsClient } from "../api/ws";
 import { ActivityBar } from "../components/ActivityBar";
-import { ConnectionDialog } from "../components/ConnectionDialog";
+import { ConnectionForm } from "../components/ConnectionForm";
 import { DocumentSidebar } from "../components/DocumentSidebar";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
 import { GripesPanel } from "../components/GripesPanel";
-import { MembersDialog } from "../components/MembersDialog";
+import { NewProjectForm } from "../components/NewProjectForm";
 import { ObjectView } from "../components/ObjectView";
 import { PresenceSidebar } from "../components/PresenceSidebar";
 import { ProjectPrompt } from "../components/ProjectPrompt";
+import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { SidebarSections } from "../components/SidebarSections";
 import { StatusBar } from "../components/StatusBar";
@@ -47,9 +53,35 @@ import {
 	panelDocumentId,
 } from "./editorPanels";
 import { registerResultsOpener } from "./resultsPanel";
-import { registerViewPanelOpeners } from "./viewPanels";
+import { openProjectSettings, registerViewPanelOpeners } from "./viewPanels";
 
 const LAYOUT_SAVE_DELAY_MS = 500;
+
+/** Sidebar width is a user preference, not layout — it applies to every
+ * workspace, so it lives in localStorage rather than the dock layout. */
+const SIDEBAR_WIDTH_KEY = "dg.sidebar.width";
+const SIDEBAR_DEFAULT_WIDTH = 240;
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 520;
+
+function clampSidebarWidth(width: number): number {
+	return Math.min(
+		SIDEBAR_MAX_WIDTH,
+		Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)),
+	);
+}
+
+function readSidebarWidth(): number {
+	try {
+		const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+		const parsed = raw === null ? Number.NaN : Number(raw);
+		return Number.isFinite(parsed)
+			? clampSidebarWidth(parsed)
+			: SIDEBAR_DEFAULT_WIDTH;
+	} catch {
+		return SIDEBAR_DEFAULT_WIDTH;
+	}
+}
 
 const layoutDebouncer = createDebouncer();
 
@@ -76,6 +108,9 @@ const components = {
 	tableView: TableView,
 	objectView: ObjectView,
 	gripes: GripesPanel,
+	connectionForm: ConnectionForm,
+	newProject: NewProjectForm,
+	projectSettings: ProjectSettingsPanel,
 };
 
 function persistLayout(api: DockviewApi): void {
@@ -129,7 +164,35 @@ function saveActiveDocument(): void {
 export function Workspace() {
 	const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
 	const dockApiRef = useRef<DockviewApi | null>(null);
-	const [showMembers, setShowMembers] = useState(false);
+	const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth);
+
+	const persistSidebarWidth = (width: number) => {
+		setSidebarWidth(width);
+		try {
+			localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+		} catch {
+			// Storage blocked — the width just stops persisting.
+		}
+	};
+
+	const startSidebarResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+		event.preventDefault();
+		const startX = event.clientX;
+		const startWidth = sidebarWidth;
+		let lastWidth = startWidth;
+		const onMove = (move: PointerEvent) => {
+			lastWidth = clampSidebarWidth(startWidth + move.clientX - startX);
+			setSidebarWidth(lastWidth);
+		};
+		const onUp = () => {
+			window.removeEventListener("pointermove", onMove);
+			window.removeEventListener("pointerup", onUp);
+			persistSidebarWidth(lastWidth);
+		};
+		window.addEventListener("pointermove", onMove);
+		window.addEventListener("pointerup", onUp);
+	};
+
 	const sessionUser = useSessionStore((state) => state.bootstrap?.user);
 	const authDisabled = useSessionStore(
 		(state) => state.bootstrap?.authDisabled ?? false,
@@ -362,9 +425,15 @@ export function Workspace() {
 				{currentWorkspace !== null && (
 					<span className="dg-header-meta">{currentWorkspace.role}</span>
 				)}
-				{!authDisabled && (
-					<button type="button" onClick={() => setShowMembers(true)}>
-						Members
+				{currentWorkspace !== null && (
+					<button
+						type="button"
+						className="dg-header-cog"
+						title="Project settings"
+						aria-label="Project settings"
+						onClick={() => openProjectSettings()}
+					>
+						⚙
 					</button>
 				)}
 				<span className="dg-header-meta">{sessionUser?.email}</span>
@@ -375,7 +444,7 @@ export function Workspace() {
 				)}
 			</header>
 			<div className="dg-body">
-				<aside className="dg-sidebar">
+				<aside className="dg-sidebar" style={{ width: sidebarWidth }}>
 					<div className="dg-explorer-region">
 						<Explorer />
 					</div>
@@ -384,7 +453,6 @@ export function Workspace() {
 							{
 								id: "files",
 								title: "Workspace files",
-								weight: 1,
 								body: (
 									<DocumentSidebar
 										kind="shared"
@@ -410,7 +478,6 @@ export function Workspace() {
 							{
 								id: "scratch",
 								title: "Scratchpads (local)",
-								weight: 1,
 								body: (
 									<DocumentSidebar
 										kind="scratch"
@@ -436,12 +503,31 @@ export function Workspace() {
 							{
 								id: "online",
 								title: "Online",
-								weight: 1,
 								body: <PresenceSidebar />,
 							},
 						]}
 					/>
 				</aside>
+				<hr
+					className="dg-sidebar-resizer"
+					aria-orientation="vertical"
+					aria-label="Resize sidebar"
+					aria-valuenow={sidebarWidth}
+					aria-valuemin={SIDEBAR_MIN_WIDTH}
+					aria-valuemax={SIDEBAR_MAX_WIDTH}
+					tabIndex={0}
+					onPointerDown={startSidebarResize}
+					onKeyDown={(event) => {
+						if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+							event.preventDefault();
+							persistSidebarWidth(
+								clampSidebarWidth(
+									sidebarWidth + (event.key === "ArrowRight" ? 16 : -16),
+								),
+							);
+						}
+					}}
+				/>
 				<div className="dg-dock-container">
 					{hydrated ? (
 						<DockviewReact
@@ -457,8 +543,6 @@ export function Workspace() {
 				</div>
 			</div>
 			<StatusBar />
-			<ConnectionDialog />
-			{showMembers && <MembersDialog onClose={() => setShowMembers(false)} />}
 		</div>
 	);
 }

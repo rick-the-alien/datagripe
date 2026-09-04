@@ -89,6 +89,14 @@ export type WorkspaceCreateRequest = z.infer<
 	typeof workspaceCreateRequestSchema
 >;
 
+export const workspaceRenameRequestSchema = z.object({
+	name: z.string().min(1).max(255),
+});
+
+export type WorkspaceRenameRequest = z.infer<
+	typeof workspaceRenameRequestSchema
+>;
+
 export const workspaceListEntrySchema = z.object({
 	id: z.uuid(),
 	name: z.string().min(1).max(255),

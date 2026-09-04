@@ -12,7 +12,7 @@ const serializedPanelSchema = z
 	.object({
 		id: z.string().min(1),
 		contentComponent: z.string().min(1).optional(),
-		params: z.object({ documentId: z.uuid() }).loose().optional(),
+		params: z.object({ documentId: z.uuid().optional() }).loose().optional(),
 	})
 	.loose();
 

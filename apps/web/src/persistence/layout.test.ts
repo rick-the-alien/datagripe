@@ -65,6 +65,17 @@ describe("parseLayout", () => {
 		expect(parseLayout({ grid: {} })).toBeUndefined();
 		expect(parseLayout(null)).toBeUndefined();
 	});
+
+	test("accepts non-editor panels whose params carry no documentId", () => {
+		const withResults = layout();
+		withResults.panels.results = {
+			id: "results",
+			contentComponent: "results",
+			params: { view: "results" },
+			title: "Results",
+		};
+		expect(parseLayout(withResults)).toBeDefined();
+	});
 });
 
 describe("sanitizeLayout", () => {

@@ -6,6 +6,7 @@ import type {
 } from "@datagripe/contracts";
 import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { wsClient } from "../api/ws";
 import { ENGINE_CHIPS } from "../stores/datasource";
 import { type DocumentsState, useDocumentsStore } from "../stores/documents";
@@ -48,22 +49,35 @@ function TargetSelect(props: {
 	onChange: (connectionId: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
+	const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(
+		null,
+	);
 	const rootRef = useRef<HTMLDivElement | null>(null);
+	const popRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
 		if (!open) {
 			return;
 		}
-		const close = () => setOpen(false);
+		const onPointerDown = (event: MouseEvent) => {
+			const target = event.target as Node;
+			if (
+				rootRef.current?.contains(target) === true ||
+				popRef.current?.contains(target) === true
+			) {
+				return;
+			}
+			setOpen(false);
+		};
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setOpen(false);
 			}
 		};
-		window.addEventListener("mousedown", close);
+		window.addEventListener("mousedown", onPointerDown);
 		window.addEventListener("keydown", onKeyDown);
 		return () => {
-			window.removeEventListener("mousedown", close);
+			window.removeEventListener("mousedown", onPointerDown);
 			window.removeEventListener("keydown", onKeyDown);
 		};
 	}, [open]);
@@ -71,7 +85,19 @@ function TargetSelect(props: {
 	const current = props.connections.find(
 		(connection) => connection.id === props.value,
 	);
-	const anchor = rootRef.current?.getBoundingClientRect();
+
+	const toggle = () => {
+		if (!open) {
+			// Fixed positioning: dockview's `contain: layout` makes fixed
+			// coordinates panel-relative, so the popover is portalled to
+			// document.body and anchored to the button's viewport rect.
+			const rect = rootRef.current?.getBoundingClientRect();
+			setAnchor(
+				rect === undefined ? null : { top: rect.bottom + 4, left: rect.left },
+			);
+		}
+		setOpen((value) => !value);
+	};
 
 	return (
 		<div ref={rootRef} className="dg-tgt">
@@ -82,7 +108,7 @@ function TargetSelect(props: {
 				aria-expanded={open}
 				aria-haspopup="true"
 				aria-label="Execution target"
-				onClick={() => setOpen((value) => !value)}
+				onClick={toggle}
 			>
 				{current !== undefined && (
 					<span className="dg-crumb-chip">{ENGINE_CHIPS[current.adapter]}</span>
@@ -92,38 +118,42 @@ function TargetSelect(props: {
 				</span>
 				<span className="dg-crumb-chev">▾</span>
 			</button>
-			{open && anchor !== undefined && (
-				<div
-					className="dg-crumb-pop dg-scroll"
-					role="menu"
-					style={{
-						position: "fixed",
-						top: anchor.bottom + 4,
-						left: anchor.left,
-					}}
-				>
-					{props.connections.map((connection) => (
-						<button
-							key={connection.id}
-							type="button"
-							role="menuitem"
-							className={`dg-crumb-item dg-crumb-item-main${
-								connection.id === props.value ? " dg-crumb-item-cur" : ""
-							}`}
-							onClick={() => {
-								setOpen(false);
-								props.onChange(connection.id);
-							}}
-						>
-							<span className="dg-crumb-chip">
-								{ENGINE_CHIPS[connection.adapter]}
-							</span>
-							{connection.name}
-							<span className="dg-crumb-sub">{connection.adapter}</span>
-						</button>
-					))}
-				</div>
-			)}
+			{open &&
+				anchor !== null &&
+				createPortal(
+					<div
+						ref={popRef}
+						className="dg-crumb-pop dg-scroll"
+						role="menu"
+						style={{
+							position: "fixed",
+							top: anchor.top,
+							left: anchor.left,
+						}}
+					>
+						{props.connections.map((connection) => (
+							<button
+								key={connection.id}
+								type="button"
+								role="menuitem"
+								className={`dg-crumb-item dg-crumb-item-main${
+									connection.id === props.value ? " dg-crumb-item-cur" : ""
+								}`}
+								onClick={() => {
+									setOpen(false);
+									props.onChange(connection.id);
+								}}
+							>
+								<span className="dg-crumb-chip">
+									{ENGINE_CHIPS[connection.adapter]}
+								</span>
+								{connection.name}
+								<span className="dg-crumb-sub">{connection.adapter}</span>
+							</button>
+						))}
+					</div>,
+					document.body,
+				)}
 		</div>
 	);
 }
@@ -314,6 +344,7 @@ export function ResultsPanel() {
 	const [showHistory, setShowHistory] = useState(false);
 	const [exportFormat, setExportFormat] = useState<ExportFormat>(readFormat);
 	const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+	const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
 	const executions = useExecutionsStore.getState();
 	const documents = useDocumentsStore.getState();
@@ -343,16 +374,21 @@ export function ResultsPanel() {
 		if (!formatMenuOpen) {
 			return;
 		}
-		const close = () => setFormatMenuOpen(false);
+		const onPointerDown = (event: MouseEvent) => {
+			if (formatMenuRef.current?.contains(event.target as Node) === true) {
+				return;
+			}
+			setFormatMenuOpen(false);
+		};
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				setFormatMenuOpen(false);
 			}
 		};
-		window.addEventListener("mousedown", close, true);
+		window.addEventListener("mousedown", onPointerDown);
 		window.addEventListener("keydown", onKeyDown);
 		return () => {
-			window.removeEventListener("mousedown", close);
+			window.removeEventListener("mousedown", onPointerDown);
 			window.removeEventListener("keydown", onKeyDown);
 		};
 	}, [formatMenuOpen]);
@@ -537,7 +573,7 @@ export function ResultsPanel() {
 						>
 							⧉
 						</button>
-						<div className="dg-exp-ec-wrap">
+						<div className="dg-exp-ec-wrap" ref={formatMenuRef}>
 							<button
 								type="button"
 								className="dg-exp-ec"

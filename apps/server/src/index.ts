@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
 	MysqlAdapter,
 	PostgresAdapter,
@@ -7,10 +8,16 @@ import {
 import { serve } from "bun";
 import { defaultWorkspaceFor, workspaceForMember } from "./auth/accounts";
 import { createSessionStore } from "./auth/sessions";
-import { loadConfig } from "./config";
+import { ensureLocalWorkspace } from "./bootstrap";
+import { loadConfig, resolveRepoPath } from "./config";
 import { loadPredefinedConnections } from "./connections/predefined";
 import { createConnectionsService } from "./connections/service";
 import { createKeyring } from "./crypto/keyring";
+import {
+	type EmbeddedPgHandle,
+	startEmbeddedPostgres,
+} from "./db/app/embedded";
+import { migrate } from "./db/app/migrate";
 import { createAppDb } from "./db/app/pool";
 import { createDocumentsService } from "./documents/service";
 import { createExecutionRegistry } from "./execution/registry";
@@ -26,7 +33,50 @@ import { createWebsocketHandler, type SocketData } from "./ws/handler";
 import { SocketHub } from "./ws/hub";
 
 const config = await loadConfig();
-const appDb = createAppDb(config);
+
+// Embedded mode: boot the managed PostgreSQL cluster first, then keep its
+// schema current automatically. External mode expects `bun run db:migrate`.
+let embeddedPg: EmbeddedPgHandle | null = null;
+if (config.DATABASE_MODE === "embedded") {
+	embeddedPg = await startEmbeddedPostgres(config);
+}
+const appDb = createAppDb(
+	embeddedPg?.url ?? (config.APP_DATABASE_URL as string),
+);
+if (embeddedPg !== null) {
+	await migrate(appDb);
+}
+
+// Direct-in mode: a single implicit identity, no accounts or cookies.
+const localAuth = config.AUTH_DISABLED
+	? await ensureLocalWorkspace(appDb)
+	: null;
+
+// Single-binary / desktop deployments serve the built web app from
+// WEB_STATIC_DIR; development uses the vite dev server instead.
+const staticDir =
+	config.WEB_STATIC_DIR === undefined
+		? null
+		: resolveRepoPath(config.WEB_STATIC_DIR);
+/** Serve built web assets with SPA fallback to index.html. */
+async function serveStatic(
+	root: string,
+	pathname: string,
+	requestId: string,
+): Promise<Response> {
+	const relative = pathname === "/" ? "index.html" : pathname.slice(1);
+	const resolved = path.resolve(root, relative);
+	if (!resolved.startsWith(`${root}${path.sep}`) && resolved !== root) {
+		return errorResponse(403, "FORBIDDEN", "Forbidden", requestId);
+	}
+	const file = Bun.file(resolved);
+	if (await file.exists()) {
+		return new Response(file);
+	}
+	// Directories and unknown paths fall through to the SPA entry point.
+	return new Response(Bun.file(path.join(root, "index.html")));
+}
+
 const keyring = createKeyring(new Map([[1, config.CONNECTION_ENCRYPTION_KEY]]));
 const predefined = await loadPredefinedConnections(config);
 const adapters = {
@@ -95,6 +145,7 @@ const auth = createAuthRoutes({
 	sessions,
 	rateLimiter,
 	closeSocketsForSession: (sessionId) => hub.closeForSession(sessionId),
+	localAuth,
 });
 
 const server = serve<SocketData>({
@@ -135,7 +186,7 @@ const server = serve<SocketData>({
 
 			// Session-cookie authentication (browser WebSocket APIs cannot
 			// attach authorization headers).
-			const session = await sessionFromRequest(sessions, req);
+			const session = await sessionFromRequest(sessions, req, localAuth);
 			if (session === null) {
 				return errorResponse(
 					401,
@@ -144,13 +195,17 @@ const server = serve<SocketData>({
 					requestId,
 				);
 			}
-			// Optional workspace switch target; falls back to the default.
+			// Optional workspace switch target; falls back to the default. In
+			// direct-in mode the stub workspace is the only one and has no
+			// membership row, so skip membership resolution entirely.
 			const requested = url.searchParams.get("workspace");
 			const workspace =
-				requested !== null
-					? ((await workspaceForMember(appDb, session.userId, requested)) ??
-						(await defaultWorkspaceFor(appDb, session.userId)))
-					: await defaultWorkspaceFor(appDb, session.userId);
+				localAuth !== null
+					? { ...localAuth.workspace, role: "owner" as const }
+					: requested !== null
+						? ((await workspaceForMember(appDb, session.userId, requested)) ??
+							(await defaultWorkspaceFor(appDb, session.userId)))
+						: await defaultWorkspaceFor(appDb, session.userId);
 			if (workspace === null) {
 				return errorResponse(
 					403,
@@ -189,6 +244,10 @@ const server = serve<SocketData>({
 			);
 		}
 
+		if (staticDir !== null) {
+			return serveStatic(staticDir, url.pathname, requestId);
+		}
+
 		return errorResponse(404, "NOT_FOUND", "Not found", requestId);
 	},
 
@@ -202,6 +261,7 @@ async function shutdown() {
 	rateLimiter.stop();
 	await Promise.all(Object.values(adapters).map((a) => a.close()));
 	await appDb.close();
+	await embeddedPg?.stop();
 	process.exit(0);
 }
 process.on("SIGINT", () => void shutdown());

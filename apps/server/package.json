@@ -20,8 +20,9 @@
 	},
 	"dependencies": {
 		"@datagripe/contracts": "*",
-		"zod": "^4.1.5",
 		"@datagripe/database-adapters": "*",
-		"@datagripe/sql-tools": "*"
+		"@datagripe/sql-tools": "*",
+		"embedded-postgres": "^18.4.0-beta.17",
+		"zod": "^4.1.5"
 	}
 }

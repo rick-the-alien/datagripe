@@ -1,13 +1,14 @@
 import { SQL } from "bun";
-import type { AppConfig } from "../../config";
 
 /**
  * The single application-owned pool. This client is ONLY for DataGripe's
  * own database — never use it to execute editor SQL against target
- * databases (see db/targets for that boundary).
+ * databases (see db/targets for that boundary). The URL comes from
+ * APP_DATABASE_URL (external mode) or the embedded cluster started at
+ * boot (embedded mode).
  */
-export function createAppDb(config: AppConfig): SQL {
-	return new SQL(config.APP_DATABASE_URL, {
+export function createAppDb(databaseUrl: string): SQL {
+	return new SQL(databaseUrl, {
 		max: 10,
 		idleTimeout: 30,
 		connectionTimeout: 10,

@@ -18,9 +18,11 @@ import {
 	clearSessionCookie,
 	csrfMatches,
 	SESSION_COOKIE,
+	type SessionRecord,
 	type SessionStore,
 	sessionCookie,
 } from "../auth/sessions";
+import type { LocalWorkspace } from "../bootstrap";
 import type { AppConfig } from "../config";
 import type { AppDb } from "../db/app/pool";
 import { log } from "../log";
@@ -40,6 +42,12 @@ export interface AuthRouteDeps {
 	rateLimiter: RateLimiter;
 	/** Close every socket bound to a session (logout). */
 	closeSocketsForSession: (sessionId: string) => void;
+	/** Direct-in identity when AUTH_DISABLED: an implicit session for the
+	 * stub user, and no login/signup/logout routes. */
+	localAuth: {
+		user: { id: string; email: string };
+		workspace: LocalWorkspace;
+	} | null;
 }
 
 function parseCookies(header: string | null): Record<string, string> {
@@ -60,8 +68,19 @@ function parseCookies(header: string | null): Record<string, string> {
 export function sessionTokenFrom(req: Request): string | null {
 	return parseCookies(req.headers.get("cookie"))[SESSION_COOKIE] ?? null;
 }
-
-export async function sessionFromRequest(sessions: SessionStore, req: Request) {
+export async function sessionFromRequest(
+	sessions: SessionStore,
+	req: Request,
+	localAuth: AuthRouteDeps["localAuth"] = null,
+): Promise<SessionRecord | null> {
+	if (localAuth !== null) {
+		return {
+			id: "local",
+			userId: localAuth.user.id,
+			csrfToken: "",
+			expiresAt: new Date(8640000000000000),
+		};
+	}
 	const token = sessionTokenFrom(req);
 	if (token === null) {
 		return null;
@@ -85,7 +104,7 @@ function json(body: unknown, init?: ResponseInit): Response {
 }
 
 export function createAuthRoutes(deps: AuthRouteDeps) {
-	const { appDb, config, sessions, rateLimiter } = deps;
+	const { appDb, config, sessions, rateLimiter, localAuth } = deps;
 	const secureCookie = config.NODE_ENV === "production";
 
 	async function bootstrapFor(
@@ -100,11 +119,14 @@ export function createAuthRoutes(deps: AuthRouteDeps) {
 				wsUrl: `ws://localhost:${config.PORT}/ws`,
 				bootstrap: count === 0,
 				allowSignup: config.ALLOW_SIGNUP,
+				authDisabled: localAuth !== null,
 			};
 		}
 		const [userRow, workspace] = await Promise.all([
 			appDb<{ email: string }[]>`SELECT email FROM users WHERE id = ${userId}`,
-			defaultWorkspaceFor(appDb, userId),
+			localAuth !== null
+				? Promise.resolve({ ...localAuth.workspace, role: "owner" as const })
+				: defaultWorkspaceFor(appDb, userId),
 		]);
 		return {
 			user:
@@ -116,17 +138,26 @@ export function createAuthRoutes(deps: AuthRouteDeps) {
 			wsUrl: `ws://localhost:${config.PORT}/ws`,
 			bootstrap: count === 0,
 			allowSignup: config.ALLOW_SIGNUP,
+			authDisabled: localAuth !== null,
 		};
 	}
 
 	return {
 		async session(req: Request): Promise<Response> {
-			const session = await sessionFromRequest(sessions, req);
+			const session = await sessionFromRequest(sessions, req, localAuth);
 			const bootstrap = await bootstrapFor(session?.userId ?? null);
 			return json({ ...bootstrap, csrfToken: session?.csrfToken ?? null });
 		},
 
 		async signup(req: Request): Promise<Response> {
+			if (localAuth !== null) {
+				return errorResponse(
+					404,
+					ErrorCodes.NotFound,
+					"Not found",
+					crypto.randomUUID(),
+				);
+			}
 			const requestId = crypto.randomUUID();
 			let body: unknown;
 			try {
@@ -179,6 +210,14 @@ export function createAuthRoutes(deps: AuthRouteDeps) {
 		},
 
 		async login(req: Request): Promise<Response> {
+			if (localAuth !== null) {
+				return errorResponse(
+					404,
+					ErrorCodes.NotFound,
+					"Not found",
+					crypto.randomUUID(),
+				);
+			}
 			const requestId = crypto.randomUUID();
 			const ip = clientIp(req);
 			if (!rateLimiter.take("auth.login.ip", ip)) {
@@ -242,6 +281,14 @@ export function createAuthRoutes(deps: AuthRouteDeps) {
 		},
 
 		async logout(req: Request): Promise<Response> {
+			if (localAuth !== null) {
+				return errorResponse(
+					404,
+					ErrorCodes.NotFound,
+					"Not found",
+					crypto.randomUUID(),
+				);
+			}
 			const requestId = crypto.randomUUID();
 			const session = await sessionFromRequest(sessions, req);
 			if (session === null) {

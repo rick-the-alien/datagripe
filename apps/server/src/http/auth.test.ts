@@ -81,7 +81,12 @@ beforeAll(async () => {
 			NODE_ENV: "test",
 			PORT: 3001,
 			WEB_ORIGIN: "http://localhost:5173",
+			DATABASE_MODE: "external",
 			APP_DATABASE_URL: "",
+			EMBEDDED_PG_DATA_DIR: "./data/pg",
+			EMBEDDED_PG_PORT: 0,
+			EMBEDDED_PG_PASSWORD: undefined,
+			AUTH_DISABLED: false,
 			CONNECTION_ENCRYPTION_KEY: "test-key-0123456789abcdef0123",
 			SESSION_SECRET: "test-secret-0123456789abcdef01234",
 			QUERY_TIMEOUT_MS: 30_000,
@@ -98,6 +103,7 @@ beforeAll(async () => {
 			"auth.login.email": { capacity: 5, refillPerMinute: 5 },
 		}),
 		closeSocketsForSession: (sessionId) => closedSessions.push(sessionId),
+		localAuth: null,
 	});
 });
 

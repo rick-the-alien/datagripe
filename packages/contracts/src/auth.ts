@@ -29,6 +29,9 @@ export const sessionBootstrapSchema = z.object({
 	/** True while zero users exist — show the bootstrap signup form. */
 	bootstrap: z.boolean(),
 	allowSignup: z.boolean(),
+	/** True when the server runs without accounts (embedded local mode):
+	 * the session is implicit and login/signup/logout do not exist. */
+	authDisabled: z.boolean(),
 });
 
 export type SessionBootstrap = z.infer<typeof sessionBootstrapSchema>;

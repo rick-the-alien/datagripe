@@ -55,7 +55,12 @@ export async function migrate(db: AppDb): Promise<string[]> {
 // Run directly: `bun run src/db/app/migrate.ts`
 if (import.meta.main) {
 	const config = await loadConfig();
-	const db = createAppDb(config);
+	if (config.APP_DATABASE_URL === undefined) {
+		throw new Error(
+			"db:migrate targets an external database (APP_DATABASE_URL). Embedded mode migrates automatically at server startup.",
+		);
+	}
+	const db = createAppDb(config.APP_DATABASE_URL);
 	try {
 		const applied = await migrate(db);
 		if (applied.length === 0) {

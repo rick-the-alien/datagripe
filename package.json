@@ -17,6 +17,14 @@
 		"format": "biome format --write .",
 		"db:migrate": "bun run --cwd apps/server db:migrate"
 	},
+	"trustedDependencies": [
+		"embedded-postgres",
+		"@embedded-postgres/linux-x64",
+		"@embedded-postgres/linux-arm64",
+		"@embedded-postgres/darwin-x64",
+		"@embedded-postgres/darwin-arm64",
+		"@embedded-postgres/win32-x64"
+	],
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.11",
 		"@types/bun": "^1.2.21",

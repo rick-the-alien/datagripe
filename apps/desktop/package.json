@@ -1,0 +1,10 @@
+{
+	"name": "@datagripe/desktop",
+	"version": "0.0.1",
+	"private": true,
+	"description": "DataGripe standalone desktop app (Electrobun shell over the local server)",
+	"devDependencies": {
+		"@types/bun": "^1.2.21",
+		"typescript": "^5.9.2"
+	}
+}

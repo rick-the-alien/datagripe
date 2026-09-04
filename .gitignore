@@ -6,3 +6,9 @@ connections.json
 *.log
 .DS_Store
 coverage/
+data/
+dev-dist/
+.hutch/
+apps/desktop/build/
+apps/desktop/artifacts/
+.cottontail-tmp/

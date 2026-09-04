@@ -75,3 +75,20 @@ jobs:
 
       - name: Build web
         run: bun run --cwd apps/web build
+
+      - name: Embedded mode boot smoke
+        env:
+          DATABASE_MODE: embedded
+          EMBEDDED_PG_DATA_DIR: ${{ runner.temp }}/dg-embedded/pg
+          PORT: "39871"
+        run: |
+          bun run apps/server/src/index.ts &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:39871/health > /dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:39871/health
+          curl -sf http://localhost:39871/api/session | grep -q '"authDisabled":true'
+          curl -sf -o /dev/null -w '%{http_code}' -X POST http://localhost:39871/api/auth/login | grep -q 404

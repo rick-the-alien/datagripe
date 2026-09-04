@@ -5,6 +5,9 @@ services:
       POSTGRES_USER: datagripe
       POSTGRES_PASSWORD: datagripe
       POSTGRES_DB: datagripe
+      # Dev/test only: integration tests connect with dummy passwords.
+      # Applies when the volume is first initialised.
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:

@@ -16,6 +16,11 @@ jobs:
           POSTGRES_USER: datagripe
           POSTGRES_PASSWORD: datagripe
           POSTGRES_DB: datagripe
+          # Integration tests create managed connections with dummy
+          # passwords to prove secrets round-trip through the keyring;
+          # local dev databases accept them via trust auth, so the CI
+          # service must too. Test-only instance, no real data.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-

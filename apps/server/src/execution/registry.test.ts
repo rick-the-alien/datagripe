@@ -73,7 +73,24 @@ beforeAll(async () => {
 	if (existing.length === 0) {
 		await admin.unsafe(`CREATE DATABASE ${SCRATCH_DB}`);
 	}
+	// Seed the demo target database the queries below run against; any
+	// machine with a reachable postgres can then run this suite.
+	const demoExisting =
+		await admin`SELECT 1 FROM pg_database WHERE datname = 'demo'`;
+	if (demoExisting.length === 0) {
+		await admin.unsafe(`CREATE DATABASE demo`);
+	}
 	await admin.close();
+	const demo = new SQL("postgres://datagripe:datagripe@localhost:5432/demo");
+	await demo.unsafe(`
+		CREATE SCHEMA IF NOT EXISTS shop;
+		DROP TABLE IF EXISTS shop.products;
+		CREATE TABLE shop.products (id int PRIMARY KEY, sku text NOT NULL, title text NOT NULL);
+		INSERT INTO shop.products (id, sku, title) VALUES
+			(1, 'SKU-1', 'First product'),
+			(2, 'SKU-2', 'Second product')
+	`);
+	await demo.close();
 	appDb = new SQL(
 		`postgres://datagripe:datagripe@localhost:5432/${SCRATCH_DB}`,
 	);

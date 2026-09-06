@@ -1,16 +1,23 @@
 # Spec — Gripes engine
 
-**Status:** draft — nothing here is implemented
+**Status:** draft — the machinery is built, nothing is wired to the UI
 **Phase:** 11 (planned)
 **Supersedes:** nothing (implements `docs/brand/brand-system.md` "Voice",
 "Attitude levels", "Writing gripes", and the tier-3 mascot rule)
 
-> This is a design, not a description. The only gripes code that exists
-> today is the panel's empty state and the attitude selector, both marked
-> MOCK. **Which rules ship is deliberately still open** — the brand spec
-> calls the catalogue "the actual product" and reserves it for its own
-> pass, and this spec does not pre-empt that. What it fixes is the
-> machinery the catalogue will sit in.
+> **Which rules ship is deliberately still open** — the brand spec calls
+> the catalogue "the actual product" and reserves it for its own pass,
+> and this spec does not pre-empt that. What it fixes is the machinery
+> the catalogue will sit in.
+>
+> Built: `packages/gripes` (rule shape, runner, renderer, catalogue
+> assertions), `packages/contracts/src/gripes.ts` (wire types),
+> `scanTokens` in sql-tools, and `join.no-condition` — the one rule whose
+> wording the brand spec worked out itself, present so the machinery is
+> exercised by something real.
+>
+> Not built: any UI. The panel is still its mock empty state and no
+> surface renders a finding yet. Dismissal is designed and unimplemented.
 
 ## Goal
 
@@ -121,11 +128,26 @@ A new `packages/gripes`, pure, no I/O — the same shape as
 packages/gripes/
   src/
     rules/            one file per rule, each a pure function + its tests
+    types.ts          Rule, GripeContext, the five input shapes
     catalogue.ts      the rule registry
-    messages.ts       ruleId → { notice, warning, fatal, panic } templates
-    render.ts         Finding + attitude → string
+    messages.ts       ruleId → { notice, warning, fatal, panic }
+    render.ts         Finding + attitude → string, and the footer
     runner.ts         given available inputs, run the applicable rules
+    statement.ts      tokenize once per statement, not once per rule
+    assertions.ts     the mechanical checks over the catalogue
 ```
+
+The wire types — severity, attitude, location, finding — live in
+`packages/contracts/src/gripes.ts` instead, because a finding crosses
+the socket when the server evaluates an execution rule.
+
+Static analysis rests on `scanTokens` in `packages/sql-tools`: a token
+walk that shares the statement splitter's awareness of comments, string
+literals, quoted identifiers and dollar-quoted bodies. That sharing is
+the whole point — a rule scanning raw text with a regex fires on the
+word `join` inside a comment, and a wrong gripe destroys trust in every
+other gripe. Quoted words keep their case, because `"From"` and `"from"`
+are different columns.
 
 Both the server and the web app import it: the server to evaluate rules
 needing a connection, the client to evaluate rules over things it
@@ -297,23 +319,50 @@ excuse for thin coverage. Per rule: a fixture that fires, a fixture that
 does not, and a fixture that *cannot tell* and must stay silent.
 
 Beyond that, the brand spec's own acceptance checks become assertions
-over the catalogue, run once for every rule:
+over the catalogue (`assertions.ts`), run once for every rule:
 
-- Every rule has all four attitude strings. A missing `fatal` string
-  cannot fall back to `warning`; that is how a level silently stops
-  existing.
+- Every rule has all four attitude strings, none blank. A missing
+  `fatal` cannot fall back to `warning`; that is how a level silently
+  stops existing.
 - No string exceeds 90 characters at `notice` or `warning`.
-- No string at **any** level, including `panic`, matches the slur
-  denylist. "Swearing at a query is funny; punching downward is not, and
-  it is the one thing that would follow the product around."
-- `notice` strings contain no profanity.
-- Every string names a construct — it interpolates at least one fact.
-  This is the automatable half of "be specific"; generic snark is
-  filler.
-- No two rules share an id.
+- No string at **any** level, including `panic`, contains a barred term.
+  "Swearing at a query is funny; punching downward is not, and it is the
+  one thing that would follow the product around."
+- `notice` contains no sanctioned profanity.
+- Rule ids are `<subject>.<problem>` in lower-kebab, and unique.
+- No rule declares zero inputs, and no wording exists for a rule that
+  does not.
+- Rendering a rule's own fixtures leaves no unresolved `{placeholder}`.
 
-The half that cannot be automated is whether a gripe is *funny*, and
-that is a review gate, not a test.
+Matching is on word boundaries throughout: a substring check that flags
+"hello" for containing "hell" is worse than no check, because it trains
+people to work around it.
+
+**Two things are deliberately not asserted.**
+
+*"Every string interpolates a fact"* was in an earlier draft of this
+spec and is wrong. The brand spec's own approved calibration example —
+"This join has no condition. I'll allow it. I won't forget it." — names
+nothing at all. Specificity for a statement rule comes from the
+*location*, which points at the construct; a fact is how a rule is
+specific when it has a number worth quoting. Asserting the fact would
+have failed the brand spec's own copy.
+
+*Whether a gripe is funny.* That is a review gate, not a test.
+
+### The barred-term list is empty
+
+`BARRED_TERMS` in `messages.ts` ships as an empty array, so
+`assertNoBarredTerms` currently passes trivially. This is a stated gap,
+not a claim of safety.
+
+The mechanism is implemented and tested against an injected list, so
+only the contents are outstanding — and the contents are the one thing
+here that should not be guessed at by whoever last touched the file. The
+brand spec's rule is "nothing touching race, gender, sexuality,
+disability or religion at any level, including `panic`", and turning
+that into terms is a deliberate review step. **It must be populated
+before any catalogue ships.**
 
 ## Open questions
 

@@ -190,6 +190,202 @@ export function splitStatements(
 }
 
 /**
+ * A token from `scanTokens`. Enough structure for a lint rule to reason
+ * about a statement without a full parser, and no more.
+ */
+export interface SqlToken {
+	/**
+	 * `word` covers keywords, identifiers and quoted identifiers alike —
+	 * a rule that cares about the difference checks `quoted`.
+	 */
+	kind: "word" | "punct" | "string" | "number";
+	/**
+	 * Lower-cased for an unquoted `word`, since SQL folds those. A quoted
+	 * word keeps its case: `"From"` and `"from"` are different columns.
+	 */
+	text: string;
+	start: number;
+	end: number;
+	/** Parenthesis nesting at this token; 0 at the top level. */
+	depth: number;
+	/** True when a `word` arrived inside quotes and is therefore a name,
+	 * never a keyword. */
+	quoted: boolean;
+}
+
+const PUNCT = new Set([
+	",",
+	"(",
+	")",
+	"*",
+	".",
+	";",
+	"=",
+	"<",
+	">",
+	"+",
+	"-",
+	"/",
+	"|",
+	"[",
+	"]",
+	":",
+]);
+
+/**
+ * Tokenize one statement for static analysis (docs/spec/gripes.md).
+ *
+ * Shares the splitter's awareness of comments, string literals, quoted
+ * identifiers and dollar-quoted bodies — the whole reason a rule should
+ * not scan raw text with a regex. Comments are skipped entirely; a
+ * gripe about commented-out SQL is not a gripe.
+ */
+export function scanTokens(
+	sql: string,
+	options: SplitOptions = {},
+): SqlToken[] {
+	const tokens: SqlToken[] = [];
+	let i = 0;
+	let depth = 0;
+
+	const push = (
+		kind: SqlToken["kind"],
+		start: number,
+		end: number,
+		quoted = false,
+	) => {
+		const raw = sql.slice(start, end);
+		tokens.push({
+			kind,
+			text: kind === "word" && !quoted ? raw.toLowerCase() : raw,
+			start,
+			end,
+			depth,
+			quoted,
+		});
+	};
+
+	while (i < sql.length) {
+		const ch = sql[i] as string;
+		const next = sql[i + 1];
+
+		if (ch === "-" && next === "-") {
+			const eol = sql.indexOf("\n", i + 2);
+			i = eol === -1 ? sql.length : eol + 1;
+			continue;
+		}
+		if (ch === "/" && next === "*") {
+			let commentDepth = 1;
+			i += 2;
+			while (i < sql.length && commentDepth > 0) {
+				if (sql[i] === "/" && sql[i + 1] === "*") {
+					commentDepth++;
+					i += 2;
+				} else if (sql[i] === "*" && sql[i + 1] === "/") {
+					commentDepth--;
+					i += 2;
+				} else {
+					i++;
+				}
+			}
+			continue;
+		}
+		if (
+			ch === "'" ||
+			(ch === "E" && next === "'") ||
+			(ch === "e" && next === "'")
+		) {
+			const extended = ch !== "'" || options.backslashEscapes === true;
+			const start = i;
+			i = ch !== "'" ? i + 2 : i + 1;
+			while (i < sql.length) {
+				if (extended && sql[i] === "\\") {
+					i += 2;
+					continue;
+				}
+				if (sql[i] === "'") {
+					if (sql[i + 1] === "'") {
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			push("string", start, i);
+			continue;
+		}
+		if (ch === '"' || (ch === "`" && options.backtickIdentifiers === true)) {
+			const quote = ch;
+			const start = i;
+			i++;
+			while (i < sql.length) {
+				if (sql[i] === quote) {
+					if (sql[i + 1] === quote) {
+						i += 2;
+						continue;
+					}
+					i++;
+					break;
+				}
+				i++;
+			}
+			// The quotes are dropped so a rule compares against a plain name.
+			push("word", start + 1, i - 1, true);
+			continue;
+		}
+		if (ch === "$") {
+			const quote = readDollarQuoteTag(sql, i);
+			if (quote !== null) {
+				const start = i;
+				const open = `$${quote.tag}$`;
+				const closeAt = sql.indexOf(open, i + open.length);
+				i = closeAt === -1 ? sql.length : closeAt + open.length;
+				push("string", start, i);
+				continue;
+			}
+		}
+		if (/[0-9]/.test(ch)) {
+			const start = i;
+			while (i < sql.length && /[0-9._eE]/.test(sql[i] ?? "")) {
+				i++;
+			}
+			push("number", start, i);
+			continue;
+		}
+		if (/[A-Za-z_]/.test(ch)) {
+			const start = i;
+			while (i < sql.length && /[A-Za-z0-9_$]/.test(sql[i] ?? "")) {
+				i++;
+			}
+			push("word", start, i);
+			continue;
+		}
+		if (ch === "(") {
+			push("punct", i, i + 1);
+			depth++;
+			i++;
+			continue;
+		}
+		if (ch === ")") {
+			depth = Math.max(0, depth - 1);
+			push("punct", i, i + 1);
+			i++;
+			continue;
+		}
+		if (PUNCT.has(ch)) {
+			push("punct", i, i + 1);
+			i++;
+			continue;
+		}
+		i++;
+	}
+
+	return tokens;
+}
+
+/**
  * The statement containing `offset`. When the offset sits in the gap
  * between two statements, the following statement wins; at the very end,
  * the last statement. Returns null when there are no statements.

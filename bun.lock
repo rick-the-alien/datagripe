@@ -79,6 +79,17 @@
         "typescript": "^5.9.2",
       },
     },
+    "packages/gripes": {
+      "name": "@datagripe/gripes",
+      "version": "0.0.0",
+      "dependencies": {
+        "@datagripe/contracts": "workspace:*",
+        "@datagripe/sql-tools": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.2",
+      },
+    },
     "packages/sql-tools": {
       "name": "@datagripe/sql-tools",
       "version": "0.0.0",
@@ -306,6 +317,8 @@
     "@datagripe/database-adapters": ["@datagripe/database-adapters@workspace:packages/database-adapters"],
 
     "@datagripe/desktop": ["@datagripe/desktop@workspace:apps/desktop"],
+
+    "@datagripe/gripes": ["@datagripe/gripes@workspace:packages/gripes"],
 
     "@datagripe/server": ["@datagripe/server@workspace:apps/server"],
 

@@ -110,21 +110,30 @@ Tracked in `docs/spec/multiplayer.md`.
 - [x] Middle click closes a tab
 - [x] Spec: `docs/spec/object-view.md` (routines, "Editing columns")
 
-## Phase 11 — Gripes engine · planned
+## Phase 11 — Gripes engine · in progress
 
-Designed in `docs/spec/gripes.md` (draft). The rule catalogue is
-deliberately still open — the brand spec reserves it for its own pass.
+Designed in `docs/spec/gripes.md`. The rule catalogue is deliberately
+still open — the brand spec reserves it for its own pass.
 
-- [ ] `packages/gripes`: pure rule catalogue, message catalogue, renderer
-- [ ] Findings are analysis, wording is presentation — attitude re-renders,
+- [x] `packages/gripes`: rule shape, runner, renderer, catalogue registry
+- [x] `packages/contracts/src/gripes.ts`: severity, attitude, location,
+      finding as wire types
+- [x] `scanTokens` in sql-tools — comment/literal/quote-aware token walk,
+      so a rule never fires on the word `join` inside a comment
+- [x] Findings are analysis, wording is presentation — attitude re-renders,
       never re-analyses
-- [ ] Client runner for statement/schema/object rules; server runner for
-      execution rules
+- [x] Runner dispatches on declared inputs; a rule that throws costs its
+      own output and nothing else
+- [x] Catalogue assertions: four strings per rule with no fallback, length
+      caps, barred terms at every level, notice profanity-free, id shape
+- [x] `join.no-condition` — the brand spec's own worked example
+- [ ] **Populate `BARRED_TERMS`** — ships empty, so the check passes
+      trivially. A review step, not a guess. Required before any
+      catalogue ships.
 - [ ] Presentation: glyph margin, gripes panel, object-view annotations,
       annotation rail, status-bar count
 - [ ] Dismissal at occurrence / target / project scope, never silent
-- [ ] Catalogue assertions: four strings per rule, length caps, slur
-      denylist at every level, every string interpolates a fact
+- [ ] Server-side runner on the execution path
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage
 

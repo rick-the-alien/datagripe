@@ -1,0 +1,19 @@
+{
+	"name": "@datagripe/gripes",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@datagripe/contracts": "workspace:*",
+		"@datagripe/sql-tools": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.2"
+	}
+}

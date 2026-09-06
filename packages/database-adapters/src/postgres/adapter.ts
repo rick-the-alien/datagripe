@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
@@ -10,9 +11,17 @@ import {
 	type ExecuteLimits,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectRequest,
 	type ResolvedConnection,
+	type TableLimits,
+	type TableMutateOutcome,
+	type TableMutateRequest,
+	type TableReadRequest,
+	type TableReadResult,
 } from "../types";
 import { beginPostgresExecution } from "./execution";
+import { describePostgresObject } from "./objectData";
+import { mutatePostgresTable, readPostgresTable } from "./tableData";
 
 /**
  * PostgreSQL adapter over Bun.SQL. Target clients are pooled per
@@ -217,6 +226,14 @@ export class PostgresAdapter implements DatabaseAdapter {
 		);
 	}
 
+	describeObject(
+		connection: ResolvedConnection,
+		request: ObjectRequest,
+		limits: TableLimits,
+	): Promise<ObjectDescribeResult> {
+		return describePostgresObject(this.clientFor(connection), request, limits);
+	}
+
 	async close(): Promise<void> {
 		await Promise.all(
 			[...this.clients.values()].map((client) => client.close()),
@@ -231,6 +248,32 @@ export class PostgresAdapter implements DatabaseAdapter {
 		return beginPostgresExecution(
 			this.clientFor(connection),
 			connection,
+			limits,
+		);
+	}
+
+	readTable(
+		connection: ResolvedConnection,
+		request: TableReadRequest,
+		limits: TableLimits,
+	): Promise<TableReadResult> {
+		return readPostgresTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
+			limits,
+		);
+	}
+
+	mutateTable(
+		connection: ResolvedConnection,
+		request: TableMutateRequest,
+		limits: TableLimits,
+	): Promise<TableMutateOutcome> {
+		return mutatePostgresTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
 			limits,
 		);
 	}

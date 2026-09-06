@@ -12,13 +12,15 @@ import type { DockviewApi } from "dockview-react";
  * trap focus (docs/brand/mocks/datasource-selector.html "New datasource
  * is a tab").
  *
- * Table view, object view and the gripes panel are currently MOCK
- * implementations — see docs/brand/brand-system.md "Table view and
- * object view", "Danger zone" and "Gripes".
+ * The table view (docs/spec/table-view.md) and the object view
+ * (docs/spec/object-view.md) are real. The gripes panel is still a MOCK
+ * — see docs/brand/brand-system.md "Gripes".
  */
 
 export interface ObjectTarget {
 	connectionId: string;
+	/** Namespace the object lives in (schema / database / attached file). */
+	schema: string;
 	/** Object name as shown in the tree (last path segment). */
 	name: string;
 	kind: "table" | "view";
@@ -48,7 +50,8 @@ function focusOrAdd(
 
 export function registerViewPanelOpeners(api: DockviewApi): void {
 	tableViewOpener = (target) => {
-		const id = `table:${target.connectionId}/${target.name}`;
+		// Two schemas can hold a `payments`; the id has to say which.
+		const id = `table:${target.connectionId}/${target.schema}.${target.name}`;
 		const existing = api.getPanel(id);
 		if (existing !== undefined) {
 			existing.focus();
@@ -62,7 +65,7 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 		});
 	};
 	objectViewOpener = (target, tab) => {
-		const id = `object:${target.connectionId}/${target.name}`;
+		const id = `object:${target.connectionId}/${target.schema}.${target.name}`;
 		const existing = api.getPanel(id);
 		if (existing !== undefined) {
 			existing.focus();
@@ -168,24 +171,35 @@ export function readConnectionFormParams(params: unknown): {
 	return { connectionId };
 }
 
-/** Panel params for the mock table/object views, narrowed without casts. */
+/** Panel params for the table/object views, narrowed without casts. */
 export interface ViewPanelParams {
+	connectionId: string;
+	schema: string;
 	name: string;
 	kind: "table" | "view";
 	tab?: string | undefined;
 }
 
+function readString(params: object, key: string, fallback: string): string {
+	return key in params &&
+		typeof (params as Record<string, unknown>)[key] === "string"
+		? ((params as Record<string, string>)[key] as string)
+		: fallback;
+}
+
 export function readViewPanelParams(params: unknown): ViewPanelParams {
 	if (params === null || typeof params !== "object") {
-		return { name: "object", kind: "table" };
+		return { connectionId: "", schema: "", name: "object", kind: "table" };
 	}
-	const name =
-		"name" in params && typeof params.name === "string"
-			? params.name
-			: "object";
 	const kind =
 		"kind" in params && params.kind === "view" ? "view" : ("table" as const);
 	const tab =
 		"tab" in params && typeof params.tab === "string" ? params.tab : undefined;
-	return { name, kind, tab };
+	return {
+		connectionId: readString(params, "connectionId", ""),
+		schema: readString(params, "schema", ""),
+		name: readString(params, "name", "object"),
+		kind,
+		tab,
+	};
 }

@@ -83,8 +83,27 @@ Tracked in `docs/spec/multiplayer.md`.
 - [x] Live `document.changed` broadcast for shared files
 - [x] Spec: `docs/spec/workspaces.md`
 
+## Phase 8 — Table view · shipped 2026-09-05
+
+- [x] `table.rows` / `table.mutate` behind `ADAPTER_CAPABILITIES.tableData`
+- [x] Real grid on double click: sort, `where …` filter, row-limit menu, paging
+- [x] Editable cells, insert row, delete row — single-row writes in one transaction
+- [x] Value panel for large/JSON cells, transpose, export shared with results
+- [x] Spec: `docs/spec/table-view.md`
+
+## Phase 9 — Object view · shipped 2026-09-05
+
+- [x] `object.describe` behind `ADAPTER_CAPABILITIES.introspection === "sql"`
+- [x] Seven structure tabs on real catalog data, one call fills them all
+- [x] Per-engine DDL: verbatim on MySQL/SQLite, reconstructed on PostgreSQL
+- [x] Tabs an engine cannot answer report themselves unsupported
+- [x] Danger zone states real consequences; execution still deferred (see spec)
+- [x] Spec: `docs/spec/object-view.md`
+
 ## Unscheduled / parking lot
 
+- Danger zone execution — blocked on project class leaving localStorage
+  (`docs/spec/object-view.md` "Danger zone")
 - AI query generation (explicit MVP non-goal; revisit after Phase 4)
 - Arrow-based result transport (only after profiling JSON batches)
 - Visual schema design, migration generation, DBA workflows

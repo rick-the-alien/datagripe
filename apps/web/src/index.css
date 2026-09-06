@@ -2034,117 +2034,191 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	padding: 2px 4px;
 }
 
-/* ---- mock object/table views -------------------------------------------------- */
+/* ---- object view --------------------------------------------------------
+ * brand-system.md "Object view — the structure": header, then tabs, with
+ * the danger zone pushed to the right edge behind a divider and rendered
+ * in a dimmed magenta until hovered. Selected tab is a 2px accent —
+ * Function Cyan for structure, magenta for the danger zone.
+ */
 
-.dg-mockview {
+.dg-ov {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+	min-height: 0;
 	background: var(--dg-void);
 }
 
-.dg-mockview-chrome {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 6px 10px;
+.dg-ov-head {
+	flex: none;
+	padding: 11px 14px 0;
 	background: var(--dg-panel);
 	border-bottom: 1px solid var(--dg-rule);
-	flex: none;
-	font-size: var(--dg-fs-ui);
 }
 
-.dg-mockview-chrome input {
-	background: var(--dg-void);
-	border: 1px solid var(--dg-rule);
-	border-radius: var(--dg-radius-input);
-	color: var(--dg-ink);
-	padding: 3px 8px;
+.dg-ov-title {
+	display: flex;
+	align-items: baseline;
+	gap: 9px;
+	margin-bottom: 9px;
+}
+
+.dg-ov-title b {
 	font-family: var(--dg-font-mono);
-	font-size: var(--dg-fs-tree);
-	flex: 1;
-	max-width: 320px;
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--dg-ink);
 }
 
-.dg-mockview-chrome select {
-	background: var(--dg-void);
+.dg-ov-title span {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+/* The one cross-link between the two surfaces: structure knows where the
+   rows live, and says so without containing them. */
+.dg-ov-rows {
+	background: none;
 	border: 1px solid var(--dg-rule);
 	border-radius: var(--dg-radius-input);
-	color: var(--dg-ink);
-	font: inherit;
-	padding: 3px 6px;
+	color: var(--dg-green);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	padding: 2px 7px;
 }
 
-.dg-mockview-tabs {
+.dg-ov-rows:hover {
+	background: var(--dg-raised);
+}
+
+.dg-ov-tabs {
 	display: flex;
 	align-items: center;
-	gap: 2px;
-	padding: 0 10px;
-	background: var(--dg-panel);
-	border-bottom: 1px solid var(--dg-rule);
-	flex: none;
+	gap: 1px;
+	overflow-x: auto;
 	font-family: var(--dg-font-mono);
-	font-size: var(--dg-fs-tree);
+	font-size: var(--dg-fs-meta);
 }
 
-.dg-mockview-tab {
+.dg-ov-tab {
 	background: none;
 	border: none;
 	border-bottom: 2px solid transparent;
 	border-radius: 0;
 	padding: 6px 10px;
 	color: var(--dg-ink-mute);
+	white-space: nowrap;
 }
 
-.dg-mockview-tab:hover:not(:disabled) {
+.dg-ov-tab:hover:not(:disabled) {
 	background: none;
-	color: var(--dg-ink);
+	color: var(--dg-ink-dim);
 }
 
-.dg-mockview-tab[aria-pressed="true"] {
+.dg-ov-tab[aria-selected="true"] {
 	color: var(--dg-ink);
-	border-bottom-color: var(--dg-violet);
+	border-bottom-color: var(--dg-cyan);
 }
 
-.dg-mockview-tab-danger {
+.dg-ov-tab-danger {
 	margin-left: auto;
 	border-left: 1px solid var(--dg-rule);
 	padding-left: 14px;
 	color: color-mix(in srgb, var(--dg-magenta) 55%, var(--dg-void));
 }
 
-.dg-mockview-tab-danger:hover:not(:disabled) {
+.dg-ov-tab-danger:hover:not(:disabled) {
 	color: var(--dg-magenta);
 }
 
-.dg-mockview-tab-danger[aria-pressed="true"] {
+.dg-ov-tab-danger[aria-selected="true"] {
 	border-bottom-color: var(--dg-magenta);
 	color: var(--dg-magenta);
 }
 
-.dg-mockview-body {
+.dg-ov-body {
 	flex: 1;
 	min-height: 0;
 	overflow: auto;
-	padding: 18px;
+}
+
+.dg-ov-grid {
+	width: 100%;
+}
+
+.dg-ov-grid td {
+	white-space: nowrap;
+	max-width: 480px;
+}
+
+/* Tones, per the interface rules: the value column carries colour and
+   everything else stays neutral. */
+.dg-ov-pk {
+	color: var(--dg-magenta);
+}
+
+.dg-ov-type {
+	color: var(--dg-cyan);
+}
+
+.dg-ov-mute {
 	color: var(--dg-ink-mute);
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
 }
 
-.dg-mockview-body p {
+.dg-ov-role {
+	color: var(--dg-green);
+}
+
+.dg-ov-stats {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 1px;
+	background: var(--dg-rule-soft);
+}
+
+.dg-ov-stats div {
+	background: var(--dg-void);
+	padding: 12px 14px;
+}
+
+.dg-ov-stats b {
+	display: block;
+	font-family: var(--dg-font-mono);
+	font-size: 16px;
+	font-weight: 400;
+	color: var(--dg-ink);
+}
+
+.dg-ov-stats span {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+.dg-ov-ddl {
 	margin: 0;
-	max-width: 520px;
+	padding: 12px 14px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	line-height: 1.8;
+	color: var(--dg-ink-dim);
+	white-space: pre;
+	overflow-x: auto;
 }
 
-/* ---- danger zone (mock) -------------------------------------------------- */
+/* ---- danger zone --------------------------------------------------------
+ * The gating is the spec (brand-system.md "Danger zone"): reveal, type
+ * the name, execute. Square corners, since the accent border is
+ * single-sided.
+ */
 
 .dg-danger-list {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	max-width: 560px;
+	max-width: 620px;
+	padding: 14px;
 }
 
 .dg-danger-action {
@@ -2242,4 +2316,319 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 .dg-mascot {
 	display: block;
+}
+
+/* ---- table view ---------------------------------------------------------
+ * brand-system.md "Table view — the data": one line of chrome, then rows.
+ * Row numbers Ink faint, primary key Snark Magenta, numerics right-aligned
+ * and coloured, everything else neutral. Sticky header, footer with the
+ * count and the edit state. No shadows — depth is void → panel → raised.
+ */
+
+.dg-tv {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	background: var(--dg-void);
+}
+
+/* Deliberately not mono: IBM Plex Mono has no glyph for several of the
+   chrome icons, so the bar keeps the UI stack and the mono face is
+   applied to the fields and readouts that need to align. */
+.dg-tv-bar {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 6px 11px;
+	background: var(--dg-panel);
+	border-bottom: 1px solid var(--dg-rule);
+	flex: none;
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-tv-ico {
+	background: none;
+	border: none;
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink-mute);
+	padding: 2px 5px;
+	font: inherit;
+	/* Glyph buttons need a step up on the 11.5px meta size, or ↻ and ⋯
+	   blur into each other at rest. */
+	font-size: 14px;
+	line-height: 1;
+}
+
+.dg-tv-ico:hover:not(:disabled) {
+	color: var(--dg-cyan);
+}
+
+.dg-tv-ico:disabled {
+	color: var(--dg-ink-faint);
+}
+
+.dg-tv-filter {
+	flex: 1;
+	min-width: 90px;
+	max-width: 420px;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink);
+	font: inherit;
+	font-family: var(--dg-font-mono);
+	padding: 4px 8px;
+}
+
+.dg-tv-filter:focus-visible {
+	outline: none;
+	border-color: var(--dg-violet);
+}
+
+.dg-tv-limit {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink-dim);
+	font: inherit;
+	font-family: var(--dg-font-mono);
+	padding: 3px 6px;
+}
+
+.dg-tv-page {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	color: var(--dg-ink-mute);
+	white-space: nowrap;
+	font-family: var(--dg-font-mono);
+}
+
+.dg-tv-range {
+	min-width: 76px;
+	text-align: center;
+}
+
+/* Pending edits are a state, not permanent chrome — the pair only exists
+ * while there is something to commit. */
+.dg-tv-commit {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.dg-tv-apply {
+	color: var(--dg-green);
+	border-color: var(--dg-green);
+}
+
+.dg-tv-revert {
+	color: var(--dg-ink-dim);
+}
+
+.dg-tv-more {
+	min-width: 148px;
+}
+
+.dg-tv-main {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+
+.dg-tv-body {
+	flex: 1;
+	min-width: 0;
+	overflow: auto;
+}
+
+.dg-tv-foot {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex: none;
+	padding: 5px 11px;
+	border-top: 1px solid var(--dg-rule);
+	background: var(--dg-panel);
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-tv-foot-state {
+	margin-left: auto;
+	color: var(--dg-ink-faint);
+}
+
+/* ---- the grid itself --------------------------------------------------- */
+
+.dg-tv-grid td,
+.dg-tv-grid th {
+	padding: 0;
+}
+
+.dg-tv-grid th {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+.dg-tv-th {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	width: 100%;
+	background: none;
+	border: none;
+	border-radius: 0;
+	color: inherit;
+	font: inherit;
+	padding: 5px 10px;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.dg-tv-th:hover {
+	color: var(--dg-ink);
+}
+
+.dg-tv-sort {
+	color: var(--dg-cyan);
+	font-size: 9px;
+}
+
+.dg-tv-cell {
+	max-width: 340px;
+}
+
+.dg-tv-cellbtn {
+	display: block;
+	width: 100%;
+	background: none;
+	border: none;
+	border-radius: 0;
+	color: inherit;
+	font: inherit;
+	padding: 3px 10px;
+	text-align: inherit;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dg-tv-input {
+	display: block;
+	width: 100%;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-violet);
+	border-radius: 0;
+	color: var(--dg-ink);
+	font: inherit;
+	font-family: var(--dg-font-mono);
+	padding: 2px 9px;
+}
+
+.dg-tv-input:focus-visible {
+	outline: none;
+}
+
+/* Primary key in Snark Magenta (brand-system.md). */
+.dg-tv-pk .dg-tv-cellbtn,
+th.dg-tv-pk .dg-tv-th {
+	color: var(--dg-magenta);
+}
+
+/* Selection is a step up to Raised plus a violet edge, never a filled
+ * accent background — that would fight the value colours beside it. */
+.dg-tv-focused {
+	background: var(--dg-raised);
+	box-shadow: inset 2px 0 0 var(--dg-violet);
+}
+
+.dg-tv-dirty .dg-tv-cellbtn {
+	color: var(--dg-green);
+}
+
+.dg-tv-dirty {
+	background: var(--dg-sev-style-bg);
+}
+
+.dg-tv-newrow {
+	background: var(--dg-sev-warning-bg);
+}
+
+.dg-tv-new .dg-tv-cellbtn {
+	color: var(--dg-violet-text);
+}
+
+.dg-tv-deleted .dg-tv-cellbtn {
+	text-decoration: line-through;
+	color: var(--dg-ink-faint);
+}
+
+.dg-tv-deleted {
+	background: var(--dg-sev-blocker-bg);
+}
+
+.dg-tv-rowhead {
+	position: static;
+	color: var(--dg-ink-dim);
+	text-align: left;
+	padding: 3px 10px;
+	white-space: nowrap;
+	background: var(--dg-panel);
+	border-bottom: 1px solid var(--dg-rule-soft);
+	font-weight: 400;
+}
+
+/* ---- value panel ------------------------------------------------------- */
+
+.dg-tv-side {
+	flex: none;
+	width: 320px;
+	min-width: 200px;
+	display: flex;
+	flex-direction: column;
+	border-left: 1px solid var(--dg-rule);
+	background: var(--dg-panel);
+}
+
+.dg-tv-side-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--dg-rule);
+	color: var(--dg-ink-dim);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-tv-side-head span {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dg-tv-side-body {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	margin: 0;
+	padding: 10px;
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	line-height: var(--dg-lh-tree);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.dg-tv-side-foot {
+	display: flex;
+	gap: 6px;
+	padding: 6px 10px;
+	border-top: 1px solid var(--dg-rule);
 }

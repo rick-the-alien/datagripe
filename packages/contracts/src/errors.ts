@@ -21,6 +21,10 @@ export const ErrorCodes = {
 	NotFound: "NOT_FOUND",
 	Conflict: "CONFLICT",
 	RateLimited: "RATE_LIMITED",
+	/** The target database refused the statement and said why. Its message
+	 * is passed through verbatim — a constraint violation or a type cast
+	 * failure is only actionable if you can read it. */
+	TargetError: "TARGET_ERROR",
 	Internal: "INTERNAL",
 } as const;
 

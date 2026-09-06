@@ -7,7 +7,11 @@ import {
 	useState,
 } from "react";
 import { create } from "zustand";
-import { openObjectView, openTableView } from "../app/viewPanels";
+import {
+	type ObjectTarget,
+	openObjectView,
+	openTableView,
+} from "../app/viewPanels";
 import { useDatasourceStore } from "../stores/datasource";
 import {
 	type ChildrenState,
@@ -438,7 +442,7 @@ const STRUCTURE_MENU = [
 function ContextMenu(props: {
 	x: number;
 	y: number;
-	target: { connectionId: string; name: string; kind: "table" | "view" };
+	target: ObjectTarget;
 	onClose: () => void;
 }) {
 	useEffect(() => {
@@ -696,6 +700,14 @@ function TreeNode(props: {
 
 	const isObject = OBJECT_KINDS[props.node.kind] === true;
 	const isCategory = CATEGORY_KINDS[props.node.kind] === true;
+	// Objects always hang under their namespace, whether that came from
+	// the breadcrumb (`[schema]` root) or from an expanded schema row.
+	const objectTarget: ObjectTarget = {
+		connectionId: props.connectionId,
+		schema: path[0]?.name ?? "",
+		name: props.node.name,
+		kind: props.node.kind === "view" ? "view" : "table",
+	};
 	const filtering = props.filter.length > 0;
 	const [anchor, setAnchor] = useState<DOMRect | null>(null);
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -758,19 +770,11 @@ function TreeNode(props: {
 					closePopover();
 					if (event.button === 1) {
 						event.preventDefault();
-						openTableView({
-							connectionId: props.connectionId,
-							name: props.node.name,
-							kind: props.node.kind as "table" | "view",
-						});
+						openTableView(objectTarget);
 					}
 				},
 				onDoubleClick: () => {
-					openTableView({
-						connectionId: props.connectionId,
-						name: props.node.name,
-						kind: props.node.kind as "table" | "view",
-					});
+					openTableView(objectTarget);
 				},
 				onContextMenu: (event: React.MouseEvent) => {
 					event.preventDefault();
@@ -895,11 +899,7 @@ function TreeNode(props: {
 							aria-label={`Open object view for ${props.node.name}`}
 							onClick={(event) => {
 								event.stopPropagation();
-								openObjectView({
-									connectionId: props.connectionId,
-									name: props.node.name,
-									kind: props.node.kind as "table" | "view",
-								});
+								openObjectView(objectTarget);
 							}}
 						>
 							⊞
@@ -920,11 +920,7 @@ function TreeNode(props: {
 				<ContextMenu
 					x={menu.x}
 					y={menu.y}
-					target={{
-						connectionId: props.connectionId,
-						name: props.node.name,
-						kind: props.node.kind as "table" | "view",
-					}}
+					target={objectTarget}
 					onClose={() => setMenu(null)}
 				/>
 			)}

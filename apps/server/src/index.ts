@@ -1,4 +1,5 @@
 import path from "node:path";
+import { TABLE_PAGE_MAX_ROWS } from "@datagripe/contracts";
 import {
 	MysqlAdapter,
 	PostgresAdapter,
@@ -95,7 +96,21 @@ const rateLimiter = createRateLimiter({
 	"connection.test": { capacity: 10, refillPerMinute: 10 },
 	"execution.start": { capacity: 30, refillPerMinute: 30 },
 	"schema.children": { capacity: 120, refillPerMinute: 120 },
+	// Paging, sorting and refreshing a grid are all reads; a live table
+	// view fires several per interaction.
+	"table.rows": { capacity: 120, refillPerMinute: 240 },
+	"table.mutate": { capacity: 60, refillPerMinute: 60 },
+	// One describe fills every object-view tab, so the budget is per tab
+	// opened rather than per tab switched.
+	"object.describe": { capacity: 60, refillPerMinute: 120 },
 });
+
+/**
+ * Above this many estimated rows the table view's footer count comes
+ * from planner statistics: COUNT(*) on a 40M-row table costs seconds to
+ * produce a number nobody reads to the digit.
+ */
+const TABLE_COUNT_ESTIMATE_THRESHOLD = 100_000;
 
 const connections = createConnectionsService({
 	appDb,
@@ -103,6 +118,11 @@ const connections = createConnectionsService({
 	adapters,
 	predefined,
 	ssrf: createSsrfPolicy(config.TARGET_HOST_ALLOWLIST, config.SSRF_DISABLED),
+	tableLimits: {
+		timeoutMs: config.QUERY_TIMEOUT_MS,
+		maxRows: Math.min(config.QUERY_MAX_ROWS, TABLE_PAGE_MAX_ROWS),
+		estimateAboveRows: TABLE_COUNT_ESTIMATE_THRESHOLD,
+	},
 });
 const executions = createExecutionRegistry({
 	adapters,

@@ -14,8 +14,11 @@ import {
 	historyListRequestSchema,
 	memberAddRequestSchema,
 	memberRemoveRequestSchema,
+	objectDescribeRequestSchema,
 	redisGetRequestSchema,
 	schemaChildrenRequestSchema,
+	tableMutateRequestSchema,
+	tableRowsRequestSchema,
 	viewBroadcastRequestSchema,
 	viewFollowRequestSchema,
 	workspaceCreateRequestSchema,
@@ -89,6 +92,7 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"execution.start": "editor",
 	"execution.cancel": "editor",
 	"workspace.set-default-connection": "editor",
+	"table.mutate": "editor",
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
@@ -109,6 +113,9 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 	"connection.test": "connection.test",
 	"execution.start": "execution.start",
 	"schema.children": "schema.children",
+	"table.rows": "table.rows",
+	"table.mutate": "table.mutate",
+	"object.describe": "object.describe",
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
@@ -386,6 +393,39 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 			case "connection.test": {
 				const request = connectionTestRequestSchema.parse(payload);
 				return connections.testConnection(workspace, request);
+			}
+
+			case "table.rows": {
+				const request = tableRowsRequestSchema.parse(payload);
+				// Browsing rows is a viewer's job, but the `where …` box takes a
+				// raw predicate — arbitrary read SQL, which is exactly what
+				// execution.start withholds from viewers. Keep the boundary in
+				// one place rather than two.
+				if (ctx.role === "viewer" && request.filter.trim() !== "") {
+					throw new ServiceError(
+						ErrorCodes.Forbidden,
+						"Role 'viewer' cannot filter rows with a predicate",
+					);
+				}
+				return connections.readTable(workspace, request);
+			}
+
+			case "table.mutate": {
+				const request = tableMutateRequestSchema.parse(payload);
+				// Idempotent so a retried commit after a dropped socket cannot
+				// apply the same row edits twice.
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => connections.mutateTable(workspace, request),
+				);
+			}
+
+			case "object.describe": {
+				const request = objectDescribeRequestSchema.parse(payload);
+				return connections.describeObject(workspace, request);
 			}
 
 			case "schema.children": {

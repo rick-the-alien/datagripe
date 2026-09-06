@@ -2,8 +2,12 @@ import type {
 	AdapterCapabilities,
 	ConnectionAdapter,
 	ConnectionTestResult,
+	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
+	TableColumn,
+	TableEdit,
+	TableSort,
 } from "@datagripe/contracts";
 
 /**
@@ -53,8 +57,79 @@ export interface DatabaseAdapter {
 	): Promise<ExecutionSession>;
 	/** Fetch one key's value (keyspace adapters only). */
 	getKeyValue?(connection: ResolvedConnection, key: string): Promise<KeyValue>;
+	/** Read one page of a relation. Present when capabilities.tableData
+	 * is non-null. */
+	readTable?(
+		connection: ResolvedConnection,
+		request: TableReadRequest,
+		limits: TableLimits,
+	): Promise<TableReadResult>;
+	/** Apply single-row grid edits in one transaction. Present when
+	 * capabilities.tableData is "readwrite". */
+	mutateTable?(
+		connection: ResolvedConnection,
+		request: TableMutateRequest,
+		limits: TableLimits,
+	): Promise<TableMutateOutcome>;
+	/** Everything the object view's tabs need, in one call. Present when
+	 * capabilities.introspection is "sql". */
+	describeObject?(
+		connection: ResolvedConnection,
+		request: ObjectRequest,
+		limits: TableLimits,
+	): Promise<ObjectDescribeResult>;
 	/** Close every pooled target client this adapter created. */
 	close(): Promise<void>;
+}
+
+/** Server-enforced bounds for table-view reads and writes. */
+export interface TableLimits {
+	timeoutMs: number;
+	/** Hard cap on a page, independent of the requested limit. */
+	maxRows: number;
+	/**
+	 * Above this many estimated rows, the footer count comes from planner
+	 * statistics instead of COUNT(*) — a full count on a 40M-row table is
+	 * not worth the wait for a number nobody reads precisely.
+	 */
+	estimateAboveRows: number;
+}
+
+export interface TableReadRequest {
+	schema: string;
+	table: string;
+	kind: "table" | "view";
+	limit: number;
+	offset: number;
+	sort: TableSort[];
+	filter: string;
+	count: boolean;
+}
+
+export interface TableReadResult {
+	columns: TableColumn[];
+	rows: unknown[][];
+	totalRows: number | null;
+	estimated: boolean;
+	editable: boolean;
+	reason?: string;
+}
+
+export interface TableMutateRequest {
+	schema: string;
+	table: string;
+	edits: TableEdit[];
+}
+
+export interface TableMutateOutcome {
+	applied: number;
+}
+
+/** One relation to describe for the object view. */
+export interface ObjectRequest {
+	schema: string;
+	name: string;
+	kind: "table" | "view";
 }
 
 /** Thrown for introspection paths that do not match the tree shape. */

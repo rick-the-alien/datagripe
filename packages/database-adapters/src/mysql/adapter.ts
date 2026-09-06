@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
@@ -13,8 +14,16 @@ import {
 	type ExecutionRunResult,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectRequest,
 	type ResolvedConnection,
+	type TableLimits,
+	type TableMutateOutcome,
+	type TableMutateRequest,
+	type TableReadRequest,
+	type TableReadResult,
 } from "../types";
+import { describeMysqlObject } from "./objectData";
+import { mutateMysqlTable, readMysqlTable } from "./tableData";
 
 /**
  * MySQL adapter over Bun.SQL (docs/spec/adapters.md). Execution is
@@ -236,6 +245,40 @@ export class MysqlAdapter implements DatabaseAdapter {
 			reserved.release();
 			throw error;
 		}
+	}
+
+	readTable(
+		connection: ResolvedConnection,
+		request: TableReadRequest,
+		limits: TableLimits,
+	): Promise<TableReadResult> {
+		return readMysqlTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
+			limits,
+		);
+	}
+
+	mutateTable(
+		connection: ResolvedConnection,
+		request: TableMutateRequest,
+		limits: TableLimits,
+	): Promise<TableMutateOutcome> {
+		return mutateMysqlTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
+			limits,
+		);
+	}
+
+	describeObject(
+		connection: ResolvedConnection,
+		request: ObjectRequest,
+		limits: TableLimits,
+	): Promise<ObjectDescribeResult> {
+		return describeMysqlObject(this.clientFor(connection), request, limits);
 	}
 
 	async close(): Promise<void> {

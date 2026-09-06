@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
@@ -13,8 +14,16 @@ import {
 	type ExecutionRunResult,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectRequest,
 	type ResolvedConnection,
+	type TableLimits,
+	type TableMutateOutcome,
+	type TableMutateRequest,
+	type TableReadRequest,
+	type TableReadResult,
 } from "../types";
+import { describeSqliteObject } from "./objectData";
+import { mutateSqliteTable, readSqliteTable } from "./tableData";
 
 /**
  * SQLite adapter over Bun.SQL (docs/spec/adapters.md). Connections point
@@ -160,6 +169,37 @@ export class SqliteAdapter implements DatabaseAdapter {
 		// client IS the dedicated connection, so the session wraps it
 		// directly (close is a no-op — the adapter owns its lifecycle).
 		return new SqliteExecutionSession(this.clientFor(connection), limits);
+	}
+
+	readTable(
+		connection: ResolvedConnection,
+		request: TableReadRequest,
+		limits: TableLimits,
+	): Promise<TableReadResult> {
+		return readSqliteTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
+			limits,
+		);
+	}
+
+	mutateTable(
+		connection: ResolvedConnection,
+		request: TableMutateRequest,
+	): Promise<TableMutateOutcome> {
+		return mutateSqliteTable(
+			this.clientFor(connection),
+			connection.readOnly,
+			request,
+		);
+	}
+
+	describeObject(
+		connection: ResolvedConnection,
+		request: ObjectRequest,
+	): Promise<ObjectDescribeResult> {
+		return describeSqliteObject(this.clientFor(connection), request);
 	}
 
 	async close(): Promise<void> {

@@ -30,6 +30,8 @@ single source of truth, shared by server and client:
 | introspection | sql | sql | sql | keyspace |
 | execution | cursor | buffered | buffered | – |
 | cancellation | ✓ | ✓ | – | – |
+| tableData | readwrite | readwrite | readwrite | – |
+| object view | ✓ | ✓ | ✓ | – |
 | default port | 5432 | 3306 | – | 6379 |
 | dialog fields | full | full | file path, read-only | host, port, db index, password, tls, read-only |
 
@@ -41,6 +43,16 @@ single source of truth, shared by server and client:
   `QUERY_MAX_ROWS` / `QUERY_MAX_BYTES`.
 - `execution: null` → `execution.start` is rejected server-side and the
   Run buttons disable client-side. `cancellation: false` hides Cancel.
+- `tableData: "readwrite"` → the table view browses rows and writes
+  single-row edits back (`docs/spec/table-view.md`).
+- `tableData: null` → double-clicking an object has no grid to open; the
+  tab says so instead of rendering an empty one.
+- The object view (`docs/spec/object-view.md`) is gated on
+  `introspection: "sql"` rather than a flag of its own — a relation's
+  structure is exactly what SQL introspection describes. Individual tabs
+  an engine cannot answer are reported `unsupported` per object, so
+  SQLite says it has no permission system instead of showing an empty
+  grants tab.
 
 ## Per-adapter behavior
 

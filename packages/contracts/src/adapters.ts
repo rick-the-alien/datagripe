@@ -40,6 +40,13 @@ export interface AdapterCapabilities {
 	execution: "cursor" | "buffered" | null;
 	/** True when cancellation interrupts the running statement server-side. */
 	cancellation: boolean;
+	/**
+	 * Table view support (docs/spec/table-view.md).
+	 * "readwrite": browse rows and write single-row edits back.
+	 * "read": browse only.
+	 * null: no table view.
+	 */
+	tableData: "readwrite" | "read" | null;
 	defaultPort: number | null;
 	fields: AdapterField[];
 	/** Dialog label for the `database` field (database name, file path, db index). */
@@ -54,6 +61,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		introspection: "sql",
 		execution: "cursor",
 		cancellation: true,
+		tableData: "readwrite",
 		defaultPort: 5432,
 		fields: [
 			"host",
@@ -70,6 +78,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		introspection: "sql",
 		execution: "buffered",
 		cancellation: true,
+		tableData: "readwrite",
 		defaultPort: 3306,
 		fields: [
 			"host",
@@ -86,6 +95,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		introspection: "sql",
 		execution: "buffered",
 		cancellation: false,
+		tableData: "readwrite",
 		defaultPort: null,
 		fields: ["database", "readOnly"],
 		databaseLabel: "File path",
@@ -94,6 +104,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		introspection: "keyspace",
 		execution: null,
 		cancellation: false,
+		tableData: null,
 		defaultPort: 6379,
 		fields: ["host", "port", "database", "password", "tlsMode", "readOnly"],
 		databaseLabel: "DB index",
@@ -107,6 +118,7 @@ export const adapterInfoSchema = z.object({
 	introspection: z.enum(["sql", "keyspace"]).nullable(),
 	execution: z.enum(["cursor", "buffered"]).nullable(),
 	cancellation: z.boolean(),
+	tableData: z.enum(["readwrite", "read"]).nullable(),
 	defaultPort: z.number().nullable(),
 	fields: z.array(z.string()),
 	databaseLabel: z.string(),
@@ -123,6 +135,7 @@ export function adapterInfoOf(
 		introspection: capabilities.introspection,
 		execution: capabilities.execution,
 		cancellation: capabilities.cancellation,
+		tableData: capabilities.tableData,
 		defaultPort: capabilities.defaultPort,
 		fields: capabilities.fields,
 		databaseLabel: capabilities.databaseLabel,

@@ -6,16 +6,24 @@ import type {
 	ConnectionTestRequest,
 	ConnectionTestResult,
 	ConnectionUpdateRequest,
+	ObjectDescribeRequest,
+	ObjectDescribeResult,
 	RedisGetResult,
 	SchemaNode,
 	SchemaPathSegment,
+	TableMutateRequest,
+	TableMutateResult,
+	TableRowsRequest,
+	TableRowsResult,
 } from "@datagripe/contracts";
 import { adapterInfoOf } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type {
 	DatabaseAdapter,
 	ResolvedConnection,
+	TableLimits,
 } from "@datagripe/database-adapters";
+import { TableRequestError } from "@datagripe/database-adapters";
 import type { SecretKeyring } from "../crypto/keyring";
 import type { AppDb } from "../db/app/pool";
 import { log } from "../log";
@@ -66,6 +74,9 @@ export interface ConnectionsServiceDeps {
 	ssrf: SsrfPolicy;
 	/** Introspection cache TTL in ms (default 30s). */
 	introspectionCacheTtlMs?: number;
+	/** Bounds for table-view reads and writes; defaults match the
+	 * query-execution caps. */
+	tableLimits?: TableLimits;
 }
 
 export interface ConnectionsService {
@@ -110,6 +121,21 @@ export interface ConnectionsService {
 		connectionId: string,
 		key: string,
 	) => Promise<RedisGetResult>;
+	/** One page of a relation for the table view. */
+	readTable: (
+		workspace: WorkspaceRef,
+		request: TableRowsRequest,
+	) => Promise<TableRowsResult>;
+	/** Apply single-row grid edits. */
+	mutateTable: (
+		workspace: WorkspaceRef,
+		request: TableMutateRequest,
+	) => Promise<TableMutateResult>;
+	/** Every object-view tab for one relation, in one call. */
+	describeObject: (
+		workspace: WorkspaceRef,
+		request: ObjectDescribeRequest,
+	) => Promise<ObjectDescribeResult>;
 }
 
 function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
@@ -135,6 +161,11 @@ export function createConnectionsService(
 	deps: ConnectionsServiceDeps,
 ): ConnectionsService {
 	const { appDb, keyring, adapters, predefined, ssrf } = deps;
+	const tableLimits: TableLimits = deps.tableLimits ?? {
+		timeoutMs: 30_000,
+		maxRows: 5_000,
+		estimateAboveRows: 100_000,
+	};
 	const cacheTtl = deps.introspectionCacheTtlMs ?? 30_000;
 	const introspectionCache = new Map<
 		string,
@@ -191,6 +222,25 @@ export function createConnectionsService(
 			});
 			throw error;
 		}
+	}
+
+	/**
+	 * Table-view failures come in two flavours and both belong to the
+	 * caller: a request we rejected before touching the database, and a
+	 * statement the target database rejected. The second one carries the
+	 * driver's message through — "invalid input syntax for type integer"
+	 * is the whole answer, and "Internal error" is none of it.
+	 */
+	function asServiceError(error: unknown): Error {
+		if (error instanceof TableRequestError) {
+			return new ServiceError(ErrorCodes.BadRequest, error.message);
+		}
+		if (error instanceof ServiceError) {
+			return error;
+		}
+		const message = error instanceof Error ? error.message : String(error);
+		log.debug("table action failed on target", { error: message });
+		return new ServiceError(ErrorCodes.TargetError, message);
 	}
 
 	async function resolveConnection(
@@ -442,6 +492,100 @@ export function createConnectionsService(
 				);
 			}
 			return adapter.getKeyValue(resolved, key);
+		},
+
+		async readTable(workspace, request) {
+			const resolved = await resolveConnection(workspace, request.connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (adapter.readTable === undefined) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${request.connectionId}' has no table view`,
+				);
+			}
+			try {
+				const result = await adapter.readTable(
+					resolved,
+					{
+						schema: request.schema,
+						table: request.table,
+						kind: request.kind,
+						limit: request.limit,
+						offset: request.offset,
+						sort: request.sort,
+						filter: request.filter,
+						count: request.count,
+					},
+					tableLimits,
+				);
+				return {
+					...result,
+					offset: request.offset,
+					limit: Math.min(request.limit, tableLimits.maxRows),
+				};
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async mutateTable(workspace, request) {
+			const resolved = await resolveConnection(workspace, request.connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (
+				adapter.mutateTable === undefined ||
+				adapter.capabilities.tableData !== "readwrite"
+			) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${request.connectionId}' cannot be edited in the grid`,
+				);
+			}
+			if (resolved.readOnly) {
+				throw new ServiceError(
+					ConnectionErrorCodes.ReadOnly,
+					"This datasource is read-only",
+				);
+			}
+			try {
+				return await adapter.mutateTable(
+					resolved,
+					{
+						schema: request.schema,
+						table: request.table,
+						edits: request.edits,
+					},
+					tableLimits,
+				);
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async describeObject(workspace, request) {
+			const resolved = await resolveConnection(workspace, request.connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (
+				adapter.describeObject === undefined ||
+				adapter.capabilities.introspection !== "sql"
+			) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${request.connectionId}' has no object view`,
+				);
+			}
+			try {
+				return await adapter.describeObject(
+					resolved,
+					{
+						schema: request.schema,
+						name: request.name,
+						kind: request.kind,
+					},
+					tableLimits,
+				);
+			} catch (error) {
+				throw asServiceError(error);
+			}
 		},
 
 		async schemaChildren(workspace, connectionId, path, refresh) {

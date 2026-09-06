@@ -1,4 +1,4 @@
-import type { ConnectionMetadata } from "@datagripe/contracts";
+import type { ConnectionMetadata, ObjectKind } from "@datagripe/contracts";
 import type { DockviewApi } from "dockview-react";
 
 /**
@@ -21,9 +21,11 @@ export interface ObjectTarget {
 	connectionId: string;
 	/** Namespace the object lives in (schema / database / attached file). */
 	schema: string;
-	/** Object name as shown in the tree (last path segment). */
+	/** Object name as shown in the tree (last path segment). A routine's
+	 * name carries its identity arguments, which is what keeps overloads
+	 * distinct. */
 	name: string;
-	kind: "table" | "view";
+	kind: ObjectKind;
 }
 
 let tableViewOpener: ((target: ObjectTarget) => void) | null = null;
@@ -176,9 +178,17 @@ export interface ViewPanelParams {
 	connectionId: string;
 	schema: string;
 	name: string;
-	kind: "table" | "view";
+	kind: ObjectKind;
 	tab?: string | undefined;
 }
+
+const OBJECT_KIND_VALUES: ObjectKind[] = [
+	"table",
+	"view",
+	"function",
+	"procedure",
+	"sequence",
+];
 
 function readString(params: object, key: string, fallback: string): string {
 	return key in params &&
@@ -191,8 +201,12 @@ export function readViewPanelParams(params: unknown): ViewPanelParams {
 	if (params === null || typeof params !== "object") {
 		return { connectionId: "", schema: "", name: "object", kind: "table" };
 	}
-	const kind =
-		"kind" in params && params.kind === "view" ? "view" : ("table" as const);
+	const kind: ObjectKind =
+		"kind" in params && typeof params.kind === "string"
+			? OBJECT_KIND_VALUES.includes(params.kind as ObjectKind)
+				? (params.kind as ObjectKind)
+				: "table"
+			: "table";
 	const tab =
 		"tab" in params && typeof params.tab === "string" ? params.tab : undefined;
 	return {

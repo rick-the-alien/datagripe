@@ -1,5 +1,10 @@
 import type { ObjectDescribeResult, ObjectTab } from "@datagripe/contracts";
-import { ADAPTER_CAPABILITIES, OBJECT_TABS } from "@datagripe/contracts";
+import {
+	ADAPTER_CAPABILITIES,
+	isRelationKind,
+	objectTabSchema,
+	tabsForKind,
+} from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { wsClient } from "../api/ws";
@@ -11,6 +16,7 @@ import {
 } from "../stores/branding";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
+import { ColumnsTab } from "./ColumnsTab";
 
 /**
  * Object view (docs/spec/object-view.md, brand-system.md "Object view —
@@ -23,6 +29,7 @@ import { useSessionStore } from "../stores/session";
 
 const TAB_EMPTY: Record<ObjectTab, string> = {
 	columns: "This object has no columns.",
+	arguments: "This routine takes no arguments.",
 	indexes: "No indexes on this object.",
 	constraints: "No constraints on this object.",
 	triggers: "No triggers on this object.",
@@ -201,6 +208,7 @@ function TabBody(props: {
 	tab: ObjectTab;
 	data: ObjectDescribeResult;
 	adapterName: string;
+	columnEditing: React.ComponentProps<typeof ColumnsTab> | null;
 }) {
 	const { data, tab } = props;
 
@@ -214,6 +222,10 @@ function TabBody(props: {
 
 	switch (tab) {
 		case "columns":
+			// The columns tab is the editable one; everything else is a read.
+			if (props.columnEditing !== null) {
+				return <ColumnsTab {...props.columnEditing} />;
+			}
 			return data.columns.length === 0 ? (
 				<div className="dg-tree-note">{TAB_EMPTY.columns}</div>
 			) : (
@@ -225,6 +237,20 @@ function TabBody(props: {
 						cell(column.nullable ? "null" : "not null", "mute"),
 						cell(column.defaultExpr ?? "—", "mute"),
 						cell(column.comment ?? "—", "mute"),
+					])}
+				/>
+			);
+
+		case "arguments":
+			return data.arguments.length === 0 ? (
+				<div className="dg-tree-note">{TAB_EMPTY.arguments}</div>
+			) : (
+				<Grid
+					headers={["name", "type", "mode"]}
+					rows={data.arguments.map((argument) => [
+						cell(argument.name),
+						cell(argument.dataType, "type"),
+						cell(argument.mode, "mute"),
 					])}
 				/>
 			);
@@ -352,13 +378,17 @@ export function ObjectView(props: IDockviewPanelProps) {
 		state.classFor(currentWorkspace?.id ?? null),
 	);
 
-	const [tab, setTab] = useState<ObjectTab | "danger">(
-		OBJECT_TABS.includes(params.tab as ObjectTab)
-			? (params.tab as ObjectTab)
-			: params.tab === "danger"
-				? "danger"
-				: "columns",
-	);
+	// Which tabs exist depends on the kind, and the kind is known from the
+	// panel params before the describe lands — so the strip does not
+	// reshuffle once data arrives.
+	const kindTabs = tabsForKind(params.kind);
+	const [tab, setTab] = useState<ObjectTab | "danger">(() => {
+		const requested = objectTabSchema.safeParse(params.tab);
+		if (requested.success && kindTabs.includes(requested.data)) {
+			return requested.data;
+		}
+		return params.tab === "danger" ? "danger" : (kindTabs[0] as ObjectTab);
+	});
 	const [data, setData] = useState<ObjectDescribeResult | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -369,10 +399,11 @@ export function ObjectView(props: IDockviewPanelProps) {
 	const appliedDeepLink = useRef(params.tab);
 	if (params.tab !== appliedDeepLink.current) {
 		appliedDeepLink.current = params.tab;
+		const requested = objectTabSchema.safeParse(params.tab);
 		if (params.tab === "danger") {
 			setTab("danger");
-		} else if (OBJECT_TABS.includes(params.tab as ObjectTab)) {
-			setTab(params.tab as ObjectTab);
+		} else if (requested.success && kindTabs.includes(requested.data)) {
+			setTab(requested.data);
 		}
 	}
 
@@ -427,6 +458,7 @@ export function ObjectView(props: IDockviewPanelProps) {
 	// The class already knows what kind of environment this is, so it does
 	// a second job: an analytics replica is read-only and says so.
 	const readOnly = projectClass === "analytics";
+	const relation = isRelationKind(params.kind);
 	const subtitle = [
 		params.kind,
 		params.schema,
@@ -454,24 +486,26 @@ export function ObjectView(props: IDockviewPanelProps) {
 					>
 						↻
 					</button>
-					<button
-						type="button"
-						className="dg-ov-rows"
-						title="Open this object's rows"
-						onClick={() =>
-							openTableView({
-								connectionId: params.connectionId,
-								schema: params.schema,
-								name: params.name,
-								kind: params.kind,
-							})
-						}
-					>
-						▤ rows
-					</button>
+					{relation && (
+						<button
+							type="button"
+							className="dg-ov-rows"
+							title="Open this object's rows"
+							onClick={() =>
+								openTableView({
+									connectionId: params.connectionId,
+									schema: params.schema,
+									name: params.name,
+									kind: params.kind,
+								})
+							}
+						>
+							▤ rows
+						</button>
+					)}
 				</div>
 				<div className="dg-ov-tabs" role="tablist">
-					{OBJECT_TABS.map((value) => (
+					{(data?.tabs ?? kindTabs).map((value) => (
 						<button
 							key={value}
 							type="button"
@@ -483,21 +517,26 @@ export function ObjectView(props: IDockviewPanelProps) {
 							{value}
 						</button>
 					))}
-					<button
-						type="button"
-						className="dg-ov-tab dg-ov-tab-danger"
-						role="tab"
-						aria-selected={tab === "danger"}
-						disabled={readOnly}
-						title={
-							readOnly
-								? "Read-only analytics replica — writes are blocked"
-								: "Irreversible operations"
-						}
-						onClick={() => setTab("danger")}
-					>
-						danger zone
-					</button>
+					{/* truncate and drop are relation operations; a routine's
+					    danger zone would be a different set and does not exist
+					    yet. */}
+					{relation && (
+						<button
+							type="button"
+							className="dg-ov-tab dg-ov-tab-danger"
+							role="tab"
+							aria-selected={tab === "danger"}
+							disabled={readOnly}
+							title={
+								readOnly
+									? "Read-only analytics replica — writes are blocked"
+									: "Irreversible operations"
+							}
+							onClick={() => setTab("danger")}
+						>
+							danger zone
+						</button>
+					)}
 				</div>
 			</div>
 
@@ -511,6 +550,25 @@ export function ObjectView(props: IDockviewPanelProps) {
 						tab={tab}
 						data={data}
 						adapterName={connection?.adapter ?? "This engine"}
+						columnEditing={
+							// A view's columns come from its query and a routine has
+							// none, so only a base table's columns are editable.
+							params.kind === "table" && capabilities !== undefined
+								? {
+										data,
+										supported: capabilities.columnChanges,
+										canEdit: currentWorkspace?.role !== "viewer" && !readOnly,
+										readOnlyReason:
+											currentWorkspace?.role === "viewer"
+												? "viewers cannot change structure"
+												: readOnly
+													? "read-only analytics replica"
+													: null,
+										connectionId: params.connectionId,
+										onApplied: () => void load(),
+									}
+								: null
+						}
 					/>
 				)}
 				{data !== null && tab === "danger" && (

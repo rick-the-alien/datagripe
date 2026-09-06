@@ -1,8 +1,11 @@
 import type {
 	AdapterCapabilities,
+	ColumnChange,
 	ConnectionAdapter,
 	ConnectionTestResult,
+	ObjectAlterResult,
 	ObjectDescribeResult,
+	ObjectKind,
 	SchemaNode,
 	SchemaPathSegment,
 	TableColumn,
@@ -78,6 +81,13 @@ export interface DatabaseAdapter {
 		request: ObjectRequest,
 		limits: TableLimits,
 	): Promise<ObjectDescribeResult>;
+	/** Preview or apply column changes. Which change kinds are available
+	 * is capabilities.columnChanges. */
+	alterColumns?(
+		connection: ResolvedConnection,
+		request: ObjectAlterExecution,
+		limits: TableLimits,
+	): Promise<ObjectAlterResult>;
 	/** Close every pooled target client this adapter created. */
 	close(): Promise<void>;
 }
@@ -125,11 +135,20 @@ export interface TableMutateOutcome {
 	applied: number;
 }
 
-/** One relation to describe for the object view. */
+/** A column-change batch, or a request to preview one. */
+export interface ObjectAlterExecution {
+	schema: string;
+	name: string;
+	changes: ColumnChange[];
+	/** Build the statements and stop — the preview step. */
+	dryRun: boolean;
+}
+
+/** One object to describe for the object view. */
 export interface ObjectRequest {
 	schema: string;
 	name: string;
-	kind: "table" | "view";
+	kind: ObjectKind;
 }
 
 /** Thrown for introspection paths that do not match the tree shape. */

@@ -89,6 +89,19 @@ beforeAll(async () => {
 
 		CREATE OR REPLACE FUNCTION shop.touch_order() RETURNS trigger
 			LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+
+		CREATE OR REPLACE FUNCTION shop.order_total(order_id integer, vat numeric DEFAULT 0.2)
+			RETURNS numeric LANGUAGE sql STABLE STRICT AS
+		$$ SELECT amount * (1 + vat) FROM shop.orders WHERE id = order_id $$;
+		COMMENT ON FUNCTION shop.order_total(integer, numeric) IS 'Gross order total';
+		-- An overload, to prove the identity signature is what selects a row.
+		CREATE OR REPLACE FUNCTION shop.order_total(reference text)
+			RETURNS numeric LANGUAGE sql STABLE AS
+		$$ SELECT amount FROM shop.orders WHERE reference = $1 $$;
+
+		DROP SEQUENCE IF EXISTS shop.ticket_seq;
+		CREATE SEQUENCE shop.ticket_seq AS integer
+			INCREMENT BY 5 MINVALUE 10 MAXVALUE 500 START WITH 10 CACHE 2 CYCLE;
 		DROP TRIGGER IF EXISTS orders_touch ON shop.orders;
 		CREATE TRIGGER orders_touch BEFORE INSERT OR UPDATE ON shop.orders
 			FOR EACH ROW EXECUTE FUNCTION shop.touch_order();
@@ -272,6 +285,141 @@ describe("postgres object view", () => {
 			).rejects.toThrow(/was not found/);
 		},
 	);
+
+	pgTest("a function's ddl is its real definition, body included", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{
+				schema: "shop",
+				name: "order_total(order_id integer, vat numeric)",
+				kind: "function",
+			},
+			LIMITS,
+		);
+		// pg_get_functiondef is verbatim, which is the point of the tab.
+		expect(result.ddlReconstructed).toBe(false);
+		expect(result.ddl).toContain("CREATE OR REPLACE FUNCTION shop.order_total");
+		expect(result.ddl).toContain("amount * (1 + vat)");
+	});
+
+	pgTest("a routine offers only the tabs it has", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{
+				schema: "shop",
+				name: "order_total(order_id integer, vat numeric)",
+				kind: "function",
+			},
+			LIMITS,
+		);
+		expect(result.tabs).toEqual(["arguments", "grants", "statistics", "ddl"]);
+		// A routine has no rows, columns, indexes or triggers at all —
+		// absent from `tabs`, not reported unsupported.
+		expect(result.columns).toEqual([]);
+		expect(result.indexes).toEqual([]);
+		expect(result.rowEstimate).toBeNull();
+		expect(result.unsupported).toEqual([]);
+	});
+
+	pgTest("arguments carry name, type and mode in order", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{
+				schema: "shop",
+				name: "order_total(order_id integer, vat numeric)",
+				kind: "function",
+			},
+			LIMITS,
+		);
+		expect(result.arguments).toEqual([
+			{ name: "order_id", dataType: "integer", mode: "in" },
+			{ name: "vat", dataType: "numeric", mode: "in" },
+		]);
+	});
+
+	pgTest("the identity signature selects between overloads", async () => {
+		const single = await adapter.describeObject(
+			CONNECTION,
+			{ schema: "shop", name: "order_total(reference text)", kind: "function" },
+			LIMITS,
+		);
+		expect(single.arguments).toEqual([
+			{ name: "reference", dataType: "text", mode: "in" },
+		]);
+		expect(single.ddl).toContain("reference = $1");
+	});
+
+	pgTest(
+		"routine statistics report language, volatility and returns",
+		async () => {
+			const result = await adapter.describeObject(
+				CONNECTION,
+				{
+					schema: "shop",
+					name: "order_total(order_id integer, vat numeric)",
+					kind: "function",
+				},
+				LIMITS,
+			);
+			const byLabel = new Map(
+				result.statistics.map((stat) => [stat.label, stat.value]),
+			);
+			expect(byLabel.get("language")).toBe("sql");
+			expect(byLabel.get("volatility")).toBe("stable");
+			expect(byLabel.get("returns")).toBe("numeric");
+			expect(byLabel.get("strict")).toBe("yes");
+			expect(byLabel.get("arguments")).toBe("2");
+			expect(byLabel.get("comment")).toBe("Gross order total");
+		},
+	);
+
+	pgTest("a trigger function with no arguments still describes", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{ schema: "shop", name: "touch_order()", kind: "function" },
+			LIMITS,
+		);
+		expect(result.arguments).toEqual([]);
+		expect(result.ddl).toContain("RETURN NEW");
+		expect(
+			result.statistics.find((stat) => stat.label === "language")?.value,
+		).toBe("plpgsql");
+	});
+
+	pgTest(
+		"a sequence reports its counter and a rebuilt definition",
+		async () => {
+			const result = await adapter.describeObject(
+				CONNECTION,
+				{ schema: "shop", name: "ticket_seq", kind: "sequence" },
+				LIMITS,
+			);
+			expect(result.tabs).toEqual(["statistics", "ddl"]);
+			const byLabel = new Map(
+				result.statistics.map((stat) => [stat.label, stat.value]),
+			);
+			expect(byLabel.get("increment")).toBe("5");
+			expect(byLabel.get("minimum")).toBe("10");
+			expect(byLabel.get("maximum")).toBe("500");
+			expect(byLabel.get("cycles")).toBe("yes");
+			expect(byLabel.get("type")).toBe("integer");
+			// No pg_get_sequencedef exists, so this one is reconstructed.
+			expect(result.ddlReconstructed).toBe(true);
+			expect(result.ddl).toContain('create sequence "shop"."ticket_seq"');
+			expect(result.ddl).toContain("increment by 5");
+			expect(result.ddl).toContain("cycle;");
+		},
+	);
+
+	pgTest("a missing routine is a request error", async () => {
+		await expect(
+			adapter.describeObject(
+				CONNECTION,
+				{ schema: "shop", name: "nope()", kind: "function" },
+				LIMITS,
+			),
+		).rejects.toThrow(/was not found/);
+	});
 
 	pgTest("describing an object cannot write", async () => {
 		// The whole describe runs in a READ ONLY transaction; nothing in it

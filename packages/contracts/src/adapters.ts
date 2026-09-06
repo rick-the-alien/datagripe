@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type ColumnChangeKind, columnChangeKindSchema } from "./schemaChange";
 
 /**
  * Adapter capabilities (roadmap Phase 5 exit criterion): the UI and the
@@ -47,6 +48,12 @@ export interface AdapterCapabilities {
 	 * null: no table view.
 	 */
 	tableData: "readwrite" | "read" | null;
+	/**
+	 * Column changes this engine can make (docs/spec/object-view.md).
+	 * SQLite's ALTER TABLE is famously narrow, so the columns tab enables
+	 * per operation instead of all-or-nothing.
+	 */
+	columnChanges: ColumnChangeKind[];
 	defaultPort: number | null;
 	fields: AdapterField[];
 	/** Dialog label for the `database` field (database name, file path, db index). */
@@ -62,6 +69,15 @@ export const ADAPTER_CAPABILITIES: Record<
 		execution: "cursor",
 		cancellation: true,
 		tableData: "readwrite",
+		columnChanges: [
+			"add",
+			"rename",
+			"setType",
+			"setNullable",
+			"setDefault",
+			"setComment",
+			"drop",
+		],
 		defaultPort: 5432,
 		fields: [
 			"host",
@@ -79,6 +95,15 @@ export const ADAPTER_CAPABILITIES: Record<
 		execution: "buffered",
 		cancellation: true,
 		tableData: "readwrite",
+		columnChanges: [
+			"add",
+			"rename",
+			"setType",
+			"setNullable",
+			"setDefault",
+			"setComment",
+			"drop",
+		],
 		defaultPort: 3306,
 		fields: [
 			"host",
@@ -96,6 +121,9 @@ export const ADAPTER_CAPABILITIES: Record<
 		execution: "buffered",
 		cancellation: false,
 		tableData: "readwrite",
+		// SQLite's ALTER TABLE does these three and nothing else; a type,
+		// nullability or default change needs the 12-step table rebuild.
+		columnChanges: ["add", "rename", "drop"],
 		defaultPort: null,
 		fields: ["database", "readOnly"],
 		databaseLabel: "File path",
@@ -105,6 +133,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		execution: null,
 		cancellation: false,
 		tableData: null,
+		columnChanges: [],
 		defaultPort: 6379,
 		fields: ["host", "port", "database", "password", "tlsMode", "readOnly"],
 		databaseLabel: "DB index",
@@ -119,6 +148,7 @@ export const adapterInfoSchema = z.object({
 	execution: z.enum(["cursor", "buffered"]).nullable(),
 	cancellation: z.boolean(),
 	tableData: z.enum(["readwrite", "read"]).nullable(),
+	columnChanges: z.array(columnChangeKindSchema),
 	defaultPort: z.number().nullable(),
 	fields: z.array(z.string()),
 	databaseLabel: z.string(),
@@ -136,6 +166,7 @@ export function adapterInfoOf(
 		execution: capabilities.execution,
 		cancellation: capabilities.cancellation,
 		tableData: capabilities.tableData,
+		columnChanges: capabilities.columnChanges,
 		defaultPort: capabilities.defaultPort,
 		fields: capabilities.fields,
 		databaseLabel: capabilities.databaseLabel,

@@ -12,6 +12,7 @@ import { z } from "zod";
 
 export const objectTabSchema = z.enum([
 	"columns",
+	"arguments",
 	"indexes",
 	"constraints",
 	"triggers",
@@ -22,7 +23,8 @@ export const objectTabSchema = z.enum([
 
 export type ObjectTab = z.infer<typeof objectTabSchema>;
 
-export const OBJECT_TABS: ObjectTab[] = [
+/** Tab order for a relation. */
+export const RELATION_TABS: ObjectTab[] = [
 	"columns",
 	"indexes",
 	"constraints",
@@ -32,13 +34,57 @@ export const OBJECT_TABS: ObjectTab[] = [
 	"ddl",
 ];
 
+/** Tab order for a routine — no columns, no indexes, no triggers. */
+export const ROUTINE_TABS: ObjectTab[] = [
+	"arguments",
+	"grants",
+	"statistics",
+	"ddl",
+];
+
+/** Tab order for a sequence: it is a counter with a definition. */
+export const SEQUENCE_TABS: ObjectTab[] = ["statistics", "ddl"];
+
+/** Kinds of object the object view can describe. */
+export const objectKindSchema = z.enum([
+	"table",
+	"view",
+	"function",
+	"procedure",
+	"sequence",
+]);
+
+export type ObjectKind = z.infer<typeof objectKindSchema>;
+
+export function tabsForKind(kind: ObjectKind): ObjectTab[] {
+	switch (kind) {
+		case "function":
+		case "procedure":
+			return ROUTINE_TABS;
+		case "sequence":
+			return SEQUENCE_TABS;
+		default:
+			return RELATION_TABS;
+	}
+}
+
+/** Relations have rows; routines and sequences do not. */
+export function isRelationKind(kind: ObjectKind): kind is "table" | "view" {
+	return kind === "table" || kind === "view";
+}
+
 export const objectDescribeRequestSchema = z.object({
 	/** Managed UUID or predefined slug. */
 	connectionId: z.string().min(1).max(255),
 	/** Namespace as the tree shows it (schema / database / attached file). */
 	schema: z.string().min(1).max(255),
-	name: z.string().min(1).max(255),
-	kind: z.enum(["table", "view"]).default("table"),
+	/**
+	 * As the tree shows it. A PostgreSQL routine's name carries its
+	 * identity arguments — `f(integer, text)` — which is what keeps
+	 * overloads distinct.
+	 */
+	name: z.string().min(1).max(1024),
+	kind: objectKindSchema.default("table"),
 });
 
 export type ObjectDescribeRequest = z.infer<typeof objectDescribeRequestSchema>;
@@ -112,6 +158,16 @@ export const objectStatisticSchema = z.object({
 
 export type ObjectStatistic = z.infer<typeof objectStatisticSchema>;
 
+/** One routine parameter. */
+export const objectArgumentSchema = z.object({
+	name: z.string(),
+	dataType: z.string(),
+	/** in / out / inout / variadic / table. */
+	mode: z.string(),
+});
+
+export type ObjectArgument = z.infer<typeof objectArgumentSchema>;
+
 /** An object that a DROP would take with it, for the danger zone. */
 export const objectDependentSchema = z.object({
 	kind: z.string(),
@@ -123,12 +179,15 @@ export type ObjectDependent = z.infer<typeof objectDependentSchema>;
 export const objectDescribeResultSchema = z.object({
 	schema: z.string(),
 	name: z.string(),
-	kind: z.enum(["table", "view"]),
+	kind: objectKindSchema,
+	/** Tabs this kind of object has at all, in strip order. */
+	tabs: z.array(objectTabSchema),
 	/** Header row count; null when the engine has no cheap answer. */
 	rowEstimate: z.number().nullable(),
 	/** True when rowEstimate came from planner statistics. */
 	estimated: z.boolean(),
 	columns: z.array(objectColumnSchema),
+	arguments: z.array(objectArgumentSchema),
 	indexes: z.array(objectIndexSchema),
 	constraints: z.array(objectConstraintSchema),
 	triggers: z.array(objectTriggerSchema),
@@ -136,9 +195,11 @@ export const objectDescribeResultSchema = z.object({
 	statistics: z.array(objectStatisticSchema),
 	ddl: z.string().nullable(),
 	/**
-	 * Tabs this engine cannot answer at all — SQLite has no grants, for
-	 * instance. An empty tab and an unanswerable tab look identical
-	 * otherwise, and the difference matters.
+	 * Of the tabs this object has, the ones this engine cannot answer —
+	 * SQLite has no grants, for instance. An empty tab and an
+	 * unanswerable tab look identical otherwise, and the difference
+	 * matters. Tabs a kind does not have at all are simply absent from
+	 * `tabs`, which is a third and different thing.
 	 */
 	unsupported: z.array(objectTabSchema),
 	/** True when `ddl` was rebuilt from the catalog rather than reported

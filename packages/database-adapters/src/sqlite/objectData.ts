@@ -7,6 +7,7 @@ import type {
 	ObjectTab,
 	ObjectTrigger,
 } from "@datagripe/contracts";
+import { isRelationKind, tabsForKind } from "@datagripe/contracts";
 import type { SQL } from "bun";
 import { formatBytes, formatCount, statTiles } from "../object/format";
 import { TableRequestError } from "../table/builder";
@@ -78,6 +79,13 @@ export async function describeSqliteObject(
 ): Promise<ObjectDescribeResult> {
 	const query = async (sql: string, params: unknown[] = []): Promise<Row[]> =>
 		(await client.unsafe(sql, params)) as Row[];
+
+	if (!isRelationKind(request.kind)) {
+		// SQLite has no stored routines and no sequences, so the tree never
+		// offers one to describe.
+		throw new TableRequestError(`SQLite has no '${request.kind}' objects`);
+	}
+	const relationKind = request.kind;
 
 	const schema = quoted(request.schema);
 	const target = quoted(request.name);
@@ -211,7 +219,7 @@ export async function describeSqliteObject(
 			 AND name <> ${literal(request.name)}`,
 	);
 	const dependents: ObjectDependent[] = [];
-	if (request.kind === "table") {
+	if (relationKind === "table") {
 		for (const candidate of candidates) {
 			const child = text(candidate.name);
 			const keys = await query(
@@ -226,10 +234,12 @@ export async function describeSqliteObject(
 	return {
 		schema: request.schema,
 		name: request.name,
-		kind: request.kind,
+		kind: relationKind,
+		tabs: tabsForKind(relationKind),
 		rowEstimate,
 		estimated: false,
 		columns,
+		arguments: [],
 		indexes,
 		constraints,
 		triggers,

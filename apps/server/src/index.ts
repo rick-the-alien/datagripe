@@ -103,6 +103,8 @@ const rateLimiter = createRateLimiter({
 	// One describe fills every object-view tab, so the budget is per tab
 	// opened rather than per tab switched.
 	"object.describe": { capacity: 60, refillPerMinute: 120 },
+	// Previews are cheap and frequent while editing; applies are neither.
+	"object.alter": { capacity: 40, refillPerMinute: 60 },
 });
 
 /**

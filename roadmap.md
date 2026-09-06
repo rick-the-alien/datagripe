@@ -100,8 +100,24 @@ Tracked in `docs/spec/multiplayer.md`.
 - [x] Danger zone states real consequences; execution still deferred (see spec)
 - [x] Spec: `docs/spec/object-view.md`
 
+## Phase 10 — Structure editing and routines · shipped 2026-09-06
+
+- [x] Routines and sequences in the object view; double click opens the ddl
+- [x] PostgreSQL routine DDL is verbatim (`pg_get_functiondef`), overloads distinct
+- [x] Editable columns tab: add, rename, retype, nullability, default, comment, drop
+- [x] `object.alter` with `dryRun` — the SQL is reviewed before it runs
+- [x] `columnChanges` capability so SQLite's narrow ALTER is honest, not broken
+- [x] Middle click closes a tab
+- [x] Spec: `docs/spec/object-view.md` (routines, "Editing columns")
+
 ## Unscheduled / parking lot
 
+- Gripes on a routine's ddl — the best place in the product for them, and
+  the reason the rule catalogue needs its own design pass
+  (`docs/spec/object-view.md` open questions)
+- SQLite type/nullability/default changes — need the 12-step table rebuild
+- Index, constraint and trigger editing — the preview-then-apply shape is
+  proven; the rest is dialect SQL
 - Danger zone execution — blocked on project class leaving localStorage
   (`docs/spec/object-view.md` "Danger zone")
 - AI query generation (explicit MVP non-goal; revisit after Phase 4)

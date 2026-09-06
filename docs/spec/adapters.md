@@ -32,6 +32,8 @@ single source of truth, shared by server and client:
 | cancellation | ✓ | ✓ | – | – |
 | tableData | readwrite | readwrite | readwrite | – |
 | object view | ✓ | ✓ | ✓ | – |
+| routines / sequences | both | routines only | neither | – |
+| columnChanges | all 7 | all 7 | add, rename, drop | none |
 | default port | 5432 | 3306 | – | 6379 |
 | dialog fields | full | full | file path, read-only | host, port, db index, password, tls, read-only |
 
@@ -48,11 +50,15 @@ single source of truth, shared by server and client:
 - `tableData: null` → double-clicking an object has no grid to open; the
   tab says so instead of rendering an empty one.
 - The object view (`docs/spec/object-view.md`) is gated on
-  `introspection: "sql"` rather than a flag of its own — a relation's
+  `introspection: "sql"` rather than a flag of its own — an object's
   structure is exactly what SQL introspection describes. Individual tabs
   an engine cannot answer are reported `unsupported` per object, so
   SQLite says it has no permission system instead of showing an empty
   grants tab.
+- `columnChanges` lists the column DDL an engine can express. It is a
+  list rather than a boolean because SQLite's `ALTER TABLE` does add,
+  rename and drop and nothing else — the columns tab enables per
+  operation and says why the rest are off.
 
 ## Per-adapter behavior
 

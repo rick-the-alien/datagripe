@@ -8,5 +8,6 @@ export * from "./explorer";
 export * from "./multiplayer";
 export * from "./objects";
 export * from "./predefined";
+export * from "./schemaChange";
 export * from "./tables";
 export * from "./ws";

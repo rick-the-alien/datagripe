@@ -1,4 +1,9 @@
-import type { SchemaNode, SchemaPathSegment } from "@datagripe/contracts";
+import type {
+	ObjectKind,
+	SchemaNode,
+	SchemaPathSegment,
+} from "@datagripe/contracts";
+import { isRelationKind, tabsForKind } from "@datagripe/contracts";
 import {
 	type ReactNode,
 	useEffect,
@@ -58,7 +63,21 @@ const CATEGORY_KINDS: Partial<Record<SchemaNode["kind"], true>> = {
 	sequences: true,
 };
 
+/**
+ * Tree leaves that have an object view. Routines and sequences are here
+ * too: a function's definition is the object, and PostgreSQL exports it
+ * verbatim (docs/spec/object-view.md).
+ */
 const OBJECT_KINDS: Partial<Record<SchemaNode["kind"], true>> = {
+	table: true,
+	view: true,
+	function: true,
+	procedure: true,
+	sequence: true,
+};
+
+/** Kinds that have rows, and so a table view. */
+const RELATION_KINDS: Partial<Record<SchemaNode["kind"], true>> = {
 	table: true,
 	view: true,
 };
@@ -429,15 +448,18 @@ function FieldPopover(props: {
  * "Context menu").
  */
 
-const STRUCTURE_MENU = [
-	"columns",
-	"indexes",
-	"constraints",
-	"triggers",
-	"grants",
-	"statistics",
-	"ddl",
-];
+/** Narrow a tree node kind to the object kinds the object view takes. */
+function objectKindOf(kind: SchemaNode["kind"]): ObjectKind {
+	switch (kind) {
+		case "view":
+		case "function":
+		case "procedure":
+		case "sequence":
+			return kind;
+		default:
+			return "table";
+	}
+}
 
 function ContextMenu(props: {
 	x: number;
@@ -445,6 +467,7 @@ function ContextMenu(props: {
 	target: ObjectTarget;
 	onClose: () => void;
 }) {
+	const relation = isRelationKind(props.target.kind);
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
@@ -466,19 +489,23 @@ function ContextMenu(props: {
 			style={{ top: props.y, left: props.x }}
 			onMouseDown={(event) => event.stopPropagation()}
 		>
-			<button
-				type="button"
-				className="dg-context-item"
-				role="menuitem"
-				onClick={() => {
-					props.onClose();
-					openTableView(props.target);
-				}}
-			>
-				view rows <kbd>dbl click</kbd>
-			</button>
-			<div className="dg-context-separator" />
-			{STRUCTURE_MENU.map((tab) => (
+			{relation && (
+				<>
+					<button
+						type="button"
+						className="dg-context-item"
+						role="menuitem"
+						onClick={() => {
+							props.onClose();
+							openTableView(props.target);
+						}}
+					>
+						view rows <kbd>dbl click</kbd>
+					</button>
+					<div className="dg-context-separator" />
+				</>
+			)}
+			{tabsForKind(props.target.kind).map((tab) => (
 				<button
 					key={tab}
 					type="button"
@@ -490,6 +517,7 @@ function ContextMenu(props: {
 					}}
 				>
 					{tab}
+					{!relation && tab === "ddl" && <kbd>dbl click</kbd>}
 				</button>
 			))}
 			<div className="dg-context-separator" />
@@ -504,18 +532,22 @@ function ContextMenu(props: {
 			>
 				copy name
 			</button>
-			<div className="dg-context-separator" />
-			<button
-				type="button"
-				className="dg-context-item dg-context-danger"
-				role="menuitem"
-				onClick={() => {
-					props.onClose();
-					openObjectView(props.target, "danger");
-				}}
-			>
-				danger zone…
-			</button>
+			{relation && (
+				<>
+					<div className="dg-context-separator" />
+					<button
+						type="button"
+						className="dg-context-item dg-context-danger"
+						role="menuitem"
+						onClick={() => {
+							props.onClose();
+							openObjectView(props.target, "danger");
+						}}
+					>
+						danger zone…
+					</button>
+				</>
+			)}
 		</div>
 	);
 }
@@ -702,11 +734,20 @@ function TreeNode(props: {
 	const isCategory = CATEGORY_KINDS[props.node.kind] === true;
 	// Objects always hang under their namespace, whether that came from
 	// the breadcrumb (`[schema]` root) or from an expanded schema row.
+	const isRelation = RELATION_KINDS[props.node.kind] === true;
 	const objectTarget: ObjectTarget = {
 		connectionId: props.connectionId,
 		schema: path[0]?.name ?? "",
 		name: props.node.name,
-		kind: props.node.kind === "view" ? "view" : "table",
+		kind: objectKindOf(props.node.kind),
+	};
+	/** Rows for a relation; the definition for everything else. */
+	const openPrimaryView = () => {
+		if (isRelation) {
+			openTableView(objectTarget);
+		} else {
+			openObjectView(objectTarget, "ddl");
+		}
 	};
 	const filtering = props.filter.length > 0;
 	const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -770,12 +811,10 @@ function TreeNode(props: {
 					closePopover();
 					if (event.button === 1) {
 						event.preventDefault();
-						openTableView(objectTarget);
+						openPrimaryView();
 					}
 				},
-				onDoubleClick: () => {
-					openTableView(objectTarget);
-				},
+				onDoubleClick: openPrimaryView,
 				onContextMenu: (event: React.MouseEvent) => {
 					event.preventDefault();
 					clearHoverTimer();

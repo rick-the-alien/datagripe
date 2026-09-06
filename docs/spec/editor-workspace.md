@@ -169,9 +169,17 @@ A `CompletionItemProvider` for language `sql` (registered once in
   view→document bindings survive reload.
 - Editor panels use `renderer: "always"` so hidden tabs keep their editor
   instance; tab switches are pure visibility changes.
-- A custom tab component shows the title and a dirty dot. Tab close
-  removes the view only; the document and any dirty draft are retained
-  until the user explicitly deletes the document in the sidebar.
+- A custom tab component shows a kind glyph, the title and a dirty dot.
+  Tab close removes the view only; the document and any dirty draft are
+  retained until the user explicitly deletes the document in the sidebar.
+- **Middle click closes a tab**, same as its `×`. The listener is bound
+  natively on Dockview's own `.dv-tab` element rather than as a React
+  handler on the tab content: Dockview owns the interactive control and
+  the drag listeners, so the whole tab responds including its padding,
+  and no static element has to pretend to be a button. It listens on
+  `mousedown` in the capture phase — `mousedown` so the browser never
+  starts autoscroll, capture so Dockview does not read the press as the
+  start of a tab drag.
 - Dragging tabs between groups and dropping on group edges creates
   horizontal/vertical splits — stock Dockview behavior, no custom DnD.
 - A Zustand view store mirrors Dockview's panel inventory

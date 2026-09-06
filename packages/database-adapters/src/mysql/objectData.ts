@@ -7,6 +7,7 @@ import type {
 	ObjectIndex,
 	ObjectTrigger,
 } from "@datagripe/contracts";
+import { isRelationKind, tabsForKind } from "@datagripe/contracts";
 import type { SQL } from "bun";
 import {
 	formatAgo,
@@ -16,6 +17,7 @@ import {
 } from "../object/format";
 import { TableRequestError } from "../table/builder";
 import type { ObjectRequest, TableLimits } from "../types";
+import { describeMysqlRoutine } from "./routineData";
 
 /**
  * MySQL object view (docs/spec/object-view.md). Every projection is
@@ -141,8 +143,19 @@ export async function describeMysqlObject(
 				Math.floor(limits.timeoutMs),
 			)}`,
 		);
+		const bound = async (sql: string, params: unknown[]): Promise<Row[]> =>
+			(await reserved.unsafe(sql, params)) as Row[];
 		const query = async (sql: string): Promise<Row[]> =>
-			(await reserved.unsafe(sql, [request.schema, request.name])) as Row[];
+			bound(sql, [request.schema, request.name]);
+
+		if (request.kind === "function" || request.kind === "procedure") {
+			return await describeMysqlRoutine(bound, request);
+		}
+		if (!isRelationKind(request.kind)) {
+			// MySQL has no sequences; the tree never offers one.
+			throw new TableRequestError(`Cannot describe a '${request.kind}'`);
+		}
+		const relationKind = request.kind;
 
 		const columnRows = await query(COLUMNS_SQL);
 		if (columnRows.length === 0) {
@@ -229,7 +242,7 @@ export async function describeMysqlObject(
 
 		// SHOW CREATE is verbatim DDL, which is the whole point of the tab.
 		const showRows = (await reserved.unsafe(
-			`SHOW CREATE ${request.kind === "view" ? "VIEW" : "TABLE"} \`${request.schema.replaceAll(
+			`SHOW CREATE ${relationKind === "view" ? "VIEW" : "TABLE"} \`${request.schema.replaceAll(
 				"`",
 				"``",
 			)}\`.\`${request.name.replaceAll("`", "``")}\``,
@@ -247,11 +260,13 @@ export async function describeMysqlObject(
 		return {
 			schema: request.schema,
 			name: request.name,
-			kind: request.kind,
+			kind: relationKind,
+			tabs: tabsForKind(relationKind),
 			rowEstimate,
 			// information_schema.table_rows is an InnoDB estimate, always.
 			estimated: rowEstimate !== null,
 			columns,
+			arguments: [],
 			indexes,
 			constraints,
 			triggers,

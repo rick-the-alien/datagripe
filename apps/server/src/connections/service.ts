@@ -6,6 +6,8 @@ import type {
 	ConnectionTestRequest,
 	ConnectionTestResult,
 	ConnectionUpdateRequest,
+	ObjectAlterRequest,
+	ObjectAlterResult,
 	ObjectDescribeRequest,
 	ObjectDescribeResult,
 	RedisGetResult,
@@ -136,6 +138,11 @@ export interface ConnectionsService {
 		workspace: WorkspaceRef,
 		request: ObjectDescribeRequest,
 	) => Promise<ObjectDescribeResult>;
+	/** Preview (dryRun) or apply column changes. */
+	alterColumns: (
+		workspace: WorkspaceRef,
+		request: ObjectAlterRequest,
+	) => Promise<ObjectAlterResult>;
 }
 
 function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
@@ -580,6 +587,48 @@ export function createConnectionsService(
 						schema: request.schema,
 						name: request.name,
 						kind: request.kind,
+					},
+					tableLimits,
+				);
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async alterColumns(workspace, request) {
+			const resolved = await resolveConnection(workspace, request.connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (adapter.alterColumns === undefined) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`Connection '${request.connectionId}' cannot change columns`,
+				);
+			}
+			// A preview is a read: it builds SQL and runs none of it, so the
+			// read-only check belongs to the apply step, not here.
+			if (!request.dryRun && resolved.readOnly) {
+				throw new ServiceError(
+					ConnectionErrorCodes.ReadOnly,
+					"This datasource is read-only",
+				);
+			}
+			const unsupported = request.changes.find(
+				(change) => !adapter.capabilities.columnChanges.includes(change.type),
+			);
+			if (unsupported !== undefined) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`${resolved.adapter} cannot '${unsupported.type}' a column`,
+				);
+			}
+			try {
+				return await adapter.alterColumns(
+					resolved,
+					{
+						schema: request.schema,
+						name: request.name,
+						changes: request.changes,
+						dryRun: request.dryRun,
 					},
 					tableLimits,
 				);

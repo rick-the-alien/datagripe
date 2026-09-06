@@ -7,6 +7,7 @@ import type {
 	ObjectIndex,
 	ObjectTrigger,
 } from "@datagripe/contracts";
+import { isRelationKind, tabsForKind } from "@datagripe/contracts";
 import type { SQL } from "bun";
 import {
 	formatAgo,
@@ -17,6 +18,10 @@ import {
 } from "../object/format";
 import { POSTGRES_TABLE_DIALECT, TableRequestError } from "../table/builder";
 import type { ObjectRequest, TableLimits } from "../types";
+import {
+	describePostgresRoutine,
+	describePostgresSequence,
+} from "./routineData";
 
 /**
  * PostgreSQL object view (docs/spec/object-view.md). Every tab is a
@@ -205,8 +210,23 @@ export async function describePostgresObject(
 		);
 		await reserved.unsafe("BEGIN READ ONLY");
 		try {
+			const bound = async (sql: string, params: unknown[]): Promise<Row[]> =>
+				(await reserved.unsafe(sql, params)) as Row[];
 			const query = async (sql: string): Promise<Row[]> =>
-				(await reserved.unsafe(sql, [request.schema, request.name])) as Row[];
+				bound(sql, [request.schema, request.name]);
+
+			// Routines and sequences share the transaction but almost none of
+			// the catalog reads below, so they branch off here.
+			if (request.kind === "function" || request.kind === "procedure") {
+				return await describePostgresRoutine(bound, request);
+			}
+			if (request.kind === "sequence") {
+				return await describePostgresSequence(bound, request);
+			}
+			if (!isRelationKind(request.kind)) {
+				throw new TableRequestError(`Cannot describe a '${request.kind}'`);
+			}
+			const relationKind = request.kind;
 
 			// Sequential, not Promise.all: these share one reserved connection
 			// inside an open transaction, and a single backend runs one
@@ -303,7 +323,7 @@ export async function describePostgresObject(
 
 			let ddl: string | null = null;
 			let ddlReconstructed = false;
-			if (request.kind === "view") {
+			if (relationKind === "view") {
 				const viewRows = await query(VIEW_DDL_SQL);
 				const definition = nullableText(viewRows[0]?.definition);
 				ddl =
@@ -338,11 +358,13 @@ export async function describePostgresObject(
 			return {
 				schema: request.schema,
 				name: request.name,
-				kind: request.kind,
+				kind: relationKind,
+				tabs: tabsForKind(relationKind),
 				rowEstimate,
 				// Neither source is exact, so the header always says so.
 				estimated: rowEstimate !== null,
 				columns,
+				arguments: [],
 				indexes,
 				constraints,
 				triggers,

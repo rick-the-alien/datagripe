@@ -2632,3 +2632,165 @@ th.dg-tv-pk .dg-tv-th {
 	padding: 6px 10px;
 	border-top: 1px solid var(--dg-rule);
 }
+
+/* ---- editable columns tab -----------------------------------------------
+ * docs/spec/object-view.md "Editing columns". Cells are inputs that read
+ * as text until touched, so the tab looks like the read-only grid it
+ * replaced; a touched field goes Gripe Green like a dirty table cell.
+ */
+
+.dg-col {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.dg-col-bar {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 6px 11px;
+	border-bottom: 1px solid var(--dg-rule-soft);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+.dg-col-add {
+	background: none;
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink-dim);
+	font: inherit;
+	padding: 3px 8px;
+}
+
+.dg-col-add:hover:not(:disabled) {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
+}
+
+.dg-col-review {
+	background: none;
+	border: 1px solid var(--dg-cyan);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-cyan);
+	font: inherit;
+	padding: 3px 8px;
+}
+
+.dg-col-note {
+	color: var(--dg-ink-faint);
+}
+
+.dg-col-grid td {
+	padding: 0;
+}
+
+/* An input that does not announce itself until it has something to say. */
+.dg-col-input {
+	width: 100%;
+	min-width: 90px;
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 0;
+	color: var(--dg-ink-dim);
+	font: inherit;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 3px 10px;
+}
+
+.dg-col-input:hover:not(:disabled) {
+	border-color: var(--dg-rule);
+}
+
+.dg-col-input:focus-visible {
+	outline: none;
+	border-color: var(--dg-violet);
+	background: var(--dg-void);
+	color: var(--dg-ink);
+}
+
+.dg-col-input:disabled {
+	color: var(--dg-ink-mute);
+}
+
+.dg-col-null {
+	background: none;
+	border: 1px solid transparent;
+	border-radius: 0;
+	color: var(--dg-ink-mute);
+	font: inherit;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 3px 10px;
+	width: 100%;
+	text-align: left;
+}
+
+.dg-col-null:hover:not(:disabled) {
+	border-color: var(--dg-rule);
+	color: var(--dg-ink);
+}
+
+.dg-col-dirty {
+	color: var(--dg-green);
+}
+
+.dg-col-draft {
+	background: var(--dg-sev-warning-bg);
+}
+
+/* ---- the preview --------------------------------------------------------
+ * The gating for structural change: read the statement, then run it.
+ * Square corners and a single-sided accent, like the danger zone.
+ */
+
+.dg-col-preview {
+	flex: none;
+	margin: 12px;
+	border: 1px solid var(--dg-rule);
+	border-left: 3px solid var(--dg-cyan);
+	border-radius: 0;
+	background: var(--dg-panel);
+}
+
+.dg-col-preview-head {
+	padding: 9px 13px;
+	border-bottom: 1px solid var(--dg-rule);
+	color: var(--dg-ink);
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-col-confirm {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding: 0 13px 9px;
+	color: var(--dg-ink-dim);
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-col-confirm input {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 4px 8px;
+}
+
+.dg-col-confirm input:focus {
+	outline: none;
+	border-color: var(--dg-magenta);
+}
+
+.dg-col-preview-foot {
+	display: flex;
+	gap: 8px;
+	padding: 9px 13px;
+	border-top: 1px solid var(--dg-rule);
+}

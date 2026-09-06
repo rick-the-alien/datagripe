@@ -14,6 +14,7 @@ import {
 	historyListRequestSchema,
 	memberAddRequestSchema,
 	memberRemoveRequestSchema,
+	objectAlterRequestSchema,
 	objectDescribeRequestSchema,
 	redisGetRequestSchema,
 	schemaChildrenRequestSchema,
@@ -93,6 +94,7 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"execution.cancel": "editor",
 	"workspace.set-default-connection": "editor",
 	"table.mutate": "editor",
+	"object.alter": "editor",
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
@@ -116,6 +118,7 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 	"table.rows": "table.rows",
 	"table.mutate": "table.mutate",
 	"object.describe": "object.describe",
+	"object.alter": "object.alter",
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
@@ -426,6 +429,22 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 			case "object.describe": {
 				const request = objectDescribeRequestSchema.parse(payload);
 				return connections.describeObject(workspace, request);
+			}
+
+			case "object.alter": {
+				const request = objectAlterRequestSchema.parse(payload);
+				// A preview runs nothing, so it needs no idempotency key
+				// honoured; an apply must not run twice on a retried socket.
+				if (request.dryRun) {
+					return connections.alterColumns(workspace, request);
+				}
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => connections.alterColumns(workspace, request),
+				);
 			}
 
 			case "schema.children": {

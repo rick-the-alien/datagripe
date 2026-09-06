@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectAlterResult,
 	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
@@ -11,6 +12,7 @@ import {
 	type ExecuteLimits,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectAlterExecution,
 	type ObjectRequest,
 	type ResolvedConnection,
 	type TableLimits,
@@ -19,6 +21,7 @@ import {
 	type TableReadRequest,
 	type TableReadResult,
 } from "../types";
+import { alterPostgresColumns } from "./alterData";
 import { beginPostgresExecution } from "./execution";
 import { describePostgresObject } from "./objectData";
 import { mutatePostgresTable, readPostgresTable } from "./tableData";
@@ -232,6 +235,19 @@ export class PostgresAdapter implements DatabaseAdapter {
 		limits: TableLimits,
 	): Promise<ObjectDescribeResult> {
 		return describePostgresObject(this.clientFor(connection), request, limits);
+	}
+
+	alterColumns(
+		connection: ResolvedConnection,
+		request: ObjectAlterExecution,
+		limits: TableLimits,
+	): Promise<ObjectAlterResult> {
+		return alterPostgresColumns(
+			this.clientFor(connection),
+			connection,
+			request,
+			limits,
+		);
 	}
 
 	async close(): Promise<void> {

@@ -83,6 +83,17 @@ beforeAll(async () => {
 	await admin.unsafe(
 		"INSERT INTO ov_orders (reference, amount, status) VALUES ('A-1', 10.00, 'open')",
 	);
+	await admin.unsafe("DROP FUNCTION IF EXISTS ov_total");
+	await admin.unsafe("DROP PROCEDURE IF EXISTS ov_touch");
+	await admin.unsafe(
+		`CREATE FUNCTION ov_total(order_id INT, vat DECIMAL(4,2))
+		 RETURNS DECIMAL(10,2) DETERMINISTIC READS SQL DATA
+		 RETURN (SELECT amount * (1 + vat) FROM ov_orders WHERE id = order_id)`,
+	);
+	await admin.unsafe(
+		`CREATE PROCEDURE ov_touch(IN order_id INT)
+		 UPDATE ov_orders SET status = 'touched' WHERE id = order_id`,
+	);
 	await admin.unsafe("ANALYZE TABLE ov_orders");
 });
 
@@ -191,6 +202,59 @@ describe("mysql object view", () => {
 		// error or a claim that MySQL cannot answer.
 		expect(result.unsupported).toEqual([]);
 		expect(Array.isArray(result.grants)).toBe(true);
+	});
+
+	myTest("a function's ddl comes back verbatim from SHOW CREATE", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{ schema: "demo", name: "ov_total", kind: "function" },
+			LIMITS,
+		);
+		expect(result.ddlReconstructed).toBe(false);
+		expect(result.ddl).toContain("CREATE");
+		expect(result.ddl).toContain("ov_total");
+		expect(result.ddl).toContain("RETURN");
+		expect(result.tabs).toEqual(["arguments", "grants", "statistics", "ddl"]);
+	});
+
+	myTest("function arguments carry name, type and mode", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{ schema: "demo", name: "ov_total", kind: "function" },
+			LIMITS,
+		);
+		expect(result.arguments.map((argument) => argument.name)).toEqual([
+			"order_id",
+			"vat",
+		]);
+		expect(result.arguments[0]?.mode).toBe("in");
+		const byLabel = new Map(
+			result.statistics.map((stat) => [stat.label, stat.value]),
+		);
+		expect(byLabel.get("deterministic")).toBe("yes");
+		expect(byLabel.get("returns")).toBe("decimal(10,2)");
+	});
+
+	myTest("a procedure describes through the same path", async () => {
+		const result = await adapter.describeObject(
+			CONNECTION,
+			{ schema: "demo", name: "ov_touch", kind: "procedure" },
+			LIMITS,
+		);
+		expect(result.ddl).toContain("PROCEDURE");
+		expect(result.arguments.map((argument) => argument.name)).toEqual([
+			"order_id",
+		]);
+	});
+
+	myTest("mysql has no sequences to describe", async () => {
+		await expect(
+			adapter.describeObject(
+				CONNECTION,
+				{ schema: "demo", name: "whatever", kind: "sequence" },
+				LIMITS,
+			),
+		).rejects.toThrow(/Cannot describe/);
 	});
 
 	myTest("a missing relation is a request error", async () => {

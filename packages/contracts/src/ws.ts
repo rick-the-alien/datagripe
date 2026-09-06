@@ -36,6 +36,7 @@ export const clientActionSchema = z.enum([
 	"table.rows",
 	"table.mutate",
 	"object.describe",
+	"object.alter",
 	"execution.start",
 	"execution.cancel",
 	"execution.subscribe",

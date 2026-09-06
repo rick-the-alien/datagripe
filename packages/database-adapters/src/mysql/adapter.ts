@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectAlterResult,
 	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
@@ -14,6 +15,7 @@ import {
 	type ExecutionRunResult,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectAlterExecution,
 	type ObjectRequest,
 	type ResolvedConnection,
 	type TableLimits,
@@ -22,6 +24,7 @@ import {
 	type TableReadRequest,
 	type TableReadResult,
 } from "../types";
+import { alterMysqlColumns } from "./alterData";
 import { describeMysqlObject } from "./objectData";
 import { mutateMysqlTable, readMysqlTable } from "./tableData";
 
@@ -279,6 +282,19 @@ export class MysqlAdapter implements DatabaseAdapter {
 		limits: TableLimits,
 	): Promise<ObjectDescribeResult> {
 		return describeMysqlObject(this.clientFor(connection), request, limits);
+	}
+
+	alterColumns(
+		connection: ResolvedConnection,
+		request: ObjectAlterExecution,
+		limits: TableLimits,
+	): Promise<ObjectAlterResult> {
+		return alterMysqlColumns(
+			this.clientFor(connection),
+			connection,
+			request,
+			limits,
+		);
 	}
 
 	async close(): Promise<void> {

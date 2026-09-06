@@ -1,5 +1,6 @@
 import type {
 	ConnectionTestResult,
+	ObjectAlterResult,
 	ObjectDescribeResult,
 	SchemaNode,
 	SchemaPathSegment,
@@ -14,6 +15,7 @@ import {
 	type ExecutionRunResult,
 	type ExecutionSession,
 	InvalidIntrospectionPathError,
+	type ObjectAlterExecution,
 	type ObjectRequest,
 	type ResolvedConnection,
 	type TableLimits,
@@ -22,6 +24,7 @@ import {
 	type TableReadRequest,
 	type TableReadResult,
 } from "../types";
+import { alterSqliteColumns } from "./alterData";
 import { describeSqliteObject } from "./objectData";
 import { mutateSqliteTable, readSqliteTable } from "./tableData";
 
@@ -200,6 +203,13 @@ export class SqliteAdapter implements DatabaseAdapter {
 		request: ObjectRequest,
 	): Promise<ObjectDescribeResult> {
 		return describeSqliteObject(this.clientFor(connection), request);
+	}
+
+	alterColumns(
+		connection: ResolvedConnection,
+		request: ObjectAlterExecution,
+	): Promise<ObjectAlterResult> {
+		return alterSqliteColumns(this.clientFor(connection), connection, request);
 	}
 
 	async close(): Promise<void> {

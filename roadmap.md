@@ -110,11 +110,25 @@ Tracked in `docs/spec/multiplayer.md`.
 - [x] Middle click closes a tab
 - [x] Spec: `docs/spec/object-view.md` (routines, "Editing columns")
 
-## Unscheduled / parking lot
+## Phase 11 — Gripes engine · planned
 
-- Gripes on a routine's ddl — the best place in the product for them, and
-  the reason the rule catalogue needs its own design pass
-  (`docs/spec/object-view.md` open questions)
+Designed in `docs/spec/gripes.md` (draft). The rule catalogue is
+deliberately still open — the brand spec reserves it for its own pass.
+
+- [ ] `packages/gripes`: pure rule catalogue, message catalogue, renderer
+- [ ] Findings are analysis, wording is presentation — attitude re-renders,
+      never re-analyses
+- [ ] Client runner for statement/schema/object rules; server runner for
+      execution rules
+- [ ] Presentation: glyph margin, gripes panel, object-view annotations,
+      annotation rail, status-bar count
+- [ ] Dismissal at occurrence / target / project scope, never silent
+- [ ] Catalogue assertions: four strings per rule, length caps, slur
+      denylist at every level, every string interpolates a fact
+- [ ] Blocked with the danger zone on project class + attitude leaving
+      localStorage
+
+## Unscheduled / parking lot
 - SQLite type/nullability/default changes — need the 12-step table rebuild
 - Index, constraint and trigger editing — the preview-then-apply shape is
   proven; the rest is dialect SQL

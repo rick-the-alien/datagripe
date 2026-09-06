@@ -7,6 +7,12 @@ import { create } from "zustand";
  * staging / local / analytics) and a per-project attitude level for the
  * gripes engine. Neither exists in the server model yet, so both are
  * stored locally per workspace id until the real fields land.
+ *
+ * Both are blocked on the same migration, and both need it for the same
+ * reason: a setting the server does not know cannot gate anything. The
+ * class gates the danger zone (docs/spec/object-view.md) and the
+ * attitude is per project rather than per browser
+ * (docs/spec/gripes.md "Attitude levels").
  */
 
 export type ProjectClass = "production" | "staging" | "local" | "analytics";

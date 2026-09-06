@@ -21,7 +21,8 @@ set have different affordances, and conflating them costs both.
 
 - Editing views, or tables without a primary key. Both are browsable;
   neither can be written, because there is no predicate that provably
-  addresses one row.
+  addresses one row. The footer states the reason; turning "this table
+  has no primary key" into a gripe is `docs/spec/gripes.md`.
 - Multi-row bulk edits, `UPDATE … WHERE <filter>`, or find-and-replace.
   Every write here is one row.
 - DDL. Structure is the object view's job

@@ -279,17 +279,13 @@ pretending. Two reasons, both deliberate:
 
 ## Open questions
 
-- Where does the gripes engine hang off this? The brand spec says
-  object-scoped gripes slot in as a tab. Whether that is a tab or an
-  annotation rail beside the existing tabs is undecided.
-- **The ddl tab of a routine is the best place in the product to look
-  for gripes**, and nothing looks yet. A function body is dense with
-  checkable things — a `VOLATILE` marking on a body that only reads, a
-  `SECURITY DEFINER` without a `search_path`, a scan the enclosing table
-  has no index for — and unlike a table's shape, the body is right there
-  to annotate. Deliberately not built here: the brand spec calls the
-  rule catalogue "the actual product" and reserves it for its own design
-  pass, so picking rules in passing would prejudge it.
+- Object-scoped gripes are designed in `docs/spec/gripes.md`: structural
+  rules annotate the tab their subject lives in, above that tab's table.
+  **The ddl tab of a routine is the most promising surface in the
+  product for them** — a body is dense with checkable things (a
+  `VOLATILE` marking on a body that only reads, a `SECURITY DEFINER`
+  with no `search_path`) and, unlike a table's shape, the text is right
+  there to annotate. Which rules actually ship is still reserved.
 - SQLite's narrow `ALTER TABLE` means type, nullability and default
   changes need the 12-step table rebuild (new table, copy, drop,
   rename). It is well documented and entirely doable, but it is a data

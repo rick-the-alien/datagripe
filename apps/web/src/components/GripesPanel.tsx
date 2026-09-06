@@ -12,8 +12,9 @@ const ATTITUDE_LEVELS: AttitudeLevel[] = [
 
 /**
  * MOCK — gripes panel (brand-system.md "Mascot" tier 3, "Attitude
- * levels"). The rule catalogue does not exist yet, so this is the empty
- * state: faint approval, and the attitude selector that will govern it.
+ * levels"; designed in docs/spec/gripes.md). The rule catalogue does not
+ * exist yet, so this is the empty state: faint approval, and the
+ * attitude selector that will govern it.
  */
 export function GripesPanel() {
 	const currentWorkspaceId = useSessionStore(

@@ -1,0 +1,324 @@
+/* Datagripe site. Tokens come from docs/brand/tokens.css unchanged, so
+   the site and the app cannot drift apart on colour or type.
+
+   Two brand rules bind here in particular: Space Grotesk is the display
+   face and appears nowhere in the application, and there is no motion.
+   Motion in Datagripe means the database is busy, and that meaning only
+   survives if it is never spent on decoration. */
+
+@import url("tokens.css");
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--dg-void);
+	color: var(--dg-ink);
+	font-family: var(--dg-font-sans);
+	font-size: var(--dg-fs-body);
+	line-height: var(--dg-lh-body);
+	-webkit-font-smoothing: antialiased;
+}
+
+main,
+header,
+footer {
+	max-width: 880px;
+	margin: 0 auto;
+	padding: 0 24px;
+}
+
+a {
+	color: var(--dg-cyan);
+	text-decoration-color: color-mix(in srgb, var(--dg-cyan) 40%, transparent);
+	text-underline-offset: 3px;
+}
+
+a:hover {
+	text-decoration-color: var(--dg-cyan);
+}
+
+code {
+	font-family: var(--dg-font-mono);
+	font-size: 0.9em;
+	color: var(--dg-cyan);
+}
+
+/* ---- header ------------------------------------------------ */
+
+header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding-top: 28px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-ui);
+	color: var(--dg-ink-mute);
+}
+
+header img {
+	width: 26px;
+	height: 26px;
+}
+
+header .wordmark {
+	color: var(--dg-ink);
+	font-weight: 500;
+}
+
+header .wordmark em {
+	color: var(--dg-magenta);
+	font-style: normal;
+}
+
+header nav {
+	margin-left: auto;
+	display: flex;
+	gap: 18px;
+}
+
+/* ---- hero -------------------------------------------------- */
+
+/* `main` already supplies the horizontal padding; repeating it here
+   inset the hero 24px further than every section heading below it. */
+.hero {
+	padding: 76px 0 24px;
+}
+
+h1 {
+	margin: 0 0 18px;
+	font-family: var(--dg-font-display);
+	font-size: var(--dg-fs-display);
+	line-height: var(--dg-lh-display);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.lede {
+	margin: 0 0 10px;
+	max-width: 40ch;
+	font-size: 20px;
+	color: var(--dg-ink-dim);
+}
+
+.hero .sub {
+	margin: 0;
+	max-width: 62ch;
+	color: var(--dg-ink-mute);
+}
+
+/* ---- download ---------------------------------------------- */
+
+.download {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 14px;
+	padding: 32px 0 8px;
+}
+
+.button {
+	display: inline-block;
+	padding: 11px 20px;
+	border: 1px solid var(--dg-green);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--dg-green) 10%, transparent);
+	color: var(--dg-green);
+	font-family: var(--dg-font-mono);
+	font-size: 14px;
+	font-weight: 500;
+	text-decoration: none;
+}
+
+.button:hover {
+	background: color-mix(in srgb, var(--dg-green) 18%, transparent);
+}
+
+.download .meta {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-ui);
+	color: var(--dg-ink-mute);
+}
+
+.platforms {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 20px;
+	padding: 6px 0 0;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-ui);
+	color: var(--dg-ink-mute);
+	list-style: none;
+	margin: 0;
+}
+
+/* ---- sections ---------------------------------------------- */
+
+section {
+	padding-top: 64px;
+}
+
+h2 {
+	margin: 0 0 8px;
+	font-family: var(--dg-font-display);
+	font-size: var(--dg-fs-heading);
+	line-height: var(--dg-lh-heading);
+	font-weight: 500;
+}
+
+h2 + .note {
+	margin: 0 0 26px;
+	max-width: 64ch;
+	color: var(--dg-ink-mute);
+}
+
+/* ---- gripe rows -------------------------------------------- */
+
+/* The same treatment the application uses: a 3px severity border, a ~4%
+   tint, square corners because the border is single-sided, and a glyph
+   so meaning survives without colour. */
+.gripe {
+	display: flex;
+	gap: 11px;
+	padding: 11px 14px;
+	border-left: 3px solid;
+	margin-bottom: 10px;
+	font-size: var(--dg-fs-gripe);
+	line-height: var(--dg-lh-gripe);
+}
+
+.gripe .glyph {
+	flex: none;
+	font-size: 9px;
+	line-height: 1.9;
+}
+
+.gripe .level {
+	display: block;
+	margin-top: 4px;
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-mute);
+}
+
+.gripe-blocker {
+	border-left-color: var(--dg-sev-blocker);
+	background: var(--dg-sev-blocker-bg);
+}
+
+.gripe-blocker .glyph {
+	color: var(--dg-sev-blocker);
+}
+
+.gripe-warning {
+	border-left-color: var(--dg-sev-warning);
+	background: var(--dg-sev-warning-bg);
+}
+
+.gripe-warning .glyph {
+	color: var(--dg-sev-warning);
+}
+
+.gripe-style {
+	border-left-color: var(--dg-sev-style);
+	background: var(--dg-sev-style-bg);
+}
+
+.gripe-style .glyph {
+	color: var(--dg-sev-style);
+}
+
+/* ---- feature list ------------------------------------------ */
+
+.features {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+	gap: 26px 34px;
+	padding: 0;
+	list-style: none;
+	margin: 0;
+}
+
+.features h3 {
+	margin: 0 0 4px;
+	font-size: 15px;
+	font-weight: 500;
+}
+
+.features p {
+	margin: 0;
+	font-size: 15px;
+	color: var(--dg-ink-mute);
+}
+
+/* ---- code block -------------------------------------------- */
+
+pre {
+	margin: 0;
+	padding: 16px 18px;
+	background: var(--dg-panel);
+	border: 1px solid var(--dg-rule);
+	border-radius: 4px;
+	overflow-x: auto;
+	font-family: var(--dg-font-mono);
+	font-size: 13px;
+	line-height: 1.7;
+	color: var(--dg-ink-dim);
+}
+
+pre .c {
+	color: var(--dg-syn-comment);
+}
+
+/* ---- honesty list ------------------------------------------ */
+
+.missing {
+	margin: 0;
+	padding-left: 20px;
+	color: var(--dg-ink-mute);
+}
+
+.missing li {
+	margin-bottom: 8px;
+}
+
+.missing strong {
+	color: var(--dg-ink-dim);
+	font-weight: 500;
+}
+
+/* ---- footer ------------------------------------------------ */
+
+/* Top-level, not inside `main`, so this one keeps its own horizontal
+   padding — unlike the hero, which inherits it. */
+footer {
+	margin-top: 88px;
+	padding: 22px 24px 44px;
+	border-top: 1px solid var(--dg-rule);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-ui);
+	color: var(--dg-ink-mute);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 20px;
+}
+
+footer .spacer {
+	margin-left: auto;
+}
+
+@media (max-width: 620px) {
+	h1 {
+		font-size: 40px;
+	}
+
+	.hero {
+		padding-top: 48px;
+	}
+}

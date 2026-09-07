@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — a database IDE that reads your SQL back to you</title>
+<meta name="description" content="A database IDE for PostgreSQL, MySQL, SQLite and Redis. It reads your queries and your schema, and tells you what is wrong with them.">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+<meta property="og:title" content="Datagripe">
+<meta property="og:description" content="A database IDE that reads your SQL back to you.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://datagripe.com/">
+</head>
+<body>
+
+<header>
+	<img src="icon.svg" alt="">
+	<span class="wordmark">data<em>gripe</em></span>
+	<nav>
+		<a href="https://github.com/rick-the-alien/datagripe">Source</a>
+		<a href="https://github.com/rick-the-alien/datagripe/blob/main/CHANGELOG.md">Changelog</a>
+	</nav>
+</header>
+
+<main>
+
+	<div class="hero">
+		<h1>Your queries are fine.<br>Probably.</h1>
+		<p class="lede">A database IDE that reads your SQL back to you, and
+		says what is wrong with it.</p>
+		<p class="sub">PostgreSQL, MySQL, SQLite and Redis. Browse and edit
+		your schema, run queries, share files with your team — and get told,
+		before you press run, that the delete you just wrote has no where
+		clause.</p>
+	</div>
+
+	<div class="download">
+		<a class="button" id="download-primary"
+		   href="https://github.com/rick-the-alien/datagripe/releases/latest">Download</a>
+		<span class="meta" id="download-meta">Free and open source, MIT.</span>
+	</div>
+	<ul class="platforms" id="download-all">
+		<li><a href="https://github.com/rick-the-alien/datagripe/releases/latest">All downloads</a></li>
+	</ul>
+
+	<section>
+		<h2>It complains at a volume you choose</h2>
+		<p class="note">Every finding is analysis, not a sentence. The wording
+		is picked when it is shown, so turning the dial re-words the same
+		finding and never re-analyses. This is one gripe — a join with no
+		condition — at all four levels.</p>
+
+		<div class="gripe gripe-blocker">
+			<span class="glyph" aria-hidden="true">▲</span>
+			<span>This join has no condition. That is a cross product.
+			<span class="level">notice · dry, and still critical</span></span>
+		</div>
+		<div class="gripe gripe-blocker">
+			<span class="glyph" aria-hidden="true">▲</span>
+			<span>This join has no condition. I'll allow it. I won't forget it.
+			<span class="level">warning · the default</span></span>
+		</div>
+		<div class="gripe gripe-blocker">
+			<span class="glyph" aria-hidden="true">▲</span>
+			<span>No join condition. You've asked for every row times every
+			row. Absolute state of this.
+			<span class="level">fatal · swears. opt in.</span></span>
+		</div>
+		<div class="gripe gripe-blocker">
+			<span class="glyph" aria-hidden="true">▲</span>
+			<span>NO JOIN CONDITION. Every row. Times every row. I want you to
+			sit and think about what that number is.
+			<span class="level">panic · a joke, deliberately</span></span>
+		</div>
+
+		<p class="note" style="padding-top:18px">Gripes criticise the query,
+		never the person who wrote it. Anything you disagree with is
+		dismissable for that one occurrence, that table, or the whole
+		project — and it always tells you it is hiding something.</p>
+	</section>
+
+	<section>
+		<h2>Eleven rules, and none of them are about formatting</h2>
+		<p class="note">A rule earns its place by knowing something the query
+		text does not say, or by being about damage rather than tidiness.
+		Style filler is a formatter's job, and the fastest way to get the
+		whole thing switched off.</p>
+
+		<div class="gripe gripe-blocker">
+			<span class="glyph" aria-hidden="true">▲</span>
+			<span>Security definer, no search_path. Anyone who can add a
+			schema owns this.
+			<span class="level">blocker · routine · definer-no-search-path</span></span>
+		</div>
+		<div class="gripe gripe-warning">
+			<span class="glyph" aria-hidden="true">◆</span>
+			<span>status can be null, and null is not &lt;&gt; anything. Those
+			rows vanish here.
+			<span class="level">warning · column · nullable-inequality</span></span>
+		</div>
+		<div class="gripe gripe-warning">
+			<span class="glyph" aria-hidden="true">◆</span>
+			<span>The star in this view is expanded once, at creation. New
+			columns never appear.
+			<span class="level">warning · view · select-star</span></span>
+		</div>
+		<div class="gripe gripe-style">
+			<span class="glyph" aria-hidden="true">●</span>
+			<span>idx_orders_customer is already covered by
+			idx_orders_customer_placed. It costs writes and buys nothing.
+			<span class="level">style · index · duplicate</span></span>
+		</div>
+	</section>
+
+	<section>
+		<h2>The rest of it is a database IDE</h2>
+		<ul class="features">
+			<li>
+				<h3>Editor</h3>
+				<p>Movable tabs and splits, one model per document, drafts and
+				layout recovered across reloads.</p>
+			</li>
+			<li>
+				<h3>Query execution</h3>
+				<p>Run a selection, the statement at the cursor, or the whole
+				file. Streamed results, reliable cancellation, CSV and JSON out.</p>
+			</li>
+			<li>
+				<h3>Table view</h3>
+				<p>Sort, filter, page, edit cells, insert and delete rows. A
+				side panel for the JSON column you cannot read in a grid.</p>
+			</li>
+			<li>
+				<h3>Object view</h3>
+				<p>Columns, indexes, constraints, triggers, grants, statistics
+				and DDL from one catalog call. Edit columns with the SQL shown
+				to you first.</p>
+			</li>
+			<li>
+				<h3>Four engines, honestly</h3>
+				<p>Each adapter declares what it can actually do. SQLite's
+				narrow ALTER is reflected in the UI rather than failing at
+				runtime.</p>
+			</li>
+			<li>
+				<h3>Shared, if you want</h3>
+				<p>Workspace files, presence, follow mode, and queries other
+				people ran — each under their own identity, with an audit
+				trail.</p>
+			</li>
+		</ul>
+	</section>
+
+	<section>
+		<h2>Run it in about twenty seconds</h2>
+		<p class="note">No Docker, no accounts, no configuration. The server
+		starts its own PostgreSQL and opens without a login.</p>
+<pre><span class="c"># requires bun 1.4</span>
+git clone https://github.com/rick-the-alien/datagripe
+cd datagripe
+bun install
+bun run dev        <span class="c"># web on :5173</span></pre>
+		<p class="note" style="padding-top:14px">Or download the desktop app
+		above — same thing in a window, with its own database underneath. The
+		web app also installs as a PWA.</p>
+	</section>
+
+	<section>
+		<h2>What 0.0.1 means</h2>
+		<p class="note">It works and it is tested. Nothing in it is promised
+		to stay put, and these are the holes rather than a roadmap:</p>
+		<ul class="missing">
+			<li><strong>The danger zone does not fire.</strong> Truncate and
+			drop are described in the object view and deliberately not
+			implemented.</li>
+			<li><strong>Gripes are client-side only.</strong> Nothing yet
+			complains about how a query actually turned out, only about how it
+			was written.</li>
+			<li><strong>Project class and attitude live in your browser.</strong>
+			Both need to move server-side before they can be relied on.</li>
+			<li><strong>The icon and mascot are placeholders.</strong> A
+			scowling cylinder, drawn by hand, standing in for the real thing.</li>
+		</ul>
+		<p class="note" style="padding-top:18px">The
+		<a href="https://github.com/rick-the-alien/datagripe/blob/main/CHANGELOG.md">changelog</a>
+		keeps the full list. If a gripe is wrong, that is a bug worth
+		reporting — a wrong gripe costs more trust than a missing one.</p>
+	</section>
+
+</main>
+
+<footer>
+	<span>Datagripe</span>
+	<a href="https://github.com/rick-the-alien/datagripe">GitHub</a>
+	<a href="https://github.com/rick-the-alien/datagripe/issues">Issues</a>
+	<a href="https://github.com/rick-the-alien/datagripe/blob/main/LICENSE">MIT</a>
+	<!-- Required on every public surface, and deliberately names nobody:
+	     naming a vendor draws the association the line exists to deny
+	     (docs/brand/brand-system.md "Parody boundary"). -->
+	<span class="spacer">An independent parody. Not affiliated with,
+	endorsed by, or connected to any other software vendor.</span>
+</footer>
+
+<script src="download.js"></script>
+</body>
+</html>

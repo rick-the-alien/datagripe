@@ -2,6 +2,10 @@
 
 A web-based database IDE inspired by DataGrip. Bun + React 19 + TypeScript.
 
+[datagripe.com](https://datagripe.com) ·
+[downloads](https://github.com/rick-the-alien/datagripe/releases/latest) ·
+[changelog](CHANGELOG.md)
+
 ## Quickstart
 
 Personal/local use — zero config, no Docker, no accounts:
@@ -57,6 +61,7 @@ Linux, macOS, and Windows and attaches them to a GitHub release (see
 
 ## Documentation
 
+- [site/](site) — the datagripe.com landing page, deployed to GitHub Pages
 - [roadmap.md](roadmap.md) — phases, progress, scheduling
 - [docs/initial_idea.md](docs/initial_idea.md) — original engineering handoff
 - [docs/adr/](docs/adr/) — architecture decision records

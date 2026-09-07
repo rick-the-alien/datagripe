@@ -7,7 +7,12 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/apps/web/src/styles/tokens.css", "!**/docs/brand"]
+		"includes": [
+			"**",
+			"!**/apps/web/src/styles/tokens.css",
+			"!**/site/tokens.css",
+			"!**/docs/brand"
+		]
 	},
 	"formatter": {
 		"enabled": true,

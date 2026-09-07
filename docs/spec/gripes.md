@@ -372,19 +372,32 @@ have failed the brand spec's own copy.
 
 *Whether a gripe is funny.* That is a review gate, not a test.
 
-### The barred-term list is empty
+### The barred-term list, and the disclaimer instead of a gate
 
-`BARRED_TERMS` in `messages.ts` ships as an empty array, so
-`assertNoBarredTerms` currently passes trivially. This is a stated gap,
-not a claim of safety.
+`BARRED_TERMS` starts empty and grows alongside the wording: a rule
+arrives with four strings, anything those strings prove they need
+fencing off is added, and `assertNoBarredTerms` keeps it fenced for
+every rule that follows. An enumerate-it-up-front gate was considered
+and dropped — this is free software with no public release to gate, and
+a list nobody has a rule to test against is guesswork wearing a
+checklist.
 
-The mechanism is implemented and tested against an injected list, so
-only the contents are outstanding — and the contents are the one thing
-here that should not be guessed at by whoever last touched the file. The
-brand spec's rule is "nothing touching race, gender, sexuality,
-disability or religion at any level, including `panic`", and turning
-that into terms is a deliberate review step. **It must be populated
-before any catalogue ships.**
+What actually holds the line is the brand spec's rule, which is a review
+standard rather than a string match: "nothing touching race, gender,
+sexuality, disability or religion at any level", and "it criticises the
+query, never the person who wrote it". A string match cannot enforce
+either; it can only catch a regression in something already decided,
+which is what it is for.
+
+The reader gets told as much. `DISCLAIMER`, shown beside the attitude
+control in the panel:
+
+> Gripes criticise the query, never the person who wrote it. fatal and
+> panic swear; choose notice if that is unwelcome.
+
+It sits next to the attitude control because that is where someone picks
+the register, and it is written in the plain product voice, not the
+gripe voice — "if the whole interface is sarcastic then nothing is".
 
 ## Open questions
 

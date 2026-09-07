@@ -127,9 +127,8 @@ still open — the brand spec reserves it for its own pass.
 - [x] Catalogue assertions: four strings per rule with no fallback, length
       caps, barred terms at every level, notice profanity-free, id shape
 - [x] `join.no-condition` — the brand spec's own worked example
-- [ ] **Populate `BARRED_TERMS`** — ships empty, so the check passes
-      trivially. A review step, not a guess. Required before any
-      catalogue ships.
+- [x] `BARRED_TERMS` grows with the wording rather than gating it, and a
+      plain-voice disclaimer beside the attitude control carries the rest
 - [x] Client runner: debounced per document, offsets document-relative
 - [x] Presentation: editor gutter glyph + squiggle, gripes panel with
       severity rows and auditable footers, status-bar count

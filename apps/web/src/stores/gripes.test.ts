@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { useDocumentsStore } from "./documents";
 import { allFindings, findingCount, useGripesStore } from "./gripes";
 
 /**
@@ -101,5 +102,62 @@ describe("counts", () => {
 
 	test("zero on an empty store", () => {
 		expect(findingCount(useGripesStore.getState())).toBe(0);
+	});
+});
+
+describe("a deleted document's findings do not linger", () => {
+	test("dropping a document from the documents store prunes its findings", () => {
+		// Otherwise the status-bar count includes findings for a document
+		// that is gone, and the panel renders a row with no title — the
+		// title comes from the documents store.
+		useDocumentsStore.setState({
+			documents: {
+				"doc-1": {
+					id: "doc-1",
+					title: "one.sql",
+					language: "sql",
+					savedContent: "",
+					currentContent: "select * from a join b",
+					revision: 0,
+					dirty: true,
+					shared: false,
+					createdAt: "",
+					updatedAt: "",
+				},
+			},
+		});
+		useGripesStore
+			.getState()
+			.analyseNow("doc-1", "select * from a join b", "postgres");
+		expect(findingCount(useGripesStore.getState())).toBe(1);
+
+		useDocumentsStore.setState({ documents: {} });
+		expect(findingCount(useGripesStore.getState())).toBe(0);
+		expect(useGripesStore.getState().byDocument["doc-1"]).toBeUndefined();
+	});
+
+	test("a document that still exists keeps its findings", () => {
+		// Closing a tab is not deleting a document, and its gripes are
+		// still true.
+		const doc = {
+			id: "doc-1",
+			title: "one.sql",
+			language: "sql" as const,
+			savedContent: "",
+			currentContent: "select * from a join b",
+			revision: 0,
+			dirty: true,
+			shared: false,
+			createdAt: "",
+			updatedAt: "",
+		};
+		useDocumentsStore.setState({ documents: { "doc-1": doc } });
+		useGripesStore
+			.getState()
+			.analyseNow("doc-1", "select * from a join b", "postgres");
+		useDocumentsStore.setState({
+			documents: { "doc-1": { ...doc, title: "renamed.sql" } },
+		});
+		expect(findingCount(useGripesStore.getState())).toBe(1);
 	});
 });

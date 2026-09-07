@@ -2948,3 +2948,17 @@ th.dg-tv-pk .dg-tv-th {
 .dg-statusbar-blockers {
 	color: var(--dg-magenta);
 }
+
+/* The disclaimer is not a gripe, so it is written and styled like
+   ordinary product copy — "if the whole interface is sarcastic then
+   nothing is". */
+.dg-gripes-disclaimer {
+	margin: 0;
+	flex: none;
+	padding: 6px 10px 8px;
+	border-top: 1px solid var(--dg-rule-soft);
+	background: var(--dg-panel);
+	color: var(--dg-ink-faint);
+	font-size: var(--dg-fs-meta);
+	line-height: var(--dg-lh-meta);
+}

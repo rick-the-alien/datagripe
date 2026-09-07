@@ -3,6 +3,7 @@ import { RULES, runRules, statementInputFor } from "@datagripe/gripes";
 import { splitOptionsForDialect, splitStatements } from "@datagripe/sql-tools";
 import { create } from "zustand";
 import { createDebouncer } from "../persistence/debounce";
+import { useDocumentsStore } from "./documents";
 
 /**
  * Client-side gripe findings (docs/spec/gripes.md "Where rules run").
@@ -100,6 +101,28 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 			set({ byDocument: {}, failed: [] });
 		},
 	};
+});
+
+/**
+ * A deleted document's findings would otherwise linger: the count would
+ * include them and the panel would render a row with no title, since the
+ * title comes from the documents store.
+ *
+ * Pruning here rather than at each deletion site is deliberate. There
+ * are two paths that drop a document today — discarding one locally and
+ * a `document.changed` archive broadcast from another member — and the
+ * next one added would have to remember to call `forget`. This way it
+ * cannot be forgotten, and the dependency points the right way: gripes
+ * know about documents, documents know nothing about gripes.
+ */
+useDocumentsStore.subscribe((state) => {
+	const known = state.documents;
+	const stale = Object.keys(useGripesStore.getState().byDocument).filter(
+		(documentId) => known[documentId] === undefined,
+	);
+	for (const documentId of stale) {
+		useGripesStore.getState().forget(documentId);
+	}
 });
 
 /** Every finding across every open document, already sorted per document. */

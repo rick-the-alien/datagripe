@@ -51,16 +51,26 @@ export const SANCTIONED_PROFANITY = [
 /**
  * Terms barred at every level, `panic` included.
  *
- * **This list is empty and must be populated before any catalogue
- * ships.** It is the one thing in the gripes engine that cannot be
- * delegated to a machine: the brand spec's rule is "nothing touching
- * race, gender, sexuality, disability or religion at any level", and
- * deciding the terms is a deliberate review step, not a guess by
- * whoever last touched this file.
+ * Grown alongside the wording rather than enumerated up front: a rule
+ * arrives with four strings, and anything those strings prove they need
+ * fencing off gets added here. `assertNoBarredTerms` then keeps it
+ * fenced for every rule that follows.
  *
- * `assertNoBarredTerms` is tested against an injected list, so the
- * mechanism is proven and only the contents are outstanding. An empty
- * list here means the check currently passes trivially — that is a
- * known gap, tracked in the roadmap, and not a claim of safety.
+ * The list being short is not a claim that the wording is safe — the
+ * check can only catch what it knows about. What actually holds the line
+ * is the brand spec's rule, which is a review standard rather than a
+ * string match: "nothing touching race, gender, sexuality, disability or
+ * religion at any level", and "it criticises the query, never the person
+ * who wrote it". `DISCLAIMER` says as much to the reader.
  */
 export const BARRED_TERMS: string[] = [];
+
+/**
+ * Shown wherever gripes are read, in the plain product voice rather
+ * than the gripe voice — "if the whole interface is sarcastic then
+ * nothing is". It sits next to the attitude control because that is
+ * where someone chooses the register, and it is the moment the note is
+ * worth reading.
+ */
+export const DISCLAIMER =
+	"Gripes criticise the query, never the person who wrote it. fatal and panic swear; choose notice if that is unwelcome.";

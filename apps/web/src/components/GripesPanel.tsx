@@ -5,6 +5,7 @@ import type {
 } from "@datagripe/contracts";
 import { ATTITUDE_LEVELS } from "@datagripe/contracts";
 import {
+	DISCLAIMER,
 	lineOfOffset,
 	MESSAGES,
 	renderFinding,
@@ -158,6 +159,7 @@ export function GripesPanel() {
 				</select>
 				<span>{ATTITUDE_BLURB[attitude]}</span>
 			</div>
+			<p className="dg-gripes-disclaimer">{DISCLAIMER}</p>
 		</div>
 	);
 }

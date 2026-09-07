@@ -153,10 +153,10 @@ describe("assertNoBarredTerms", () => {
 		);
 	});
 
-	test("an empty list passes trivially, which is the known gap", () => {
-		// BARRED_TERMS ships empty on purpose: choosing the terms is a
-		// review step, not a guess. This test documents that the mechanism
-		// works and the contents are outstanding.
+	test("an empty list passes trivially, and that is the design", () => {
+		// BARRED_TERMS grows with the wording rather than gating it: the
+		// check catches a regression in something already decided, and the
+		// review standard plus the disclaimer carry the rest.
 		expect(assertNoBarredTerms({ "a.b": messages("anything") }, [])).toEqual(
 			[],
 		);

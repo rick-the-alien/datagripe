@@ -1,6 +1,12 @@
-import type { ObjectDescribeResult, ObjectTab } from "@datagripe/contracts";
+import type {
+	Finding,
+	GripeSeverity,
+	ObjectDescribeResult,
+	ObjectTab,
+} from "@datagripe/contracts";
 import {
 	ADAPTER_CAPABILITIES,
+	defaultTabForKind,
 	isDismissed,
 	isRelationKind,
 	objectTabSchema,
@@ -50,6 +56,35 @@ const TAB_EMPTY: Record<ObjectTab, string> = {
 	statistics: "No statistics available for this object.",
 	ddl: "This engine did not return a definition.",
 };
+
+/** Matches the glyphs the gripe rows use, so the strip reads the same. */
+const SEVERITY_GLYPHS: Record<GripeSeverity, string> = {
+	blocker: "▲",
+	warning: "◆",
+	style: "•",
+};
+
+const SEVERITY_ORDER: GripeSeverity[] = ["blocker", "warning", "style"];
+
+/**
+ * The worst severity among a tab's findings, or null when it has none.
+ * A finding with no tab belongs to every tab, so it marks all of them.
+ */
+export function worstSeverityForTab(
+	findings: Finding[],
+	tab: ObjectTab,
+): GripeSeverity | null {
+	const present = new Set(
+		findings
+			.filter(
+				(finding) =>
+					finding.at.kind === "object" &&
+					(finding.at.tab === undefined || finding.at.tab === tab),
+			)
+			.map((finding) => finding.severity),
+	);
+	return SEVERITY_ORDER.find((severity) => present.has(severity)) ?? null;
+}
 
 /** Why a tab is empty when the engine cannot answer it at all. */
 function unsupportedNote(tab: ObjectTab, adapter: string): string {
@@ -400,7 +435,7 @@ export function ObjectView(props: IDockviewPanelProps) {
 		if (requested.success && kindTabs.includes(requested.data)) {
 			return requested.data;
 		}
-		return params.tab === "danger" ? "danger" : (kindTabs[0] as ObjectTab);
+		return params.tab === "danger" ? "danger" : defaultTabForKind(params.kind);
 	});
 	const [data, setData] = useState<ObjectDescribeResult | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -561,18 +596,40 @@ export function ObjectView(props: IDockviewPanelProps) {
 					)}
 				</div>
 				<div className="dg-ov-tabs" role="tablist">
-					{(data?.tabs ?? kindTabs).map((value) => (
-						<button
-							key={value}
-							type="button"
-							className="dg-ov-tab"
-							role="tab"
-							aria-selected={tab === value}
-							onClick={() => setTab(value)}
-						>
-							{value}
-						</button>
-					))}
+					{(data?.tabs ?? kindTabs).map((value) => {
+						// A finding is scoped to the tab its subject lives in,
+						// so without this the worst gripe in the object can sit
+						// behind a tab nobody thought to click.
+						const severity = worstSeverityForTab(objectFindings, value);
+						return (
+							<button
+								key={value}
+								type="button"
+								className="dg-ov-tab"
+								role="tab"
+								aria-selected={tab === value}
+								// The glyph is decoration; the severity has to reach
+								// the accessible name or the mark says nothing to a
+								// screen reader.
+								aria-label={
+									severity === null
+										? value
+										: `${value}, has a ${severity} gripe`
+								}
+								onClick={() => setTab(value)}
+							>
+								{value}
+								{severity !== null && (
+									<span
+										aria-hidden="true"
+										className={`dg-ov-tab-mark dg-sev-${severity}`}
+									>
+										{SEVERITY_GLYPHS[severity]}
+									</span>
+								)}
+							</button>
+						);
+					})}
 					{/* truncate and drop are relation operations; a routine's
 					    danger zone would be a different set and does not exist
 					    yet. */}

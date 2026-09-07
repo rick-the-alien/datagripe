@@ -68,6 +68,25 @@ export function tabsForKind(kind: ObjectKind): ObjectTab[] {
 	}
 }
 
+/**
+ * Which tab to land on.
+ *
+ * Not simply the first tab: a routine's definition is the whole point of
+ * opening it, and it is where its gripes live — a security-definer
+ * escalation is a blocker, and it would be invisible behind a tab nobody
+ * clicked. A relation still opens on its columns, and a sequence on the
+ * counter that is the only thing it has.
+ */
+export function defaultTabForKind(kind: ObjectKind): ObjectTab {
+	switch (kind) {
+		case "function":
+		case "procedure":
+			return "ddl";
+		default:
+			return tabsForKind(kind)[0] as ObjectTab;
+	}
+}
+
 /** Relations have rows; routines and sequences do not. */
 export function isRelationKind(kind: ObjectKind): kind is "table" | "view" {
 	return kind === "table" || kind === "view";

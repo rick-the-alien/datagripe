@@ -2121,6 +2121,27 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	border-bottom-color: var(--dg-cyan);
 }
 
+/* A finding is scoped to the tab its subject lives in, so the strip has
+   to carry a mark or the worst gripe in the object hides behind a tab
+   nobody clicked. Same glyphs as the gripe rows, at the same weight. */
+.dg-ov-tab-mark {
+	margin-left: 5px;
+	font-size: 9px;
+	vertical-align: 1px;
+}
+
+.dg-ov-tab-mark.dg-sev-blocker {
+	color: var(--dg-sev-blocker);
+}
+
+.dg-ov-tab-mark.dg-sev-warning {
+	color: var(--dg-sev-warning);
+}
+
+.dg-ov-tab-mark.dg-sev-style {
+	color: var(--dg-sev-style);
+}
+
 .dg-ov-tab-danger {
 	margin-left: auto;
 	border-left: 1px solid var(--dg-rule);

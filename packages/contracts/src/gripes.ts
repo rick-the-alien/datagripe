@@ -97,6 +97,12 @@ export const findingSchema = z.object({
 	severity: gripeSeveritySchema,
 	at: gripeLocationSchema,
 	facts: gripeFactsSchema,
+	/**
+	 * Stable key for "this finding, here" — a hash of the statement text
+	 * rather than its offset, which moves as soon as anything above it is
+	 * typed. Absent for findings with no statement behind them.
+	 */
+	fingerprint: z.string().max(40).optional(),
 });
 
 export type Finding = z.infer<typeof findingSchema>;
@@ -105,3 +111,72 @@ export type Finding = z.infer<typeof findingSchema>;
 export const dismissalScopeSchema = z.enum(["occurrence", "target", "project"]);
 
 export type DismissalScope = z.infer<typeof dismissalScopeSchema>;
+
+/**
+ * Dismissal (docs/spec/gripes.md). Three scopes, coarsest last:
+ * `occurrence` is "not here", `target` is "not in this file or on this
+ * object", `project` is "never, in this project".
+ */
+export const dismissalSchema = z.object({
+	ruleId: z.string().min(1).max(80),
+	scope: dismissalScopeSchema,
+	/**
+	 * `occurrence`: the finding's fingerprint.
+	 * `target`: a document id, or `object:<schema>.<name>`.
+	 * `project`: absent.
+	 */
+	key: z.string().min(1).max(512).nullable(),
+});
+
+export type Dismissal = z.infer<typeof dismissalSchema>;
+
+export const dismissRequestSchema = dismissalSchema.extend({
+	idempotencyKey: z.string().min(8).max(128),
+});
+
+export type DismissRequest = z.infer<typeof dismissRequestSchema>;
+
+export const dismissalListResultSchema = z.object({
+	dismissals: z.array(dismissalSchema),
+});
+
+export type DismissalListResult = z.infer<typeof dismissalListResultSchema>;
+
+/** The target key for an object-scoped dismissal. */
+export function objectTargetKey(schema: string, name: string): string {
+	return `object:${schema}.${name}`;
+}
+
+/**
+ * Whether a dismissal silences a finding. Coarse scopes win, so a
+ * project dismissal covers every occurrence without needing rows for
+ * each one.
+ */
+export function isDismissed(
+	finding: Finding,
+	dismissals: Dismissal[],
+): boolean {
+	return dismissals.some((dismissal) => {
+		if (dismissal.ruleId !== finding.ruleId) {
+			return false;
+		}
+		if (dismissal.scope === "project") {
+			return true;
+		}
+		if (dismissal.scope === "occurrence") {
+			return (
+				finding.fingerprint !== undefined &&
+				dismissal.key === finding.fingerprint
+			);
+		}
+		if (finding.at.kind === "document") {
+			return dismissal.key === finding.at.documentId;
+		}
+		if (finding.at.kind === "object") {
+			return (
+				dismissal.key === objectTargetKey(finding.at.schema, finding.at.name)
+			);
+		}
+		return false;
+	});
+}

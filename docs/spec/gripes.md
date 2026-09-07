@@ -17,10 +17,12 @@
 > exercised by something real.
 >
 > Also built: the client runner (`stores/gripes.ts`), the gripes panel,
-> the status-bar count, and the editor's gutter glyph and squiggle.
+> the status-bar count, the editor's gutter glyph, squiggle and
+> annotation rail, and dismissal at all three scopes.
 >
-> Not built: the object-view annotation, the annotation rail, dismissal,
-> and the server-side runner on the execution path.
+> Not built: the object-view annotation and the server-side runner on the
+> execution path. Both wait on rules with those inputs, which is a
+> catalogue decision.
 
 ## Goal
 
@@ -223,11 +225,12 @@ Five surfaces, in descending order of how often you see them:
    the relevant tab's table — *"No index on `status`, which four of your
    five slowest queries filter on"* with a `blocker · index · missing`
    footer. Structural rules annotate the tab their subject lives in.
-4. **Annotation rail.** From the scrollbars mock: marks beside the
-   vertical scrollbar showing where findings are in the *whole*
-   document, not just the visible window. Capped — "a rail with two
-   hundred marks is a gradient, not a map. Cluster nearby marks into one
-   and stop drawing past roughly forty."
+4. **Annotation rail.** Built, on Monaco's overview ruler, which is
+   exactly this: marks beside the vertical scrollbar showing where
+   findings are in the *whole* document, not just the visible window.
+   Capped at forty, because "a rail with two hundred marks is a
+   gradient, not a map" — and since findings are sorted worst first, the
+   cap drops style notes before blockers.
 5. **Status bar.** Built. A count, and magenta when any finding is a
    blocker — so the one that matters is not averaged away by a pile of
    style notes.
@@ -278,16 +281,36 @@ Three scopes, coarsest last:
 | target | rule id + document or object | not in this file |
 | project | rule id | never, in this project |
 
-Stored server-side per workspace so a dismissal survives a browser and
-is visible to the team. Two consequences to decide rather than discover
-(see Open questions): a dismissal is currently proposed as **team-wide**,
-because a schema finding is a team fact; and a scratchpad's dismissal
-would reference a document id the server does not otherwise know, which
-is harmless but worth noting.
+Stored server-side per workspace (`gripe_dismissals`) so a dismissal
+survives a browser and is visible to the team. It is **team-wide**,
+because a schema finding is a team fact — still an open question, so
+`dismissed_by` is recorded on every row, which is enough to make it
+personal later without losing history. A scratchpad's dismissal
+references a document id the server does not otherwise know; harmless,
+and worth knowing.
+
+**An occurrence dismissal cannot key on a document offset.** Offsets
+move the moment anything above them is typed, so the dismissal would
+evaporate on the next keystroke. It keys on a hash of the statement's
+normalized text instead, which gets the behaviour right in both
+directions: editing an unrelated statement — or running the formatter —
+keeps the dismissal, and editing *this* statement drops it, because the
+finding may no longer hold once the text changed.
+
+Dismissing the same thing twice is a no-op rather than an error, via a
+unique index over `(workspace, rule, scope, key)`. `project` scope has
+no key and stores `''`, so one index covers all three scopes.
 
 Dismissal is never silent. The panel keeps a count of what is hidden and
-a way to bring it back, or the feature becomes a way to make the tool
-lie quietly.
+a "show all again" beside it, or the feature becomes a way to make the
+tool lie quietly. A dismissed finding also leaves the gutter and the
+rail — silencing the panel while the squiggle argues with it would be
+worse than not dismissing at all. Findings stay in the store either way,
+so restoring costs no re-analysis.
+
+The scope labels say what they mean rather than what they are called:
+"not here", "not in this file" (or "not on this object"), "never in this
+project".
 
 ### Rule ids are a public contract
 

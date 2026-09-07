@@ -1,6 +1,8 @@
+import type { GripeSeverity } from "@datagripe/contracts";
+import { isDismissed } from "@datagripe/contracts";
 import { MESSAGES, renderFinding, renderFooter } from "@datagripe/gripes";
 import type { IDockviewPanelProps } from "dockview-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { wsClient } from "../api/ws";
 import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
@@ -17,6 +19,20 @@ import { modelRegistry } from "./registry";
 import { remoteViewDecorations } from "./remoteCursors";
 
 const VIEW_STATE_DELAY_MS = 500;
+
+/**
+ * How many findings get a mark on the annotation rail. Past roughly
+ * forty the rail stops being a map (mocks/scrollbars.html), so the rest
+ * keep their gutter glyph and squiggle and give up the rail mark.
+ */
+const RAIL_CAP = 40;
+
+/** Severity accents, resolved here because Monaco needs real colours. */
+const RAIL_COLOURS: Record<GripeSeverity, string> = {
+	blocker: "#FF3EA5",
+	warning: "#8B5CF6",
+	style: "#00E599",
+};
 const BROADCAST_DELAY_MS = 250;
 
 /** Live editor instances and their decoration collections by view id. */
@@ -318,8 +334,15 @@ export function EditorView(props: IDockviewPanelProps) {
 		analyse(documentId, documentContent, "postgres");
 	}, [documentId, documentContent, analyse]);
 
-	const findings = useGripesStore((state) =>
+	// Dismissed findings must leave the gutter too, or dismissing one
+	// silences the panel and leaves the squiggle arguing with it.
+	const rawFindings = useGripesStore((state) =>
 		documentId === undefined ? undefined : state.byDocument[documentId],
+	);
+	const dismissals = useGripesStore((state) => state.dismissals);
+	const findings = useMemo(
+		() => rawFindings?.filter((finding) => !isDismissed(finding, dismissals)),
+		[rawFindings, dismissals],
 	);
 	useEffect(() => {
 		const decorations = gripeDecorations.get(props.api.id);
@@ -335,29 +358,45 @@ export function EditorView(props: IDockviewPanelProps) {
 			.getState()
 			.attitudeFor(useSessionStore.getState().currentWorkspaceId);
 		decorations.set(
-			findings.flatMap((finding): monaco.editor.IModelDeltaDecoration[] => {
-				if (finding.at.kind !== "document") {
-					return [];
-				}
-				return [
-					{
-						range: monaco.Range.fromPositions(
-							model.getPositionAt(finding.at.start),
-							model.getPositionAt(finding.at.end),
-						),
-						options: {
-							glyphMarginClassName: `dg-gripe-glyph-${finding.severity}`,
-							className: `dg-gripe-squiggle-${finding.severity}`,
-							hoverMessage: {
-								value: `${renderFinding(finding, attitude, MESSAGES)}\n\n\`${renderFooter(finding)}\``,
+			findings.flatMap(
+				(finding, index): monaco.editor.IModelDeltaDecoration[] => {
+					if (finding.at.kind !== "document") {
+						return [];
+					}
+					return [
+						{
+							range: monaco.Range.fromPositions(
+								model.getPositionAt(finding.at.start),
+								model.getPositionAt(finding.at.end),
+							),
+							options: {
+								glyphMarginClassName: `dg-gripe-glyph-${finding.severity}`,
+								className: `dg-gripe-squiggle-${finding.severity}`,
+								hoverMessage: {
+									value: `${renderFinding(finding, attitude, MESSAGES)}\n\n\`${renderFooter(finding)}\``,
+								},
+								// The annotation rail (mocks/scrollbars.html): marks
+								// beside the scrollbar showing where findings are in
+								// the whole document, not just the visible window.
+								// Capped, because "a rail with two hundred marks is a
+								// gradient, not a map". Findings are sorted worst
+								// first, so the cap drops style notes before blockers.
+								...(index < RAIL_CAP
+									? {
+											overviewRuler: {
+												color: RAIL_COLOURS[finding.severity],
+												position: monaco.editor.OverviewRulerLane.Right,
+											},
+										}
+									: {}),
+								stickiness:
+									monaco.editor.TrackedRangeStickiness
+										.NeverGrowsWhenTypingAtEdges,
 							},
-							stickiness:
-								monaco.editor.TrackedRangeStickiness
-									.NeverGrowsWhenTypingAtEdges,
 						},
-					},
-				];
-			}),
+					];
+				},
+			),
 		);
 	}, [findings, props.api]);
 

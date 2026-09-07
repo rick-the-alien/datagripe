@@ -39,6 +39,7 @@ import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { useDatasourceStore } from "../stores/datasource";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
+import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
 import {
 	useConnectionsStore,
@@ -226,6 +227,10 @@ export function Workspace() {
 			useDatasourceStore.getState().reset();
 			usePresenceStore.getState().reset();
 			useExecutionsStore.getState().reset();
+			// Dismissals are workspace-wide, so they rescope with everything
+			// else. Findings are re-derived from the documents that follow.
+			useGripesStore.getState().reset();
+			void useGripesStore.getState().loadDismissals();
 			void useConnectionsStore
 				.getState()
 				.load()

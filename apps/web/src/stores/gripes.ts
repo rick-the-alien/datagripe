@@ -1,7 +1,13 @@
-import type { Finding } from "@datagripe/contracts";
+import type {
+	Dismissal,
+	DismissalListResult,
+	Finding,
+} from "@datagripe/contracts";
+import { isDismissed } from "@datagripe/contracts";
 import { RULES, runRules, statementInputFor } from "@datagripe/gripes";
 import { splitOptionsForDialect, splitStatements } from "@datagripe/sql-tools";
 import { create } from "zustand";
+import { wsClient } from "../api/ws";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "./documents";
 
@@ -24,16 +30,27 @@ const ANALYSE_DELAY_MS = 400;
 const debouncer = createDebouncer();
 
 export type GripesState = {
-	/** document id → findings, worst first. */
+	/**
+	 * document id → every finding, worst first, dismissed ones included.
+	 * Filtering happens on read so a dismissal can be undone without
+	 * re-analysing.
+	 */
 	byDocument: Record<string, Finding[]>;
 	/** Rule ids that threw while evaluating, for the console. Never shown. */
 	failed: string[];
+	/** Workspace-wide dismissals, loaded on connect. */
+	dismissals: Dismissal[];
 	/** Re-analyse one document's text. Debounced per document. */
 	analyse: (documentId: string, sql: string, dialect: string) => void;
 	/** Analyse now, skipping the debounce — used on document open. */
 	analyseNow: (documentId: string, sql: string, dialect: string) => void;
 	/** Drop a document's findings when it closes or is deleted. */
 	forget: (documentId: string) => void;
+	/** Load the workspace's dismissals. Called when the socket opens. */
+	loadDismissals: () => Promise<void>;
+	dismiss: (dismissal: Dismissal) => Promise<void>;
+	/** One dismissal, or every one when given nothing. */
+	restore: (dismissal?: Dismissal) => Promise<void>;
 	reset: () => void;
 };
 
@@ -76,6 +93,7 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 	return {
 		byDocument: {},
 		failed: [],
+		dismissals: [],
 
 		analyse(documentId, sql, dialect) {
 			debouncer.schedule(
@@ -96,9 +114,38 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 			set({ byDocument });
 		},
 
+		async loadDismissals() {
+			try {
+				const result = await wsClient.request<DismissalListResult>(
+					"gripe.dismissals",
+					{},
+				);
+				set({ dismissals: result.dismissals });
+			} catch {
+				// A gripe engine that cannot read dismissals shows everything,
+				// which is noisy but never wrong.
+			}
+		},
+
+		async dismiss(dismissal) {
+			const result = await wsClient.request<DismissalListResult>(
+				"gripe.dismiss",
+				{ ...dismissal, idempotencyKey: crypto.randomUUID() },
+			);
+			set({ dismissals: result.dismissals });
+		},
+
+		async restore(dismissal) {
+			const result = await wsClient.request<DismissalListResult>(
+				"gripe.restore",
+				dismissal ?? null,
+			);
+			set({ dismissals: result.dismissals });
+		},
+
 		reset() {
 			debouncer.flush();
-			set({ byDocument: {}, failed: [] });
+			set({ byDocument: {}, failed: [], dismissals: [] });
 		},
 	};
 });
@@ -125,11 +172,41 @@ useDocumentsStore.subscribe((state) => {
 	}
 });
 
-/** Every finding across every open document, already sorted per document. */
+/**
+ * Findings that survive the workspace's dismissals — what any surface
+ * should actually show. Dismissed findings stay in the store so
+ * restoring one costs nothing.
+ */
+export function visibleFindings(state: GripesState): Finding[] {
+	return Object.values(state.byDocument)
+		.flat()
+		.filter((finding) => !isDismissed(finding, state.dismissals));
+}
+
+/** Every finding, dismissed included. */
 export function allFindings(state: GripesState): Finding[] {
 	return Object.values(state.byDocument).flat();
 }
 
 export function findingCount(state: GripesState): number {
-	return allFindings(state).length;
+	return visibleFindings(state).length;
+}
+
+/**
+ * How many findings the dismissals are hiding. "Dismissal is never
+ * silent" — without this the feature is a way to make the tool lie
+ * quietly.
+ */
+export function hiddenCount(state: GripesState): number {
+	return allFindings(state).length - visibleFindings(state).length;
+}
+
+/** The visible findings of one document, for the panel's grouping. */
+export function visibleForDocument(
+	state: GripesState,
+	documentId: string,
+): Finding[] {
+	return (state.byDocument[documentId] ?? []).filter(
+		(finding) => !isDismissed(finding, state.dismissals),
+	);
 }

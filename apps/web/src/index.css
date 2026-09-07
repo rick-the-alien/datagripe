@@ -2819,15 +2819,24 @@ th.dg-tv-pk .dg-tv-th {
 	gap: 4px;
 }
 
+/* A container, not a button: the reveal is a button inside it and the
+   dismiss control is its sibling, so neither nests inside the other. */
 .dg-gripe {
 	display: flex;
 	align-items: flex-start;
+	border-left: var(--dg-border-accent-row) solid transparent;
+	border-radius: 0;
+}
+
+.dg-gripe-main {
+	display: flex;
+	align-items: flex-start;
 	gap: 10px;
-	width: 100%;
+	flex: 1;
+	min-width: 0;
 	text-align: left;
 	background: none;
 	border: none;
-	border-left: var(--dg-border-accent-row) solid transparent;
 	border-radius: 0;
 	padding: 9px 13px;
 	font: inherit;
@@ -2835,6 +2844,53 @@ th.dg-tv-pk .dg-tv-th {
 
 .dg-gripe:hover {
 	background: var(--dg-raised);
+}
+
+/* Visible on hover or when its menu is open — a dismiss affordance on
+   every row at rest is an invitation to silence the tool. */
+.dg-gripe-dismiss {
+	position: relative;
+	flex: none;
+	padding: 8px 8px 0 0;
+	opacity: 0;
+}
+
+.dg-gripe:hover .dg-gripe-dismiss,
+.dg-gripe-dismiss:focus-within {
+	opacity: 1;
+}
+
+.dg-gripe-dismiss-menu {
+	min-width: 172px;
+	top: 28px;
+}
+
+/* Dismissal is never silent: the count and the way back are permanent. */
+.dg-gripes-hidden {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex: none;
+	padding: 6px 10px;
+	border-top: 1px solid var(--dg-rule);
+	background: var(--dg-panel);
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-gripes-hidden button {
+	background: none;
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink-dim);
+	font: inherit;
+	padding: 2px 7px;
+}
+
+.dg-gripes-hidden button:hover {
+	background: var(--dg-raised);
+	color: var(--dg-ink);
 }
 
 .dg-gripe-glyph {

@@ -1,5 +1,6 @@
 export * from "./assertions";
 export { RULES, ruleById } from "./catalogue";
+export * from "./fingerprint";
 export {
 	BARRED_TERMS,
 	DISCLAIMER,

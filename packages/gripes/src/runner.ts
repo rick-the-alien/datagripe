@@ -1,5 +1,6 @@
 import type { Finding, GripeSeverity } from "@datagripe/contracts";
 import { GRIPE_SEVERITIES } from "@datagripe/contracts";
+import { statementFingerprint } from "./fingerprint";
 import type { GripeContext, Rule, RuleInput } from "./types";
 
 /**
@@ -77,9 +78,20 @@ export interface RunResult {
 export function runRules(rules: Rule[], context: GripeContext): RunResult {
 	const findings: Finding[] = [];
 	const failed: string[] = [];
+	// Stamped once per run rather than per rule: every finding from this
+	// statement shares its text, and a rule should not have to remember
+	// to key its own dismissals.
+	const fingerprint =
+		context.statement === undefined
+			? undefined
+			: statementFingerprint(context.statement.text);
 	for (const rule of rulesFor(rules, context)) {
 		try {
-			findings.push(...rule.evaluate(context));
+			for (const finding of rule.evaluate(context)) {
+				findings.push(
+					fingerprint === undefined ? finding : { ...finding, fingerprint },
+				);
+			}
 		} catch {
 			failed.push(rule.id);
 		}

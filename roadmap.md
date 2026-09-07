@@ -132,8 +132,10 @@ still open — the brand spec reserves it for its own pass.
 - [x] Client runner: debounced per document, offsets document-relative
 - [x] Presentation: editor gutter glyph + squiggle, gripes panel with
       severity rows and auditable footers, status-bar count
-- [ ] Presentation: object-view annotations, annotation rail
-- [ ] Dismissal at occurrence / target / project scope, never silent
+- [x] Annotation rail on Monaco's overview ruler, capped at forty
+- [x] Dismissal at occurrence / target / project scope, never silent —
+      occurrence keys on a statement fingerprint, not a moving offset
+- [ ] Presentation: object-view annotations
 - [ ] Server-side runner on the execution path
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage

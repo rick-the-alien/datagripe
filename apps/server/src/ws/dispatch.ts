@@ -3,6 +3,8 @@ import {
 	connectionDeleteRequestSchema,
 	connectionTestRequestSchema,
 	connectionUpdateRequestSchema,
+	dismissalSchema,
+	dismissRequestSchema,
 	documentArchiveRequestSchema,
 	documentCreateRequestSchema,
 	documentFocusRequestSchema,
@@ -35,6 +37,12 @@ import type { AppDb } from "../db/app/pool";
 import type { DocumentsService } from "../documents/service";
 import { listHistory } from "../execution/history";
 import type { ExecutionRegistry } from "../execution/registry";
+import {
+	dismiss,
+	listDismissals,
+	restore,
+	restoreAll,
+} from "../gripes/dismissals";
 import { log } from "../log";
 import type { PresenceTracker } from "../multiplayer/presence";
 import type { ViewBroadcastThrottle } from "../multiplayer/views";
@@ -95,6 +103,8 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"workspace.set-default-connection": "editor",
 	"table.mutate": "editor",
 	"object.alter": "editor",
+	"gripe.dismiss": "editor",
+	"gripe.restore": "editor",
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
@@ -445,6 +455,30 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					request.idempotencyKey,
 					() => connections.alterColumns(workspace, request),
 				);
+			}
+
+			case "gripe.dismissals":
+				return { dismissals: await listDismissals(appDb, workspace.id) };
+
+			case "gripe.dismiss": {
+				const request = dismissRequestSchema.parse(payload);
+				return {
+					dismissals: await dismiss(appDb, workspace.id, ctx.userId, request),
+				};
+			}
+
+			case "gripe.restore": {
+				// An empty payload restores everything, which is the panel's
+				// "show hidden" escape; a dismissal restores just that one.
+				if (payload === null || payload === undefined) {
+					return {
+						dismissals: await restoreAll(appDb, workspace.id, ctx.userId),
+					};
+				}
+				const request = dismissalSchema.parse(payload);
+				return {
+					dismissals: await restore(appDb, workspace.id, ctx.userId, request),
+				};
 			}
 
 			case "schema.children": {

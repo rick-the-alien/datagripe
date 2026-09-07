@@ -1,9 +1,10 @@
 import type {
 	AttitudeLevel,
+	Dismissal,
 	Finding,
 	GripeSeverity,
 } from "@datagripe/contracts";
-import { ATTITUDE_LEVELS } from "@datagripe/contracts";
+import { ATTITUDE_LEVELS, isDismissed } from "@datagripe/contracts";
 import {
 	DISCLAIMER,
 	lineOfOffset,
@@ -14,8 +15,9 @@ import {
 import { revealInEditor } from "../app/editorPanels";
 import { useBrandingStore } from "../stores/branding";
 import { useDocumentsStore } from "../stores/documents";
-import { useGripesStore } from "../stores/gripes";
+import { hiddenCount, useGripesStore } from "../stores/gripes";
 import { useSessionStore } from "../stores/session";
+import { GripeDismiss } from "./GripeDismiss";
 import { Mascot } from "./Mascot";
 
 /**
@@ -50,6 +52,7 @@ function GripeRow(props: {
 	attitude: AttitudeLevel;
 	documentTitle: string | undefined;
 	line: number | undefined;
+	onDismiss: (dismissal: Dismissal) => void;
 }) {
 	const { finding } = props;
 	// Wording is chosen here, at render, from the reader's attitude — the
@@ -61,26 +64,29 @@ function GripeRow(props: {
 	);
 
 	return (
-		<button
-			type="button"
-			className={`dg-gripe dg-gripe-${finding.severity}`}
-			onClick={() => {
-				if (finding.at.kind === "document") {
-					revealInEditor(finding.at.documentId, finding.at.start);
-				}
-			}}
-		>
-			<span className="dg-gripe-glyph" aria-hidden="true">
-				{SEVERITY_GLYPH[finding.severity]}
-			</span>
-			<span className="dg-gripe-body">
-				<span className="dg-gripe-text">{text}</span>
-				<span className="dg-gripe-footer">
-					{props.documentTitle !== undefined && `${props.documentTitle} · `}
-					{footer}
+		<div className={`dg-gripe dg-gripe-${finding.severity}`}>
+			<button
+				type="button"
+				className="dg-gripe-main"
+				onClick={() => {
+					if (finding.at.kind === "document") {
+						revealInEditor(finding.at.documentId, finding.at.start);
+					}
+				}}
+			>
+				<span className="dg-gripe-glyph" aria-hidden="true">
+					{SEVERITY_GLYPH[finding.severity]}
 				</span>
-			</span>
-		</button>
+				<span className="dg-gripe-body">
+					<span className="dg-gripe-text">{text}</span>
+					<span className="dg-gripe-footer">
+						{props.documentTitle !== undefined && `${props.documentTitle} · `}
+						{footer}
+					</span>
+				</span>
+			</button>
+			<GripeDismiss finding={props.finding} onDismiss={props.onDismiss} />
+		</div>
 	);
 }
 
@@ -93,16 +99,20 @@ export function GripesPanel() {
 	);
 	const setAttitude = useBrandingStore((state) => state.setAttitude);
 	const byDocument = useGripesStore((state) => state.byDocument);
+	const dismissals = useGripesStore((state) => state.dismissals);
+	const hidden = useGripesStore((state) => hiddenCount(state));
+	const dismiss = useGripesStore((state) => state.dismiss);
+	const restore = useGripesStore((state) => state.restore);
 	const documents = useDocumentsStore((state) => state.documents);
 
 	const groups = Object.entries(byDocument)
-		.filter(([, findings]) => findings.length > 0)
 		.map(([documentId, findings]) => ({
 			documentId,
 			title: documents[documentId]?.title,
 			content: documents[documentId]?.currentContent ?? "",
-			findings,
+			findings: findings.filter((finding) => !isDismissed(finding, dismissals)),
 		}))
+		.filter((group) => group.findings.length > 0)
 		.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
 
 	const total = groups.reduce((sum, group) => sum + group.findings.length, 0);
@@ -112,9 +122,11 @@ export function GripesPanel() {
 			{total === 0 ? (
 				<div className="dg-gripes-empty">
 					<Mascot size={72} expression="approval" />
-					<p>No gripes.</p>
+					<p>{hidden === 0 ? "No gripes." : "No gripes left to show."}</p>
 					<p className="dg-header-meta">
-						Nothing worth complaining about in what is open. Give it time.
+						{hidden === 0
+							? "Nothing worth complaining about in what is open. Give it time."
+							: "Everything found here has been dismissed."}
 					</p>
 				</div>
 			) : (
@@ -128,6 +140,7 @@ export function GripesPanel() {
 									}`}
 									finding={finding}
 									attitude={attitude}
+									onDismiss={(dismissal) => void dismiss(dismissal)}
 									documentTitle={group.title}
 									line={
 										finding.at.kind === "document"
@@ -138,6 +151,17 @@ export function GripesPanel() {
 							))}
 						</div>
 					))}
+				</div>
+			)}
+			{hidden > 0 && (
+				<div className="dg-gripes-hidden">
+					<span>
+						{hidden} hidden by {dismissals.length} dismissal
+						{dismissals.length === 1 ? "" : "s"}
+					</span>
+					<button type="button" onClick={() => void restore()}>
+						show all again
+					</button>
 				</div>
 			)}
 			<div className="dg-gripes-attitude">

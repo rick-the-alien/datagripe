@@ -163,6 +163,23 @@ describe("dispatcher authorization", () => {
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 	});
 
+	test("dismissing a gripe requires editor; listing is open to viewers", async () => {
+		const { dispatch } = createTestDispatcher();
+		// A dismissal is a workspace-wide opinion change, so it needs the
+		// same role a workspace mutation does. Reading them does not.
+		await expect(
+			dispatch(ctx("viewer"), "gripe.dismiss", {
+				ruleId: "join.no-condition",
+				scope: "project",
+				key: null,
+				idempotencyKey: "idem-key-0004",
+			}),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+		await expect(
+			dispatch(ctx("viewer"), "gripe.restore", null),
+		).rejects.toMatchObject({ code: "FORBIDDEN" });
+	});
+
 	test("unknown actions are rejected as not implemented", async () => {
 		const { dispatch } = createTestDispatcher();
 		await expect(

@@ -14,7 +14,9 @@ function fakeCatalog(
 	asked: string[] = [],
 ): Catalog {
 	return {
-		ensureCatalog: () => {},
+		ensureCatalog: (connectionId) => {
+			asked.push(`catalog:${connectionId}`);
+		},
 		ensureColumns: (_connection, schemaName, tableName) => {
 			asked.push(`${schemaName}.${tableName}`);
 		},
@@ -68,6 +70,16 @@ describe("isNullable", () => {
 		expect(schema.isNullable(null, "orders", "status")).toBeNull();
 	});
 
+	test("asks for the catalog, or nothing would ever load", () => {
+		// In a project where completion has never run the catalog is empty,
+		// so findTable finds nothing and the columns are never requested
+		// either. Without this the rule is silent forever, not for a moment.
+		const asked: string[] = [];
+		const schema = schemaInputFor("conn-1", fakeCatalog({}, asked));
+		expect(schema.isNullable(null, "orders", "status")).toBeNull();
+		expect(asked).toEqual(["catalog:conn-1"]);
+	});
+
 	test("null while the columns are still unfetched, and asks for them", () => {
 		// The whole reason a schema rule can be silent on first sight and
 		// correct a moment later.
@@ -77,7 +89,7 @@ describe("isNullable", () => {
 			fakeCatalog({ "public.orders": undefined }, asked),
 		);
 		expect(schema.isNullable(null, "orders", "status")).toBeNull();
-		expect(asked).toEqual(["public.orders"]);
+		expect(asked).toEqual(["catalog:conn-1", "public.orders"]);
 	});
 });
 

@@ -28,6 +28,11 @@ export function schemaInputFor(
 		indexLeadsWith: () => null,
 
 		isNullable(schemaName, table, column) {
+			// Without this the whole thing is dead in a project where
+			// completion has never run: `findTable` finds nothing, so the
+			// columns are never asked for either, and the rule stays silent
+			// forever rather than for a moment.
+			instance.ensureCatalog(connectionId);
 			const found = instance.findTable(
 				connectionId,
 				table,

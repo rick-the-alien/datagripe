@@ -19,7 +19,13 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { SQL } from "bun";
 
-const OWNER_EMAIL = process.argv[2] ?? "dev@datagripe.local";
+/**
+ * Whose project it is. Defaults to whoever logged in most recently,
+ * because this database has five dev accounts and picking the wrong one
+ * makes the project invisible to the person who asked for it — which is
+ * exactly what happened the first time.
+ */
+const OWNER_EMAIL = process.argv[2];
 const WORKSPACE_NAME = "Demo";
 const CONNECTION_REF = "predefined:local-demo";
 
@@ -32,17 +38,30 @@ if (databaseUrl === undefined) {
 const sql = new SQL(databaseUrl);
 const queriesDir = join(dirname(Bun.main), "queries");
 
-const [owner] = await sql`
-	select id from users where email = ${OWNER_EMAIL}
-`;
+const [owner] =
+	OWNER_EMAIL === undefined
+		? await sql`
+				select u.id, u.email from users u
+				join sessions s on s.user_id = u.id
+				order by s.created_at desc
+				limit 1
+			`
+		: await sql`select id, email from users where email = ${OWNER_EMAIL}`;
 if (owner === undefined) {
-	console.error(`no user with email ${OWNER_EMAIL}`);
+	console.error(
+		OWNER_EMAIL === undefined
+			? "no user has ever logged in; pass an email"
+			: `no user with email ${OWNER_EMAIL}`,
+	);
 	process.exit(1);
 }
+console.log(`owner: ${owner.email}`);
 
+// Keyed on name alone, not on (name, owner). Every dev account is a
+// member either way, and matching on the owner too silently created a
+// second "Demo" the first time this ran as a different user.
 const [existing] = await sql`
-	select id from workspaces
-	where name = ${WORKSPACE_NAME} and owner_id = ${owner.id}
+	select id from workspaces where name = ${WORKSPACE_NAME}
 `;
 const workspaceId =
 	existing?.id ??
@@ -63,6 +82,16 @@ await sql`
 await sql`
 	insert into workspace_members (workspace_id, user_id, role)
 	values (${workspaceId}, ${owner.id}, 'owner')
+	on conflict do nothing
+`;
+
+// Every local dev account gets to see the demo. This database has
+// several, the app remembers which one you logged in as, and a demo
+// nobody can find is worse than no demo.
+await sql`
+	insert into workspace_members (workspace_id, user_id, role)
+	select ${workspaceId}, u.id, 'editor' from users u
+	where u.id <> ${owner.id}
 	on conflict do nothing
 `;
 

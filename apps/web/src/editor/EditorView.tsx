@@ -1,11 +1,15 @@
+import { MESSAGES, renderFinding, renderFooter } from "@datagripe/gripes";
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useRef } from "react";
 import { wsClient } from "../api/ws";
 import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
+import { useBrandingStore } from "../stores/branding";
 import { useDocumentsStore } from "../stores/documents";
+import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
 import { useExecutionsStore } from "../stores/runtime";
+import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
 import { registerEditorHandle, unregisterEditorHandle } from "./handles";
 import { monaco } from "./monacoSetup";
@@ -23,6 +27,11 @@ const editorDecorations = new Map<
 >();
 /** Statement result glyphs (executed-statement gutter ticks), per view. */
 const statementDecorations = new Map<
+	string,
+	monaco.editor.IEditorDecorationsCollection
+>();
+/** Gripe glyphs and squiggles (docs/spec/gripes.md), per view. */
+const gripeDecorations = new Map<
 	string,
 	monaco.editor.IEditorDecorationsCollection
 >();
@@ -137,6 +146,15 @@ export function EditorView(props: IDockviewPanelProps) {
 					end: model.getOffsetAt(selection.getEndPosition()),
 				};
 			},
+			reveal: (offset) => {
+				const position = model.getPositionAt(offset);
+				// revealPositionInCenterIfOutsideViewport, not
+				// revealPositionInCenter: jumping a line that is already on
+				// screen throws away the reader's sense of place.
+				editor.revealPositionInCenterIfOutsideViewport(position);
+				editor.setPosition(position);
+				editor.focus();
+			},
 		});
 
 		let disposed = false;
@@ -144,6 +162,7 @@ export function EditorView(props: IDockviewPanelProps) {
 		const decorations = editor.createDecorationsCollection();
 		editorDecorations.set(viewId, decorations);
 		statementDecorations.set(viewId, editor.createDecorationsCollection());
+		gripeDecorations.set(viewId, editor.createDecorationsCollection());
 		editorInstances.set(viewId, editor);
 		const persistViewState = () => {
 			const state = editor.saveViewState();
@@ -208,6 +227,7 @@ export function EditorView(props: IDockviewPanelProps) {
 			}
 			editorDecorations.delete(viewId);
 			statementDecorations.delete(viewId);
+			gripeDecorations.delete(viewId);
 			editorInstances.delete(viewId);
 			unregisterEditorHandle(viewId);
 			editor.dispose();
@@ -281,6 +301,65 @@ export function EditorView(props: IDockviewPanelProps) {
 			),
 		);
 	}, [statementMarkers, props.api]);
+
+	// Gripes: re-analyse as the document changes, then render the findings
+	// as gutter glyphs and squiggles. Analysis is debounced in the store;
+	// the wording never enters the editor, only the location and severity.
+	const documentContent = useDocumentsStore((state) =>
+		documentId === undefined
+			? undefined
+			: state.documents[documentId]?.currentContent,
+	);
+	const analyse = useGripesStore((state) => state.analyse);
+	useEffect(() => {
+		if (documentId === undefined || documentContent === undefined) {
+			return;
+		}
+		analyse(documentId, documentContent, "postgres");
+	}, [documentId, documentContent, analyse]);
+
+	const findings = useGripesStore((state) =>
+		documentId === undefined ? undefined : state.byDocument[documentId],
+	);
+	useEffect(() => {
+		const decorations = gripeDecorations.get(props.api.id);
+		const model = editorInstances.get(props.api.id)?.getModel();
+		if (decorations === undefined || model === undefined || model === null) {
+			return;
+		}
+		if (findings === undefined || findings.length === 0) {
+			decorations.clear();
+			return;
+		}
+		const attitude = useBrandingStore
+			.getState()
+			.attitudeFor(useSessionStore.getState().currentWorkspaceId);
+		decorations.set(
+			findings.flatMap((finding): monaco.editor.IModelDeltaDecoration[] => {
+				if (finding.at.kind !== "document") {
+					return [];
+				}
+				return [
+					{
+						range: monaco.Range.fromPositions(
+							model.getPositionAt(finding.at.start),
+							model.getPositionAt(finding.at.end),
+						),
+						options: {
+							glyphMarginClassName: `dg-gripe-glyph-${finding.severity}`,
+							className: `dg-gripe-squiggle-${finding.severity}`,
+							hoverMessage: {
+								value: `${renderFinding(finding, attitude, MESSAGES)}\n\n\`${renderFooter(finding)}\``,
+							},
+							stickiness:
+								monaco.editor.TrackedRangeStickiness
+									.NeverGrowsWhenTypingAtEdges,
+						},
+					},
+				];
+			}),
+		);
+	}, [findings, props.api]);
 
 	// External content changes (server sync adoption, conflict reload)
 	// replace the model's content for clean documents. Dirty documents are

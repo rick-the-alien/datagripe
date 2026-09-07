@@ -35,6 +35,7 @@ test("events arriving before the start response are drained on register", async 
 		getSelection: () => ({ text: "", isEmpty: true }),
 		getCursorOffset: () => 0,
 		getSelectionOffsets: () => null,
+		reveal: () => {},
 	});
 	useDocumentsStore.setState({
 		documents: {
@@ -111,6 +112,7 @@ function setupDocument(text: string, handle: Partial<EditorHandle> = {}) {
 		getSelection: () => ({ text: "", isEmpty: true }),
 		getCursorOffset: () => 0,
 		getSelectionOffsets: () => null,
+		reveal: () => {},
 		...handle,
 	});
 	useDocumentsStore.setState({

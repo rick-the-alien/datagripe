@@ -9,6 +9,9 @@ export interface EditorHandle {
 	getCursorOffset: () => number;
 	/** Document offsets of the selection range, or null when empty. */
 	getSelectionOffsets: () => { start: number; end: number } | null;
+	/** Scroll an offset into view, put the caret on it, and focus. Used
+	 * when a gripe row is clicked. */
+	reveal: (offset: number) => void;
 }
 
 const handles = new Map<string, EditorHandle>();
@@ -26,4 +29,23 @@ export function unregisterEditorHandle(viewId: string): void {
 
 export function getEditorHandle(viewId: string): EditorHandle | undefined {
 	return handles.get(viewId);
+}
+
+/**
+ * Reveal an offset in whichever open view shows this document. A
+ * document may be open in several views (splits); the first registered
+ * one wins, which is the one the user most recently opened.
+ */
+export function revealInDocument(
+	viewsForDocument: string[],
+	offset: number,
+): boolean {
+	for (const viewId of viewsForDocument) {
+		const handle = handles.get(viewId);
+		if (handle !== undefined) {
+			handle.reveal(offset);
+			return true;
+		}
+	}
+	return false;
 }

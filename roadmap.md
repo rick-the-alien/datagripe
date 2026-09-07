@@ -130,8 +130,10 @@ still open — the brand spec reserves it for its own pass.
 - [ ] **Populate `BARRED_TERMS`** — ships empty, so the check passes
       trivially. A review step, not a guess. Required before any
       catalogue ships.
-- [ ] Presentation: glyph margin, gripes panel, object-view annotations,
-      annotation rail, status-bar count
+- [x] Client runner: debounced per document, offsets document-relative
+- [x] Presentation: editor gutter glyph + squiggle, gripes panel with
+      severity rows and auditable footers, status-bar count
+- [ ] Presentation: object-view annotations, annotation rail
 - [ ] Dismissal at occurrence / target / project scope, never silent
 - [ ] Server-side runner on the execution path
 - [ ] Blocked with the danger zone on project class + attitude leaving

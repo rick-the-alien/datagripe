@@ -10,8 +10,8 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@datagripe/contracts": "workspace:*",
-		"@datagripe/sql-tools": "workspace:*"
+		"@datagripe/contracts": "*",
+		"@datagripe/sql-tools": "*"
 	},
 	"devDependencies": {
 		"typescript": "^5.9.2"

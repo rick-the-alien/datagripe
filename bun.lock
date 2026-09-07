@@ -34,6 +34,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@datagripe/contracts": "*",
+        "@datagripe/gripes": "*",
         "@datagripe/sql-tools": "*",
         "@fontsource/ibm-plex-mono": "^5.3.0",
         "@fontsource/ibm-plex-sans": "^5.3.0",
@@ -83,8 +84,8 @@
       "name": "@datagripe/gripes",
       "version": "0.0.0",
       "dependencies": {
-        "@datagripe/contracts": "workspace:*",
-        "@datagripe/sql-tools": "workspace:*",
+        "@datagripe/contracts": "*",
+        "@datagripe/sql-tools": "*",
       },
       "devDependencies": {
         "typescript": "^5.9.2",

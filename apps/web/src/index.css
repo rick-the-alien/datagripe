@@ -2794,3 +2794,157 @@ th.dg-tv-pk .dg-tv-th {
 	padding: 9px 13px;
 	border-top: 1px solid var(--dg-rule);
 }
+
+/* ---- gripe rows ---------------------------------------------------------
+ * brand-system.md "Gripe rows": severity is a 3px left border with the
+ * background tinted to roughly 4% of that accent over Void. Square
+ * corners, since the border is single-sided. Each row carries a severity
+ * glyph so meaning survives without colour — all four accents sit at
+ * similar lightness, so colour alone never distinguishes two states.
+ */
+
+.dg-gripes-list {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.dg-gripe-group {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.dg-gripe {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: none;
+	border-left: var(--dg-border-accent-row) solid transparent;
+	border-radius: 0;
+	padding: 9px 13px;
+	font: inherit;
+}
+
+.dg-gripe:hover {
+	background: var(--dg-raised);
+}
+
+.dg-gripe-glyph {
+	flex: none;
+	font-size: 9px;
+	line-height: 1.9;
+}
+
+.dg-gripe-body {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	min-width: 0;
+}
+
+/* Gripe text is the one place the sans face carries body copy. */
+.dg-gripe-text {
+	color: var(--dg-ink);
+	font-family: var(--dg-font-sans);
+	font-size: var(--dg-fs-gripe);
+	line-height: var(--dg-lh-gripe);
+}
+
+/* The factual footer, which is what makes a complaint auditable. */
+.dg-gripe-footer {
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-gripe-blocker {
+	border-left-color: var(--dg-sev-blocker);
+	background: var(--dg-sev-blocker-bg);
+}
+
+.dg-gripe-blocker .dg-gripe-glyph {
+	color: var(--dg-sev-blocker);
+}
+
+.dg-gripe-warning {
+	border-left-color: var(--dg-sev-warning);
+	background: var(--dg-sev-warning-bg);
+}
+
+.dg-gripe-warning .dg-gripe-glyph {
+	color: var(--dg-sev-warning);
+}
+
+.dg-gripe-style {
+	border-left-color: var(--dg-sev-style);
+	background: var(--dg-sev-style-bg);
+}
+
+.dg-gripe-style .dg-gripe-glyph {
+	color: var(--dg-sev-style);
+}
+
+.dg-gripe-blocker:hover,
+.dg-gripe-warning:hover,
+.dg-gripe-style:hover {
+	/* Keep the tint; lift only the text, so the severity stays readable. */
+	background: var(--dg-raised);
+}
+
+/* ---- gripes in the editor ----------------------------------------------
+ * A gutter glyph and an underline, matching the executed-statement ticks
+ * already in the margin. Never the mascot: tier 3 is empty state only.
+ */
+
+.dg-gripe-glyph-blocker::before,
+.dg-gripe-glyph-warning::before,
+.dg-gripe-glyph-style::before {
+	display: block;
+	text-align: center;
+	font-size: 9px;
+	line-height: inherit;
+}
+
+.dg-gripe-glyph-blocker::before {
+	content: "▲";
+	color: var(--dg-sev-blocker);
+}
+
+.dg-gripe-glyph-warning::before {
+	content: "◆";
+	color: var(--dg-sev-warning);
+}
+
+.dg-gripe-glyph-style::before {
+	content: "●";
+	color: var(--dg-sev-style);
+}
+
+/* Underline rather than a filled background: a filled range would fight
+   the syntax colours it sits on. */
+.dg-gripe-squiggle-blocker {
+	text-decoration: underline wavy var(--dg-sev-blocker);
+	text-underline-offset: 3px;
+}
+
+.dg-gripe-squiggle-warning {
+	text-decoration: underline wavy var(--dg-sev-warning);
+	text-underline-offset: 3px;
+}
+
+.dg-gripe-squiggle-style {
+	text-decoration: underline wavy var(--dg-sev-style);
+	text-underline-offset: 3px;
+}
+
+.dg-statusbar-blockers {
+	color: var(--dg-magenta);
+}

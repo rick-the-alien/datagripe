@@ -1,6 +1,8 @@
 import type { DockviewApi } from "dockview-react";
+import { revealInDocument } from "../editor/handles";
 import { EDITOR_PANEL_COMPONENT } from "../persistence/layout";
 import type { EditorDocument } from "../stores/documents";
+import { useViewsStore } from "../stores/views";
 
 /** Read the document binding of a Dockview panel; undefined if not an editor panel. */
 export function panelDocumentId(params: unknown): string | undefined {
@@ -42,4 +44,18 @@ export function closeEditorPanels(api: DockviewApi, documentId: string): void {
 			api.removePanel(panel);
 		}
 	}
+}
+
+/**
+ * Scroll an offset in a document into view and put the caret on it —
+ * what clicking a gripe row does. Silently does nothing when the
+ * document has no open view: a finding always comes from an open
+ * document, so that case means the tab closed under the panel.
+ */
+export function revealInEditor(documentId: string, offset: number): boolean {
+	const views = useViewsStore.getState().views;
+	const matching = Object.entries(views)
+		.filter(([, view]) => view.documentId === documentId)
+		.map(([viewId]) => viewId);
+	return revealInDocument(matching, offset);
 }

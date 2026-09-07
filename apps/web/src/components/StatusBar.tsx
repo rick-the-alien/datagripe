@@ -1,6 +1,7 @@
 import { openGripesPanel } from "../app/viewPanels";
 import { PROJECT_CLASS_COLORS, useBrandingStore } from "../stores/branding";
 import { NAMESPACE_LABELS, useDatasourceStore } from "../stores/datasource";
+import { allFindings, findingCount, useGripesStore } from "../stores/gripes";
 import { usePwaStore } from "../stores/pwa";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
@@ -13,7 +14,7 @@ import { MockBadge } from "./MockBadge";
  * production reads as permanent magenta in peripheral vision.
  *
  * MOCK — health ("connected" vs degraded) is not tracked yet, so the dot
- * only encodes the project class; the gripes button opens the mock panel.
+ * only encodes the project class.
  */
 export function StatusBar() {
 	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
@@ -28,6 +29,14 @@ export function StatusBar() {
 	);
 	const projectClass = useBrandingStore((state) =>
 		state.classFor(currentWorkspace?.id ?? null),
+	);
+	// A count, not a list: the panel is where findings are read. Blockers
+	// colour the button so the one that matters is not averaged away.
+	const gripes = useGripesStore((state) => findingCount(state));
+	const blockers = useGripesStore(
+		(state) =>
+			allFindings(state).filter((finding) => finding.severity === "blocker")
+				.length,
 	);
 	const updateAvailable = usePwaStore((state) => state.updateAvailable);
 	const applyUpdate = usePwaStore((state) => state.applyUpdate);
@@ -66,10 +75,17 @@ export function StatusBar() {
 			)}
 			<button
 				type="button"
-				className="dg-statusbar-button"
+				className={
+					blockers > 0
+						? "dg-statusbar-button dg-statusbar-blockers"
+						: "dg-statusbar-button"
+				}
+				title="Open the gripes panel"
 				onClick={() => openGripesPanel()}
 			>
-				no gripes
+				{gripes === 0
+					? "no gripes"
+					: `${gripes} gripe${gripes === 1 ? "" : "s"}`}
 			</button>
 		</footer>
 	);

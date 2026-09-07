@@ -1,6 +1,6 @@
 # Spec — Gripes engine
 
-**Status:** draft — the machinery is built, nothing is wired to the UI
+**Status:** draft — machinery and the editor/panel surfaces are built
 **Phase:** 11 (planned)
 **Supersedes:** nothing (implements `docs/brand/brand-system.md` "Voice",
 "Attitude levels", "Writing gripes", and the tier-3 mascot rule)
@@ -16,8 +16,11 @@
 > wording the brand spec worked out itself, present so the machinery is
 > exercised by something real.
 >
-> Not built: any UI. The panel is still its mock empty state and no
-> surface renders a finding yet. Dismissal is designed and unimplemented.
+> Also built: the client runner (`stores/gripes.ts`), the gripes panel,
+> the status-bar count, and the editor's gutter glyph and squiggle.
+>
+> Not built: the object-view annotation, the annotation rail, dismissal,
+> and the server-side runner on the execution path.
 
 ## Goal
 
@@ -203,12 +206,18 @@ to read the panel.
 
 Five surfaces, in descending order of how often you see them:
 
-1. **Editor glyph margin and squiggle.** The mechanism already exists:
-   `statementMarkers` renders per-statement glyph decorations for
-   execution outcomes. Gripes reuse it with severity colours.
-2. **Gripes panel.** The list, grouped by document then severity.
-   Clicking a row reveals its location. This is the surface that already
-   exists as a mock, including the attitude selector.
+1. **Editor glyph margin and squiggle.** Built. A parallel decoration
+   collection to the one `statementMarkers` already uses for execution
+   outcomes, with a severity glyph in the gutter and a wavy underline on
+   the range. Underline rather than a filled background: a filled range
+   would fight the syntax colours it sits on. The hover carries the
+   rendered sentence and the footer.
+2. **Gripes panel.** Built. Rows grouped by document, worst first, each
+   with its severity glyph and footer. Clicking a row reveals the offset
+   in whichever view holds that document and focuses the editor —
+   `revealPositionInCenterIfOutsideViewport`, so a finding already on
+   screen does not throw away the reader's sense of place. The attitude
+   selector drives the wording live.
 3. **Object view.** The brand spec puts object-scoped gripes here, and
    the tree-interactions mock shows the shape: an annotation block above
    the relevant tab's table — *"No index on `status`, which four of your
@@ -219,7 +228,9 @@ Five surfaces, in descending order of how often you see them:
    document, not just the visible window. Capped — "a rail with two
    hundred marks is a gradient, not a map. Cluster nearby marks into one
    and stop drawing past roughly forty."
-5. **Status bar.** A count, which is already there reading "no gripes".
+5. **Status bar.** Built. A count, and magenta when any finding is a
+   blocker — so the one that matters is not averaged away by a pile of
+   style notes.
 
 **The mascot appears on none of them.** Tier 3 is "empty state only
 (`no gripes` gets faint approval). **Never per-gripe.**" A mascot on
@@ -311,6 +322,17 @@ The two `routine.*` entries are why a function's ddl tab is the most
 promising surface in the product for this: a body is dense with
 checkable things, and unlike a table's shape, the text is right there to
 annotate.
+
+### Analysis is debounced, and per document
+
+The client runner re-analyses on document content change, debounced 400ms
+per document through the same keyed debouncer the draft checkpoints use —
+long enough that typing mid-word does not flicker findings.
+
+Each statement is analysed separately, with its document offset passed
+in, so a finding in the third statement still points at where it is in
+the whole document rather than at an offset into that statement. That is
+the one thing easy to get wrong here and it has a test.
 
 ### Testing
 

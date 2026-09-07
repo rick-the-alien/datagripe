@@ -138,7 +138,11 @@ still open — the brand spec reserves it for its own pass.
 - [x] Annotation rail on Monaco's overview ruler, capped at forty
 - [x] Dismissal at occurrence / target / project scope, never silent —
       occurrence keys on a statement fingerprint, not a moving offset
-- [x] Object-view annotations, tab-scoped, counted in the panel and status bar
+- [x] Object-view annotations, tab-scoped, counted in the panel and
+      status bar, with severity marks on the tab strip so a scoped
+      finding cannot hide behind an unopened tab
+- [x] Demo project: `scripts/demo/` seeds the objects and query files
+      that exercise every rule, plus the silent counterexamples
 - [ ] Server-side runner on the execution path
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage

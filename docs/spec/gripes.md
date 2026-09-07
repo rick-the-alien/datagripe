@@ -218,6 +218,14 @@ Five surfaces, in descending order of how often you see them:
    them. Above the content rather than replacing it — a complaint about
    an index reads best next to the indexes.
 
+   A finding is scoped to a tab, which means a tab can hide one. The
+   strip therefore marks any tab carrying findings with the severity
+   glyph the gripe rows use, worst-first, and a routine opens on `ddl`
+   rather than on the first tab in its list — that is where its gripes
+   live and what you opened it to read. Without both, a routine's
+   security-definer finding was in the store, counted in the status bar,
+   and invisible on screen.
+
    Object rules run in the object view itself, because the describe
    result is their whole input. The findings are published into the
    gripes store so the panel and the status-bar count agree with what
@@ -431,6 +439,13 @@ trusted at all, and both were silent:
 
 ### Still on the list
 
+- **Statement rules over an object's DDL.** The `ddl` tab holds the
+  reconstructed definition as text, and nothing analyses it. A view
+  created with `select *` is a finding this catalogue already has —
+  `view.select-star` — and it fires in a query document but not on the
+  view itself, which is the one place someone would look. Running the
+  statement rules over the DDL would close that, and is the cheapest
+  large win left.
 - `index.missing` needs to know a relation's indexes, which the
   completion catalog does not carry. The object describe result does, so
   this waits on either widening the catalog or a server-side runner.

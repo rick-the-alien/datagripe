@@ -45,6 +45,38 @@ export const MESSAGES: MessageCatalogue = {
 			"UPDATE WITH NO WHERE. Every row in the table gets this value. Every single one.",
 	},
 
+	"subquery.not-in": {
+		notice:
+			"not in with a subquery returns nothing at all if the subquery yields a null.",
+		warning:
+			"not in against a subquery. One null in there and you get zero rows, silently.",
+		fatal:
+			"not in with a subquery. One sodding null and this returns nothing, with no error to explain it.",
+		panic:
+			"NOT IN. A SUBQUERY. One null in that column and your answer is zero rows, quietly, forever. Use not exists.",
+	},
+
+	"view.select-star": {
+		notice: "select * in a view freezes the column list as it is right now.",
+		warning:
+			"The star in this view is expanded once, at creation. New columns never appear.",
+		fatal:
+			"select * in a view definition. That star is spent now; add a column later and the bloody view ignores it.",
+		panic:
+			"SELECT STAR IN A VIEW. Resolved once and welded shut. Every column you add after today is invisible to it.",
+	},
+
+	"index.not-concurrent": {
+		notice:
+			"create index without concurrently blocks writes until the build finishes.",
+		warning:
+			"No concurrently. Writes to this table queue up until the index is built.",
+		fatal:
+			"create index with no concurrently. Every write waits for the whole scan. On anything big that is an outage.",
+		panic:
+			"NO CONCURRENTLY. This locks out writes for the entire build. Small table here, production on fire there.",
+	},
+
 	"table.no-primary-key": {
 		notice: "{table} has no primary key, so a row cannot be addressed.",
 		warning:

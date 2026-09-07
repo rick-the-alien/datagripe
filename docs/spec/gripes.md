@@ -7,7 +7,7 @@
 
 > Built: `packages/gripes` (rule shape, runner, renderer, catalogue and
 > its assertions), the wire types in contracts, `scanTokens` in
-> sql-tools, seven rules, dismissal at all three scopes, and four
+> sql-tools, ten rules, dismissal at all three scopes, and four
 > surfaces — editor gutter and squiggle, annotation rail, gripes panel,
 > object-view annotations, status-bar count.
 >
@@ -333,9 +333,23 @@ way to get the whole thing switched off.
 | `join.no-condition` | blocker | statement | a join with no `on` or `using` |
 | `delete.no-where` | blocker | statement | a delete that removes every row |
 | `update.no-where` | blocker | statement | an update that rewrites every row |
+| `subquery.not-in` | warning | statement | `NOT IN (SELECT ...)`, which returns nothing at all if the subquery yields a null |
 | `table.no-primary-key` | warning | object | a base table with no addressable row |
+| `view.select-star` | warning | statement | a view whose column list the star froze at creation |
+| `index.not-concurrent` | warning | statement | `CREATE INDEX` with no `CONCURRENTLY`, which blocks writes for the build |
 | `index.duplicate` | style | object | an index whose keys prefix another's |
 | `routine.volatile-but-readonly` | style | object | a read-only `sql` routine left volatile |
+
+Two of these are about something the statement text actively
+misrepresents. A star in a view reads as a standing instruction and is
+not one: the database expands it once, at creation, and records the
+result, so a column added later never appears. And `NOT IN` against a
+subquery reads as the negation of `IN` and is not one: a single null in
+that subquery makes the whole predicate unknown, so the query answers
+zero rows with no error and no clue. The shape is the finding in both
+cases — nothing at the call site says whether the subquery's column is
+nullable, and it can become nullable later without this query being
+touched.
 
 `routine.definer-no-search-path` is the one that is about a
 vulnerability rather than a cost: a definer routine runs with the
@@ -355,6 +369,17 @@ a wrong gripe would come from:
   list, and never a unique index: a unique index enforces something the
   wider index does not, so dropping it changes behaviour rather than
   saving writes.
+- `view.select-star` distinguishes a projection star from
+  multiplication by what surrounds it: a star follows `select`, a comma
+  or a qualifier's `.`, and precedes a comma or `from`. Depth alone is
+  not enough — the `*` in `select qty * price` sits at the same depth as
+  a real one, so without this the rule fires on arithmetic.
+- `index.not-concurrent` is gated on the *dialect*, not the adapter id.
+  `CONCURRENTLY` is not merely unhelpful advice on MySQL and SQLite; it
+  is a syntax error, so a gripe suggesting it would be actively wrong.
+- `subquery.not-in` stays on the adjacent `NOT IN` form and never fires
+  on `NOT EXISTS`, which is the fix, nor on a written-out list, where a
+  null is visible to whoever reads it.
 - `routine.volatile-but-readonly` reads the routine *body*, not the
   definition. Checking the whole definition finds `CREATE` in every
   routine, so the rule never fires at all — which is how it was first

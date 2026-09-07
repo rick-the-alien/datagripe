@@ -1,9 +1,12 @@
 import { indexDuplicate } from "./rules/indexDuplicate";
+import { indexNotConcurrent } from "./rules/indexNotConcurrent";
 import { joinNoCondition } from "./rules/joinNoCondition";
 import { routineDefinerNoSearchPath } from "./rules/routineDefinerNoSearchPath";
 import { routineVolatileButReadonly } from "./rules/routineVolatileButReadonly";
+import { subqueryNotIn } from "./rules/subqueryNotIn";
 import { tableNoPrimaryKey } from "./rules/tableNoPrimaryKey";
 import { deleteNoWhere, updateNoWhere } from "./rules/unqualifiedWrite";
+import { viewSelectStar } from "./rules/viewSelectStar";
 import type { Rule } from "./types";
 
 /**
@@ -23,6 +26,9 @@ export const RULES: Rule[] = [
 	joinNoCondition,
 	deleteNoWhere,
 	updateNoWhere,
+	subqueryNotIn,
+	viewSelectStar,
+	indexNotConcurrent,
 	// object
 	routineDefinerNoSearchPath,
 	tableNoPrimaryKey,

@@ -113,3 +113,34 @@ export function keywords(tokens: SqlToken[]): string[] {
 		.filter((token) => token.kind === "word" && !token.quoted)
 		.map((token) => token.text);
 }
+
+/**
+ * Whether the `*` at this index is a projection star rather than
+ * multiplication.
+ *
+ * `select a * 2 from t` has a `*` punct token sitting at the same depth
+ * as a real star, and the only thing distinguishing them is what
+ * surrounds it: a star is preceded by `select`, a comma or the `.` of a
+ * table qualifier, and followed by a comma or `from`. Multiplication
+ * has an operand on both sides. Without this a rule about `select *`
+ * fires on arithmetic, which is the kind of wrong gripe that gets the
+ * whole feature switched off.
+ */
+export function isProjectionStar(tokens: SqlToken[], index: number): boolean {
+	const star = tokens[index];
+	if (star === undefined || star.kind !== "punct" || star.text !== "*") {
+		return false;
+	}
+	const before = tokens[index - 1];
+	const after = tokens[index + 1];
+	if (before === undefined || after === undefined) {
+		return false;
+	}
+	const leads =
+		(before.kind === "word" && !before.quoted && before.text === "select") ||
+		(before.kind === "punct" && (before.text === "," || before.text === "."));
+	const trails =
+		(after.kind === "word" && !after.quoted && after.text === "from") ||
+		(after.kind === "punct" && (after.text === "," || after.text === ";"));
+	return leads && trails;
+}

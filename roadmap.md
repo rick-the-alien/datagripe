@@ -112,8 +112,7 @@ Tracked in `docs/spec/multiplayer.md`.
 
 ## Phase 11 — Gripes engine · in progress
 
-Designed in `docs/spec/gripes.md`. The rule catalogue is deliberately
-still open — the brand spec reserves it for its own pass.
+Designed in `docs/spec/gripes.md`.
 
 - [x] `packages/gripes`: rule shape, runner, renderer, catalogue registry
 - [x] `packages/contracts/src/gripes.ts`: severity, attitude, location,
@@ -126,10 +125,14 @@ still open — the brand spec reserves it for its own pass.
       own output and nothing else
 - [x] Catalogue assertions: four strings per rule with no fallback, length
       caps, barred terms at every level, notice profanity-free, id shape
-- [x] Seven rules: definer-no-search-path, join.no-condition,
-      delete/update.no-where, table.no-primary-key, index.duplicate,
-      routine.volatile-but-readonly — each with a "looks like the finding
-      and is not" fixture class
+- [x] Eleven rules — four blockers (definer-no-search-path,
+      join.no-condition, delete/update.no-where), five warnings
+      (subquery.not-in, view.select-star, index.not-concurrent,
+      column.nullable-inequality, table.no-primary-key), two style
+      (index.duplicate, routine.volatile-but-readonly) — each with a
+      "looks like the finding and is not" fixture class
+- [x] Client `SchemaInput` off the completion catalog: honest about what
+      it does not know, and silent rather than guessing
 - [x] `BARRED_TERMS` grows with the wording rather than gating it, and a
       plain-voice disclaimer beside the attitude control carries the rest
 - [x] Client runner: debounced per document, offsets document-relative

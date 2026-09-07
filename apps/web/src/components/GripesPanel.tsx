@@ -99,19 +99,30 @@ export function GripesPanel() {
 	);
 	const setAttitude = useBrandingStore((state) => state.setAttitude);
 	const byDocument = useGripesStore((state) => state.byDocument);
+	const byObject = useGripesStore((state) => state.byObject);
 	const dismissals = useGripesStore((state) => state.dismissals);
 	const hidden = useGripesStore((state) => hiddenCount(state));
 	const dismiss = useGripesStore((state) => state.dismiss);
 	const restore = useGripesStore((state) => state.restore);
 	const documents = useDocumentsStore((state) => state.documents);
 
-	const groups = Object.entries(byDocument)
-		.map(([documentId, findings]) => ({
-			documentId,
+	const documentGroups = Object.entries(byDocument).map(
+		([documentId, findings]) => ({
+			key: documentId,
 			title: documents[documentId]?.title,
 			content: documents[documentId]?.currentContent ?? "",
 			findings: findings.filter((finding) => !isDismissed(finding, dismissals)),
-		}))
+		}),
+	);
+	// Object findings have no document, so they group under the object's
+	// own name — `shop.orders` rather than a file.
+	const objectGroups = Object.entries(byObject).map(([key, findings]) => ({
+		key,
+		title: key.replace(/^object:/, ""),
+		content: "",
+		findings: findings.filter((finding) => !isDismissed(finding, dismissals)),
+	}));
+	const groups = [...documentGroups, ...objectGroups]
 		.filter((group) => group.findings.length > 0)
 		.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
 
@@ -132,7 +143,7 @@ export function GripesPanel() {
 			) : (
 				<div className="dg-gripes-list dg-scroll">
 					{groups.map((group) => (
-						<div key={group.documentId} className="dg-gripe-group">
+						<div key={group.key} className="dg-gripe-group">
 							{group.findings.map((finding) => (
 								<GripeRow
 									key={`${finding.ruleId}:${

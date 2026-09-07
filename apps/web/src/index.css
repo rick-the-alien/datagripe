@@ -3018,3 +3018,26 @@ th.dg-tv-pk .dg-tv-th {
 	font-size: var(--dg-fs-meta);
 	line-height: var(--dg-lh-meta);
 }
+
+/* Object-scoped gripes sit above the tab's content, not instead of it —
+   a complaint about an index reads best next to the indexes. */
+.dg-ov-gripes {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 10px 10px 0;
+}
+
+.dg-ov-gripe {
+	max-width: 720px;
+}
+
+/* No reveal target here, so the body carries the padding the row's
+   button carries in the panel. */
+.dg-ov-gripe .dg-gripe-glyph {
+	padding: 9px 0 0 13px;
+}
+
+.dg-ov-gripe .dg-gripe-body {
+	padding: 9px 13px 9px 10px;
+}

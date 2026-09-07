@@ -126,7 +126,10 @@ still open — the brand spec reserves it for its own pass.
       own output and nothing else
 - [x] Catalogue assertions: four strings per rule with no fallback, length
       caps, barred terms at every level, notice profanity-free, id shape
-- [x] `join.no-condition` — the brand spec's own worked example
+- [x] Seven rules: definer-no-search-path, join.no-condition,
+      delete/update.no-where, table.no-primary-key, index.duplicate,
+      routine.volatile-but-readonly — each with a "looks like the finding
+      and is not" fixture class
 - [x] `BARRED_TERMS` grows with the wording rather than gating it, and a
       plain-voice disclaimer beside the attitude control carries the rest
 - [x] Client runner: debounced per document, offsets document-relative
@@ -135,7 +138,7 @@ still open — the brand spec reserves it for its own pass.
 - [x] Annotation rail on Monaco's overview ruler, capped at forty
 - [x] Dismissal at occurrence / target / project scope, never silent —
       occurrence keys on a statement fingerprint, not a moving offset
-- [ ] Presentation: object-view annotations
+- [x] Object-view annotations, tab-scoped, counted in the panel and status bar
 - [ ] Server-side runner on the execution path
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage

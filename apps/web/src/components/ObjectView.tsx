@@ -1,12 +1,15 @@
 import type { ObjectDescribeResult, ObjectTab } from "@datagripe/contracts";
 import {
 	ADAPTER_CAPABILITIES,
+	isDismissed,
 	isRelationKind,
 	objectTabSchema,
+	objectTargetKey,
 	tabsForKind,
 } from "@datagripe/contracts";
+import { RULES, runRules } from "@datagripe/gripes";
 import type { IDockviewPanelProps } from "dockview-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { wsClient } from "../api/ws";
 import { openTableView, readViewPanelParams } from "../app/viewPanels";
 import {
@@ -14,9 +17,11 @@ import {
 	type ProjectClass,
 	useBrandingStore,
 } from "../stores/branding";
+import { useGripesStore } from "../stores/gripes";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { ColumnsTab } from "./ColumnsTab";
+import { GripeAnnotations } from "./GripeAnnotations";
 
 /**
  * Object view (docs/spec/object-view.md, brand-system.md "Object view —
@@ -26,6 +31,14 @@ import { ColumnsTab } from "./ColumnsTab";
  * There is deliberately no data tab — rows are the table view's job, and
  * that separation is what lets both surfaces be generous with space.
  */
+
+/**
+ * Kinds an object rule can be written against. A sequence is a counter;
+ * there is nothing in it to have an opinion about.
+ */
+function isRelationOrRoutine(kind: ObjectDescribeResult["kind"]): boolean {
+	return kind !== "sequence";
+}
 
 const TAB_EMPTY: Record<ObjectTab, string> = {
 	columns: "This object has no columns.",
@@ -412,6 +425,49 @@ export function ObjectView(props: IDockviewPanelProps) {
 			? undefined
 			: ADAPTER_CAPABILITIES[connection.adapter];
 
+	// Object rules run here rather than in a store: their whole input is
+	// the describe result this panel already holds, and the findings live
+	// exactly as long as the panel does.
+	const dismissals = useGripesStore((state) => state.dismissals);
+	const setObjectFindings = useGripesStore((state) => state.setObjectFindings);
+	const forgetObject = useGripesStore((state) => state.forgetObject);
+	const objectFindings = useMemo(() => {
+		if (data === null || !isRelationOrRoutine(data.kind)) {
+			return [];
+		}
+		const result = runRules(RULES, {
+			object: {
+				connectionId: params.connectionId,
+				schema: data.schema,
+				name: data.name,
+				kind: data.kind,
+				columns: data.columns.map((column) => ({
+					name: column.name,
+					primaryKey: column.primaryKey,
+					nullable: column.nullable,
+				})),
+				indexes: data.indexes.map((index) => ({
+					name: index.name,
+					columns: index.columns,
+					unique: index.unique,
+				})),
+				rowEstimate: data.rowEstimate,
+				ddl: data.ddl,
+			},
+		});
+		return result.findings.filter(
+			(finding) => !isDismissed(finding, dismissals),
+		);
+	}, [data, dismissals, params.connectionId]);
+
+	// Publish them so the panel and the status-bar count agree with what
+	// this tab is showing, and clear them when the tab closes.
+	const objectKey = objectTargetKey(params.schema, params.name);
+	useEffect(() => {
+		setObjectFindings(objectKey, objectFindings);
+		return () => forgetObject(objectKey);
+	}, [objectKey, objectFindings, setObjectFindings, forgetObject]);
+
 	const load = useCallback(async () => {
 		setLoading(true);
 		setError(null);
@@ -544,6 +600,9 @@ export function ObjectView(props: IDockviewPanelProps) {
 				{error !== null && <div className="dg-results-error">{error}</div>}
 				{data === null && error === null && (
 					<div className="dg-tree-note dg-tree-note-loading">loading…</div>
+				)}
+				{data !== null && tab !== "danger" && (
+					<GripeAnnotations findings={objectFindings} tab={tab} />
 				)}
 				{data !== null && tab !== "danger" && (
 					<TabBody

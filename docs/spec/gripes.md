@@ -5,24 +5,14 @@
 **Supersedes:** nothing (implements `docs/brand/brand-system.md` "Voice",
 "Attitude levels", "Writing gripes", and the tier-3 mascot rule)
 
-> **Which rules ship is deliberately still open** — the brand spec calls
-> the catalogue "the actual product" and reserves it for its own pass,
-> and this spec does not pre-empt that. What it fixes is the machinery
-> the catalogue will sit in.
+> Built: `packages/gripes` (rule shape, runner, renderer, catalogue and
+> its assertions), the wire types in contracts, `scanTokens` in
+> sql-tools, seven rules, dismissal at all three scopes, and four
+> surfaces — editor gutter and squiggle, annotation rail, gripes panel,
+> object-view annotations, status-bar count.
 >
-> Built: `packages/gripes` (rule shape, runner, renderer, catalogue
-> assertions), `packages/contracts/src/gripes.ts` (wire types),
-> `scanTokens` in sql-tools, and `join.no-condition` — the one rule whose
-> wording the brand spec worked out itself, present so the machinery is
-> exercised by something real.
->
-> Also built: the client runner (`stores/gripes.ts`), the gripes panel,
-> the status-bar count, the editor's gutter glyph, squiggle and
-> annotation rail, and dismissal at all three scopes.
->
-> Not built: the object-view annotation and the server-side runner on the
-> execution path. Both wait on rules with those inputs, which is a
-> catalogue decision.
+> Not built: the server-side runner on the execution path, which waits on
+> a rule with `execution` inputs.
 
 ## Goal
 
@@ -220,11 +210,18 @@ Five surfaces, in descending order of how often you see them:
    `revealPositionInCenterIfOutsideViewport`, so a finding already on
    screen does not throw away the reader's sense of place. The attitude
    selector drives the wording live.
-3. **Object view.** The brand spec puts object-scoped gripes here, and
-   the tree-interactions mock shows the shape: an annotation block above
-   the relevant tab's table — *"No index on `status`, which four of your
-   five slowest queries filter on"* with a `blocker · index · missing`
-   footer. Structural rules annotate the tab their subject lives in.
+3. **Object view.** Built. An annotation block above the tab's content,
+   in the shape the tree-interactions mock shows. A finding carries the
+   tab it belongs to, so an index complaint stays on `indexes` and does
+   not follow you to `grants`; a finding with no tab shows on all of
+   them. Above the content rather than replacing it — a complaint about
+   an index reads best next to the indexes.
+
+   Object rules run in the object view itself, because the describe
+   result is their whole input. The findings are published into the
+   gripes store so the panel and the status-bar count agree with what
+   the tab is showing: a count reading "no gripes" beside two visible
+   gripes would undermine every other number the tool prints.
 4. **Annotation rail.** Built, on Monaco's overview ruler, which is
    exactly this: marks beside the vertical scrollbar showing where
    findings are in the *whole* document, not just the visible window.
@@ -323,28 +320,53 @@ Format is `<subject>.<problem>`, lower-kebab: `join.no-condition`,
 `index.missing`, `table.no-primary-key`, `select.unqualified-star`,
 `routine.volatile-but-readonly`.
 
-### Candidate rules — not the catalogue
+### The catalogue
 
-**These are examples of the shape, not a shipping list.** The brand spec
-reserves the catalogue, and the reserved decision is which of these (and
-what else) earns a place, at what severity, with what wording.
+Every rule earns its place by knowing something the query text alone
+does not, or by being about damage rather than tidiness. What is
+deliberately absent is style filler — a formatter's job, and the fastest
+way to get the whole thing switched off.
 
-| Candidate id | Inputs | Sketch |
-| --- | --- | --- |
-| `join.no-condition` | statement | a join with no `on` or `using` — the brand spec's worked example |
-| `select.unqualified-star` | statement, schema | `select *` against a relation over some row threshold |
-| `index.missing` | statement, schema | a filtered column with no index on a relation over some row threshold |
-| `table.no-primary-key` | object | a base table with no primary key; the table view already knows and says so |
-| `column.nullable-equality` | statement, schema | `=` against a nullable column, which silently drops nulls |
-| `routine.volatile-but-readonly` | object | a routine marked `volatile` whose body only reads |
-| `routine.definer-no-search-path` | object | `security definer` with no `search_path` set — a real escalation risk |
-| `index.duplicate` | object | an index whose leading columns are another index's prefix |
-| `execution.truncated` | execution | the result hit the row cap, so what you are reading is not the answer |
+| Rule | Severity | Inputs | Fires on |
+| --- | --- | --- | --- |
+| `routine.definer-no-search-path` | blocker | object | `security definer` with no `search_path` pinned |
+| `join.no-condition` | blocker | statement | a join with no `on` or `using` |
+| `delete.no-where` | blocker | statement | a delete that removes every row |
+| `update.no-where` | blocker | statement | an update that rewrites every row |
+| `table.no-primary-key` | warning | object | a base table with no addressable row |
+| `index.duplicate` | style | object | an index whose keys prefix another's |
+| `routine.volatile-but-readonly` | style | object | a read-only `sql` routine left volatile |
 
-The two `routine.*` entries are why a function's ddl tab is the most
-promising surface in the product for this: a body is dense with
-checkable things, and unlike a table's shape, the text is right there to
-annotate.
+`routine.definer-no-search-path` is the one that is about a
+vulnerability rather than a cost: a definer routine runs with the
+owner's privileges but resolves unqualified names using the *caller's*
+`search_path`, so anyone who can create a schema can shadow something
+the body calls and have it run as the owner.
+
+**Where the correctness discipline actually bit.** Each of these has a
+"looks like the finding and is not" fixture class, because that is where
+a wrong gripe would come from:
+
+- `delete.no-where` reads the statement's *main verb*, looking through a
+  leading `WITH`. Without that, `create trigger t after delete on x`
+  reads as an unqualified delete — and it would fire on every trigger in
+  the database.
+- `index.duplicate` treats a prefix as covered but not an equal column
+  list, and never a unique index: a unique index enforces something the
+  wider index does not, so dropping it changes behaviour rather than
+  saving writes.
+- `routine.volatile-but-readonly` reads the routine *body*, not the
+  definition. Checking the whole definition finds `CREATE` in every
+  routine, so the rule never fires at all — which is how it was first
+  written, and what its test caught. It also declines to judge a plpgsql
+  body, which can write through dynamic SQL that no amount of reading
+  will reveal.
+
+Still on the list and not built, because they need inputs no runner
+supplies yet: `select.unqualified-star` and `index.missing` need row
+counts and index knowledge client-side, which the completion catalog
+does not carry; `column.nullable-equality` needs column nullability;
+`execution.truncated` needs the server-side runner.
 
 ### Analysis is debounced, and per document
 

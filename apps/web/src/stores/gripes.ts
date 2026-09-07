@@ -36,6 +36,14 @@ export type GripesState = {
 	 * re-analysing.
 	 */
 	byDocument: Record<string, Finding[]>;
+	/**
+	 * `object:<schema>.<name>` → findings from object rules, which the
+	 * object view computes because the describe result is its own input.
+	 * Kept here so the panel and the status-bar count see them too — a
+	 * count reading "no gripes" while two are on screen would undermine
+	 * every other number the tool shows.
+	 */
+	byObject: Record<string, Finding[]>;
 	/** Rule ids that threw while evaluating, for the console. Never shown. */
 	failed: string[];
 	/** Workspace-wide dismissals, loaded on connect. */
@@ -46,6 +54,9 @@ export type GripesState = {
 	analyseNow: (documentId: string, sql: string, dialect: string) => void;
 	/** Drop a document's findings when it closes or is deleted. */
 	forget: (documentId: string) => void;
+	/** Publish an object view's findings, or clear them when it closes. */
+	setObjectFindings: (key: string, findings: Finding[]) => void;
+	forgetObject: (key: string) => void;
 	/** Load the workspace's dismissals. Called when the socket opens. */
 	loadDismissals: () => Promise<void>;
 	dismiss: (dismissal: Dismissal) => Promise<void>;
@@ -92,6 +103,7 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 
 	return {
 		byDocument: {},
+		byObject: {},
 		failed: [],
 		dismissals: [],
 
@@ -112,6 +124,27 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 			debouncer.cancel(documentId);
 			const { [documentId]: _dropped, ...byDocument } = get().byDocument;
 			set({ byDocument });
+		},
+
+		setObjectFindings(key, findings) {
+			const current = get().byObject[key];
+			// Object rules re-run on every describe; skip the set when
+			// nothing changed, or the panel re-renders on every tab switch.
+			if (
+				current !== undefined &&
+				current.length === findings.length &&
+				current.every(
+					(finding, index) => finding.ruleId === findings[index]?.ruleId,
+				)
+			) {
+				return;
+			}
+			set({ byObject: { ...get().byObject, [key]: findings } });
+		},
+
+		forgetObject(key) {
+			const { [key]: _dropped, ...byObject } = get().byObject;
+			set({ byObject });
 		},
 
 		async loadDismissals() {
@@ -145,7 +178,7 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 
 		reset() {
 			debouncer.flush();
-			set({ byDocument: {}, failed: [], dismissals: [] });
+			set({ byDocument: {}, byObject: {}, failed: [], dismissals: [] });
 		},
 	};
 });
@@ -178,14 +211,17 @@ useDocumentsStore.subscribe((state) => {
  * restoring one costs nothing.
  */
 export function visibleFindings(state: GripesState): Finding[] {
-	return Object.values(state.byDocument)
-		.flat()
-		.filter((finding) => !isDismissed(finding, state.dismissals));
+	return allFindings(state).filter(
+		(finding) => !isDismissed(finding, state.dismissals),
+	);
 }
 
-/** Every finding, dismissed included. */
+/** Every finding from every surface, dismissed included. */
 export function allFindings(state: GripesState): Finding[] {
-	return Object.values(state.byDocument).flat();
+	return [
+		...Object.values(state.byDocument).flat(),
+		...Object.values(state.byObject).flat(),
+	];
 }
 
 export function findingCount(state: GripesState): number {

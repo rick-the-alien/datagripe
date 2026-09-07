@@ -17,6 +17,7 @@ import { catalog } from "../editor/completion/catalog";
 import { schemaInputFor } from "../editor/completion/schemaInput";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "./documents";
+import { useViewsStore } from "./views";
 
 /**
  * Client-side gripe findings (docs/spec/gripes.md "Where rules run").
@@ -268,6 +269,37 @@ useDocumentsStore.subscribe((state) => {
 	);
 	for (const documentId of stale) {
 		useGripesStore.getState().forget(documentId);
+	}
+});
+
+/**
+ * A closed tab's findings would otherwise linger too, and that is worse
+ * than a stale count: clicking such a row cannot go anywhere, because
+ * there is no editor left to reveal the offset in. A finding is only
+ * ever about what is open.
+ *
+ * Keyed on views rather than tab-close callbacks for the same reason as
+ * above — Dockview drops a panel from several places (the close glyph, a
+ * middle click, closing a group, replacing the layout on a workspace
+ * switch) and every one of them would have to remember. A document is
+ * still open if any view shows it, since splits give one document
+ * several views.
+ */
+useViewsStore.subscribe((state, previous) => {
+	// Only documents whose views actually went away, rather than every
+	// document absent from `views`. Restoring a layout registers panels
+	// one at a time, so a half-populated store would look like a pile of
+	// closed tabs and prune findings that had just been analysed.
+	const open = new Set(
+		Object.values(state.views).map((view) => view.documentId),
+	);
+	const wasOpen = new Set(
+		Object.values(previous.views).map((view) => view.documentId),
+	);
+	for (const documentId of wasOpen) {
+		if (!open.has(documentId)) {
+			useGripesStore.getState().forget(documentId);
+		}
 	}
 });
 

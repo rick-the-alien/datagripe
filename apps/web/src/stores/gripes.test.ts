@@ -7,6 +7,7 @@ import {
 	findingCount,
 	useGripesStore,
 } from "./gripes";
+import { useViewsStore } from "./views";
 
 /**
  * The client-side runner (docs/spec/gripes.md). `analyseNow` skips the
@@ -15,6 +16,9 @@ import {
 
 beforeEach(() => {
 	useGripesStore.getState().reset();
+	for (const viewId of Object.keys(useViewsStore.getState().views)) {
+		useViewsStore.getState().unregisterView(viewId);
+	}
 });
 
 describe("analyseNow", () => {
@@ -228,5 +232,62 @@ describe("dialect gating", () => {
 		expect(evaluateDocument("doc-1", sql, "mysql", undefined).findings).toEqual(
 			[],
 		);
+	});
+});
+
+describe("closing a tab", () => {
+	test("drops that document's findings", () => {
+		useViewsStore.getState().registerView("view-1", "doc-1");
+		useGripesStore
+			.getState()
+			.analyseNow("doc-1", "select * from a join b", "postgres");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toHaveLength(1);
+
+		// A row for a closed document cannot go anywhere when clicked:
+		// there is no editor left to reveal the offset in.
+		useViewsStore.getState().unregisterView("view-1");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toBeUndefined();
+	});
+
+	test("keeps them while another split still shows the document", () => {
+		useViewsStore.getState().registerView("view-1", "doc-1");
+		useViewsStore.getState().registerView("view-2", "doc-1");
+		useGripesStore
+			.getState()
+			.analyseNow("doc-1", "select * from a join b", "postgres");
+
+		useViewsStore.getState().unregisterView("view-1");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toHaveLength(1);
+
+		useViewsStore.getState().unregisterView("view-2");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toBeUndefined();
+	});
+
+	test("leaves other documents alone", () => {
+		useViewsStore.getState().registerView("view-1", "doc-1");
+		useViewsStore.getState().registerView("view-2", "doc-2");
+		for (const id of ["doc-1", "doc-2"]) {
+			useGripesStore
+				.getState()
+				.analyseNow(id, "select * from a join b", "postgres");
+		}
+
+		useViewsStore.getState().unregisterView("view-1");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toBeUndefined();
+		expect(useGripesStore.getState().byDocument["doc-2"]).toHaveLength(1);
+	});
+});
+
+describe("a half-restored layout", () => {
+	test("registering one view does not prune another document", () => {
+		// restoreLayout registers panels one at a time, and an editor can
+		// have analysed before the sync loop reaches its panel. Pruning
+		// everything absent from `views` would drop findings that were just
+		// computed.
+		useGripesStore
+			.getState()
+			.analyseNow("doc-1", "select * from a join b", "postgres");
+		useViewsStore.getState().registerView("view-2", "doc-2");
+		expect(useGripesStore.getState().byDocument["doc-1"]).toHaveLength(1);
 	});
 });

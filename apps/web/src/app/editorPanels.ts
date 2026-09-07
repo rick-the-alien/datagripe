@@ -1,7 +1,7 @@
 import type { DockviewApi } from "dockview-react";
 import { revealInDocument } from "../editor/handles";
 import { EDITOR_PANEL_COMPONENT } from "../persistence/layout";
-import type { EditorDocument } from "../stores/documents";
+import { type EditorDocument, useDocumentsStore } from "../stores/documents";
 import { useViewsStore } from "../stores/views";
 
 /** Read the document binding of a Dockview panel; undefined if not an editor panel. */
@@ -47,15 +47,68 @@ export function closeEditorPanels(api: DockviewApi, documentId: string): void {
 }
 
 /**
- * Scroll an offset in a document into view and put the caret on it —
- * what clicking a gripe row does. Silently does nothing when the
- * document has no open view: a finding always comes from an open
- * document, so that case means the tab closed under the panel.
+ * The Dockview api, for the surfaces that navigate rather than open —
+ * registered once by the workspace, same seam as `viewPanels.ts`.
  */
-export function revealInEditor(documentId: string, offset: number): boolean {
-	const views = useViewsStore.getState().views;
-	const matching = Object.entries(views)
+let panelApi: DockviewApi | null = null;
+
+export function registerEditorPanelApi(api: DockviewApi): void {
+	panelApi = api;
+}
+
+/** How long to wait for a freshly opened editor to register its handle. */
+const REVEAL_ATTEMPTS = 40;
+
+function viewsShowing(documentId: string): string[] {
+	return Object.entries(useViewsStore.getState().views)
 		.filter(([, view]) => view.documentId === documentId)
 		.map(([viewId]) => viewId);
-	return revealInDocument(matching, offset);
+}
+
+/**
+ * Bring a document's tab to the front and put the caret on an offset —
+ * what clicking a gripe row does.
+ *
+ * Activating the panel is not optional. Editors are kept mounted so tab
+ * switches cost nothing (docs/spec/editor-workspace.md), which means a
+ * hidden editor will happily scroll and take focus with nothing visible
+ * changing — the row looks broken while doing exactly what it was told.
+ *
+ * Opens the document when no view shows it. A finding is only ever about
+ * an open document, so this should not arise; it costs two lines and
+ * beats a click that silently does nothing if it ever does.
+ */
+export function revealInEditor(documentId: string, offset: number): boolean {
+	const api = panelApi;
+	if (api === null) {
+		return revealInDocument(viewsShowing(documentId), offset);
+	}
+
+	const panel = api.panels.find(
+		(candidate) => panelDocumentId(candidate.params) === documentId,
+	);
+	if (panel === undefined) {
+		const doc = useDocumentsStore.getState().documents[documentId];
+		if (doc === undefined) {
+			return false;
+		}
+		openEditorPanel(api, doc);
+		// The editor registers its handle when Monaco mounts, which is
+		// after this turn of the event loop.
+		let attempts = 0;
+		const settle = () => {
+			if (revealInDocument(viewsShowing(documentId), offset)) {
+				return;
+			}
+			attempts += 1;
+			if (attempts < REVEAL_ATTEMPTS) {
+				requestAnimationFrame(settle);
+			}
+		};
+		requestAnimationFrame(settle);
+		return true;
+	}
+
+	panel.api.setActive();
+	return revealInDocument(viewsShowing(documentId), offset);
 }

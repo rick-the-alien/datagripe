@@ -52,6 +52,7 @@ import {
 	closeEditorPanels,
 	openEditorPanel,
 	panelDocumentId,
+	registerEditorPanelApi,
 } from "./editorPanels";
 import { registerResultsOpener } from "./resultsPanel";
 import { openProjectSettings, registerViewPanelOpeners } from "./viewPanels";
@@ -375,6 +376,9 @@ export function Workspace() {
 			});
 		});
 		registerViewPanelOpeners(api);
+		// Lets a gripe row bring its document's tab to the front, not just
+		// scroll an editor that may be hidden behind another tab.
+		registerEditorPanelApi(api);
 
 		setDockApi(api);
 		dockApiRef.current = api;

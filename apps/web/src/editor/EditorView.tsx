@@ -7,6 +7,10 @@ import { wsClient } from "../api/ws";
 import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { useBrandingStore } from "../stores/branding";
+import {
+	connectionIdForDocument,
+	dialectForConnection,
+} from "../stores/documentConnection";
 import { useDocumentsStore } from "../stores/documents";
 import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
@@ -331,7 +335,16 @@ export function EditorView(props: IDockviewPanelProps) {
 		if (documentId === undefined || documentContent === undefined) {
 			return;
 		}
-		analyse(documentId, documentContent, "postgres");
+		// The dialect is resolved from the document's connection, not
+		// assumed: a rule that only applies to one engine would otherwise
+		// fire on all of them.
+		const connectionId = connectionIdForDocument(documentId);
+		analyse(
+			documentId,
+			documentContent,
+			dialectForConnection(connectionId),
+			connectionId,
+		);
 	}, [documentId, documentContent, analyse]);
 
 	// Dismissed findings must leave the gutter too, or dismissing one

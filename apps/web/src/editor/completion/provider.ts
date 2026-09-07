@@ -1,8 +1,6 @@
 import { statementAt } from "@datagripe/sql-tools";
 import * as monaco from "monaco-editor";
-import { useDocumentsStore } from "../../stores/documents";
-import { refToConnectionId } from "../../stores/executions";
-import { useSessionStore } from "../../stores/session";
+import { connectionIdForDocument } from "../../stores/documentConnection";
 import { type Catalog, type CatalogTable, catalog } from "./catalog";
 import { completionContext, parseStatementTables } from "./context";
 import { SQL_FUNCTIONS, SQL_KEYWORDS } from "./keywords";
@@ -135,15 +133,7 @@ export function registerSqlCompletion(
 				model.uri.scheme === "datagripe" && model.uri.authority === "document"
 					? /^\/(.+)\.sql$/.exec(model.uri.path)?.[1]
 					: undefined;
-			const connectionId =
-				documentId === undefined
-					? undefined
-					: (useDocumentsStore.getState().prefs[documentId]
-							?.defaultConnectionId ??
-						refToConnectionId(
-							useSessionStore.getState().currentWorkspace
-								?.defaultConnectionRef ?? null,
-						));
+			const connectionId = connectionIdForDocument(documentId);
 			if (connectionId !== undefined) {
 				catalogInstance.ensureCatalog(connectionId);
 			}

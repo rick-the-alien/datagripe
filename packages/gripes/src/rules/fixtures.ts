@@ -1,6 +1,6 @@
 import type { SqlDialect } from "@datagripe/sql-tools";
 import { statementInputFor } from "../statement";
-import type { ObjectInput, Rule } from "../types";
+import type { ObjectInput, Rule, SchemaInput } from "../types";
 
 /** Fixture builders for rule tests. Not exported from the package. */
 
@@ -35,4 +35,35 @@ export function objectFindingsFor(
 	overrides: Partial<ObjectInput> = {},
 ) {
 	return rule.evaluate({ object: objectFor(overrides) });
+}
+
+/**
+ * A schema that knows exactly what it is told and answers `null` for
+ * everything else — which is what a rule must handle by staying silent.
+ */
+export function schemaFor(
+	known: {
+		nullable?: Record<string, boolean>;
+		rows?: Record<string, number>;
+		indexed?: Record<string, boolean>;
+	} = {},
+): SchemaInput {
+	const key = (schema: string | null, table: string, column?: string) =>
+		[schema ?? "", table, column ?? ""].join(".");
+	return {
+		rowsFor: (schema, table) => known.rows?.[key(schema, table)] ?? null,
+		indexLeadsWith: (schema, table, column) =>
+			known.indexed?.[key(schema, table, column)] ?? null,
+		isNullable: (schema, table, column) =>
+			known.nullable?.[key(schema, table, column)] ?? null,
+	};
+}
+
+export function schemaFindingsFor(
+	rule: Rule,
+	sql: string,
+	schema: SchemaInput,
+	dialect: SqlDialect = "postgres",
+) {
+	return rule.evaluate({ statement: statementFor(sql, dialect), schema });
 }

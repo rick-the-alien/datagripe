@@ -7,7 +7,8 @@
 
 > Built: `packages/gripes` (rule shape, runner, renderer, catalogue and
 > its assertions), the wire types in contracts, `scanTokens` in
-> sql-tools, ten rules, dismissal at all three scopes, and four
+> sql-tools, eleven rules, a client `SchemaInput`, dismissal at all
+> three scopes, and four
 > surfaces — editor gutter and squiggle, annotation rail, gripes panel,
 > object-view annotations, status-bar count.
 >
@@ -333,6 +334,7 @@ way to get the whole thing switched off.
 | `join.no-condition` | blocker | statement | a join with no `on` or `using` |
 | `delete.no-where` | blocker | statement | a delete that removes every row |
 | `update.no-where` | blocker | statement | an update that rewrites every row |
+| `column.nullable-inequality` | warning | statement, schema | `col <> 'x'` where the schema says `col` is nullable |
 | `subquery.not-in` | warning | statement | `NOT IN (SELECT ...)`, which returns nothing at all if the subquery yields a null |
 | `table.no-primary-key` | warning | object | a base table with no addressable row |
 | `view.select-star` | warning | statement | a view whose column list the star froze at creation |
@@ -350,6 +352,15 @@ zero rows with no error and no clue. The shape is the finding in both
 cases — nothing at the call site says whether the subquery's column is
 nullable, and it can become nullable later without this query being
 touched.
+
+`column.nullable-inequality` is the first rule that needs the schema,
+and it is deliberately about the *inequality* and not the equality.
+Most columns are nullable, and `col = 'x'` excluding nulls is what
+everyone expects, so griping there would fire on half the queries in
+the tool and get the whole feature switched off. The negation is where
+the reading and the behaviour come apart: "status <> 'void'" reads as
+everything that is not void, and nulls are obviously not void, but the
+comparison is unknown for those rows so they are dropped in silence.
 
 `routine.definer-no-search-path` is the one that is about a
 vulnerability rather than a cost: a definer routine runs with the
@@ -387,11 +398,48 @@ a wrong gripe would come from:
   body, which can write through dynamic SQL that no amount of reading
   will reveal.
 
-Still on the list and not built, because they need inputs no runner
-supplies yet: `select.unqualified-star` and `index.missing` need row
-counts and index knowledge client-side, which the completion catalog
-does not carry; `column.nullable-equality` needs column nullability;
-`execution.truncated` needs the server-side runner.
+### The client's SchemaInput
+
+Built, backed by the completion catalog, and honest about what that
+cache does and does not hold. `isNullable` is real; `rowsFor` and
+`indexLeadsWith` always answer `null`, because the catalog carries
+neither. They are declared rather than omitted so a rule needing them
+compiles and stays quiet, instead of the runner having to know which
+parts of the schema each caller can supply.
+
+The catalog fetches a table's columns on demand, so a schema rule's
+first look usually knows nothing and correctly says nothing. Asking for
+the columns is the side effect; when they arrive the catalog notifies,
+the store re-analyses, and the finding appears — a beat late, but never
+wrong. That is the whole reason `null` may not be read as `false`: a
+rule treating "not fetched" as "NOT NULL" would go silent on a real
+problem, and one treating it as "nullable" would invent one.
+
+Two things had to be fixed before a schema or dialect rule could be
+trusted at all, and both were silent:
+
+- `scanTokens` dropped any character it did not recognise, and `!` was
+  not in its punctuation set. `a != 1` therefore tokenized identically
+  to `a = 1`, so a rule about equality would have fired on its exact
+  opposite. Multi-character operators are now single tokens.
+- `SqlDialect` was `keyof Record<string, ...>`, which is `string`, so
+  every caller type-checked and the editor was passing a hardcoded
+  `"postgres"` for every connection. A dialect-gated rule would have
+  fired on MySQL. The dialect is now a real union, resolved from the
+  adapter's `sqlDialect` capability — a capability and not the adapter
+  id, since Redis is an adapter with no dialect at all.
+
+### Still on the list
+
+- `index.missing` needs to know a relation's indexes, which the
+  completion catalog does not carry. The object describe result does, so
+  this waits on either widening the catalog or a server-side runner.
+- `execution.truncated` needs the server-side runner.
+- `select.unqualified-star` is **not** going to ship as specified. In a
+  SQL client, `select * from t limit 100` is the single most common
+  legitimate query there is, and griping at it is precisely the style
+  filler this catalogue exists to avoid. The freezing case has real
+  teeth and shipped as `view.select-star`; the ad-hoc case does not.
 
 ### Analysis is debounced, and per document
 

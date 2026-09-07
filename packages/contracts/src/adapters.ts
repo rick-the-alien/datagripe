@@ -26,7 +26,18 @@ export type AdapterField =
 	| "tlsMode"
 	| "readOnly";
 
+/**
+ * The SQL dialect an adapter speaks, for the tokenizer and the splitter.
+ * Declared here rather than derived from the adapter id because they
+ * only coincide today: Redis is an adapter with no dialect at all, and
+ * passing its id where a dialect was wanted is exactly the bug this
+ * field exists to stop.
+ */
+export type AdapterDialect = "postgres" | "mysql" | "sqlite";
+
 export interface AdapterCapabilities {
+	/** null when the adapter speaks no SQL. */
+	sqlDialect: AdapterDialect | null;
 	/**
 	 * "sql": schema/tables/views/columns tree.
 	 * "keyspace": key/prefix browser (Redis).
@@ -65,6 +76,7 @@ export const ADAPTER_CAPABILITIES: Record<
 	AdapterCapabilities
 > = {
 	postgres: {
+		sqlDialect: "postgres",
 		introspection: "sql",
 		execution: "cursor",
 		cancellation: true,
@@ -91,6 +103,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		databaseLabel: "Database",
 	},
 	mysql: {
+		sqlDialect: "mysql",
 		introspection: "sql",
 		execution: "buffered",
 		cancellation: true,
@@ -117,6 +130,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		databaseLabel: "Database",
 	},
 	sqlite: {
+		sqlDialect: "sqlite",
 		introspection: "sql",
 		execution: "buffered",
 		cancellation: false,
@@ -129,6 +143,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		databaseLabel: "File path",
 	},
 	redis: {
+		sqlDialect: null,
 		introspection: "keyspace",
 		execution: null,
 		cancellation: false,

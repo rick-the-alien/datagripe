@@ -45,6 +45,16 @@ export const MESSAGES: MessageCatalogue = {
 			"UPDATE WITH NO WHERE. Every row in the table gets this value. Every single one.",
 	},
 
+	"column.nullable-inequality": {
+		notice: "{column} is nullable, so this excludes the rows where it is null.",
+		warning:
+			"{column} can be null, and null is not <> anything. Those rows vanish here.",
+		fatal:
+			"{column} is nullable. null <> anything is unknown, not true, so every null row is silently dropped.",
+		panic:
+			"{column} IS NULLABLE. Those rows are not missing because you excluded them. They are missing because null compares to nothing.",
+	},
+
 	"subquery.not-in": {
 		notice:
 			"not in with a subquery returns nothing at all if the subquery yields a null.",

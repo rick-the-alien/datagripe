@@ -5,7 +5,7 @@ import { documentListEntrySchema } from "./multiplayer";
 
 /** Connection contracts. Secrets are write-only; never serialized back to clients. */
 
-export type { ConnectionAdapter } from "./adapters";
+export type { AdapterDialect, ConnectionAdapter } from "./adapters";
 
 export const tlsModeSchema = z.enum(["disable", "require", "verify-full"]);
 

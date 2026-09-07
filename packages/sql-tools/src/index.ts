@@ -21,13 +21,28 @@ export interface SplitOptions {
 	backtickIdentifiers?: boolean;
 }
 
-const DIALECT_OPTIONS: Record<string, SplitOptions> = {
+/**
+ * Declared without a `Record<string, ...>` annotation on purpose: that
+ * widened `SqlDialect` to `string`, so every dialect-gated rule and
+ * every caller could pass any word at all and type-check. A rule that
+ * only applies to Postgres needs the union to be real.
+ */
+const DIALECT_OPTIONS = {
 	postgres: {},
 	mysql: { backslashEscapes: true, backtickIdentifiers: true },
 	sqlite: { backtickIdentifiers: true },
-};
+} satisfies Record<string, SplitOptions>;
 
 export type SqlDialect = keyof typeof DIALECT_OPTIONS;
+
+export const SQL_DIALECTS = Object.keys(DIALECT_OPTIONS) as SqlDialect[];
+
+/** Narrow an untrusted string, for a value arriving from the wire. */
+export function asSqlDialect(value: string): SqlDialect | null {
+	return (SQL_DIALECTS as string[]).includes(value)
+		? (value as SqlDialect)
+		: null;
+}
 
 type DollarQuote = { tag: string };
 
@@ -230,7 +245,46 @@ const PUNCT = new Set([
 	"[",
 	"]",
 	":",
+	// Included so they cannot be silently dropped: an unrecognised
+	// character used to vanish, which turned `a != 1` into `a = 1` and
+	// would have had a rule about equality misread an inequality.
+	"!",
+	"%",
+	"~",
+	"@",
+	"#",
+	"&",
+	"^",
+	"?",
 ]);
+
+/**
+ * Operators that are one token despite being several characters, longest
+ * first so `->>` is not read as `->` followed by `>`.
+ *
+ * Without these, `<>` arrives as `<` then `>` and a rule comparing
+ * against `=` cannot tell an inequality from an equality — which is the
+ * whole job of some of them.
+ */
+const OPERATORS = [
+	"->>",
+	"<->",
+	"#>>",
+	"<>",
+	"!=",
+	"<=",
+	">=",
+	"||",
+	"::",
+	"->",
+	"#>",
+	"@>",
+	"<@",
+	"<<",
+	">>",
+	"!~",
+	"~*",
+];
 
 /**
  * Tokenize one statement for static analysis (docs/spec/gripes.md).
@@ -372,6 +426,14 @@ export function scanTokens(
 			depth = Math.max(0, depth - 1);
 			push("punct", i, i + 1);
 			i++;
+			continue;
+		}
+		const operator = OPERATORS.find((candidate) =>
+			sql.startsWith(candidate, i),
+		);
+		if (operator !== undefined) {
+			push("punct", i, i + operator.length);
+			i += operator.length;
 			continue;
 		}
 		if (PUNCT.has(ch)) {

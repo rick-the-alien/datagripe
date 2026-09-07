@@ -6,6 +6,7 @@ import type {
 	ExecutionStartResult,
 	ExecutionStatus,
 } from "@datagripe/contracts";
+import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type {
 	DatabaseAdapter,
@@ -280,9 +281,13 @@ export function createExecutionRegistry(
 				);
 			}
 
+			// The dialect is a capability, not the adapter id: they only
+			// coincide today, and Redis has no dialect at all.
+			const dialect =
+				ADAPTER_CAPABILITIES[connection.adapter].sqlDialect ?? "postgres";
 			const statements = splitStatements(
 				request.sql,
-				splitOptionsForDialect(connection.adapter),
+				splitOptionsForDialect(dialect),
 			).map((statement) => statement.text);
 			if (statements.length === 0) {
 				throw new ServiceError(

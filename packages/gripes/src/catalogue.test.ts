@@ -3,7 +3,7 @@ import { ATTITUDE_LEVELS } from "@datagripe/contracts";
 import { RULES } from "./catalogue";
 import { MESSAGES } from "./messages";
 import { renderFinding, renderFooter } from "./render";
-import { objectFor } from "./rules/fixtures";
+import { objectFor, schemaFor } from "./rules/fixtures";
 import { runRules } from "./runner";
 import { statementInputFor } from "./statement";
 
@@ -42,7 +42,13 @@ const OFFENDING = [
 	"select * from users where id not in (select user_id from bans)",
 	"create view v as select * from orders",
 	"create index idx_orders_user on orders (user_id)",
+	"select id from orders where status <> 'void'",
 ].join(";\n");
+
+/** The only schema facts the fixtures above rely on. */
+const KNOWN_SCHEMA = schemaFor({
+	nullable: { ".orders.status": true },
+});
 
 /** Every finding the catalogue produces over the fixtures above. */
 function allFindings() {
@@ -51,6 +57,7 @@ function allFindings() {
 	for (const text of OFFENDING.split(";\n")) {
 		findings.push(
 			...runRules(RULES, {
+				schema: KNOWN_SCHEMA,
 				statement: statementInputFor({
 					documentId: "doc-1",
 					dialect: "postgres",
@@ -77,6 +84,7 @@ describe("the catalogue, end to end", () => {
 
 	test("nothing fires on innocent SQL", () => {
 		const result = runRules(RULES, {
+			schema: KNOWN_SCHEMA,
 			statement: statementInputFor({
 				documentId: "doc-1",
 				dialect: "postgres",

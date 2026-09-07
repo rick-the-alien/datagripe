@@ -1,3 +1,4 @@
+import { columnNullableInequality } from "./rules/columnNullableInequality";
 import { indexDuplicate } from "./rules/indexDuplicate";
 import { indexNotConcurrent } from "./rules/indexNotConcurrent";
 import { joinNoCondition } from "./rules/joinNoCondition";
@@ -29,6 +30,8 @@ export const RULES: Rule[] = [
 	subqueryNotIn,
 	viewSelectStar,
 	indexNotConcurrent,
+	// statement + schema
+	columnNullableInequality,
 	// object
 	routineDefinerNoSearchPath,
 	tableNoPrimaryKey,

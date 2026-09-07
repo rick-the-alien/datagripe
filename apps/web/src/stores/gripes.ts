@@ -4,10 +4,17 @@ import type {
 	Finding,
 } from "@datagripe/contracts";
 import { isDismissed } from "@datagripe/contracts";
+import type { SchemaInput } from "@datagripe/gripes";
 import { RULES, runRules, statementInputFor } from "@datagripe/gripes";
-import { splitOptionsForDialect, splitStatements } from "@datagripe/sql-tools";
+import {
+	type SqlDialect,
+	splitOptionsForDialect,
+	splitStatements,
+} from "@datagripe/sql-tools";
 import { create } from "zustand";
 import { wsClient } from "../api/ws";
+import { catalog } from "../editor/completion/catalog";
+import { schemaInputFor } from "../editor/completion/schemaInput";
 import { createDebouncer } from "../persistence/debounce";
 import { useDocumentsStore } from "./documents";
 
@@ -48,10 +55,26 @@ export type GripesState = {
 	failed: string[];
 	/** Workspace-wide dismissals, loaded on connect. */
 	dismissals: Dismissal[];
-	/** Re-analyse one document's text. Debounced per document. */
-	analyse: (documentId: string, sql: string, dialect: string) => void;
+	/**
+	 * Re-analyse one document's text. Debounced per document.
+	 *
+	 * `connectionId` is what lets schema rules run at all; without it they
+	 * are simply not in the set the runner can supply inputs for, so they
+	 * stay silent rather than guess.
+	 */
+	analyse: (
+		documentId: string,
+		sql: string,
+		dialect: SqlDialect,
+		connectionId?: string,
+	) => void;
 	/** Analyse now, skipping the debounce — used on document open. */
-	analyseNow: (documentId: string, sql: string, dialect: string) => void;
+	analyseNow: (
+		documentId: string,
+		sql: string,
+		dialect: SqlDialect,
+		connectionId?: string,
+	) => void;
 	/** Drop a document's findings when it closes or is deleted. */
 	forget: (documentId: string) => void;
 	/** Publish an object view's findings, or clear them when it closes. */
@@ -65,18 +88,29 @@ export type GripesState = {
 	reset: () => void;
 };
 
-function evaluate(
+/**
+ * Analyse one document. Exported with the schema provider injectable so
+ * a test can supply schema facts without a live connection — the schema
+ * rules are otherwise only reachable through a loaded catalog, and would
+ * go untested at exactly the point where they are wired up.
+ */
+export function evaluateDocument(
 	documentId: string,
 	sql: string,
-	dialect: string,
+	dialect: SqlDialect,
+	connectionId: string | undefined,
+	makeSchema: (connectionId: string) => SchemaInput = schemaInputFor,
 ): { findings: Finding[]; failed: string[] } {
 	// A document is many statements; each is analysed on its own so a
 	// finding's offsets point into the document, not into the statement.
 	const options = splitOptionsForDialect(dialect);
+	const schema =
+		connectionId === undefined ? undefined : makeSchema(connectionId);
 	const findings: Finding[] = [];
 	const failed = new Set<string>();
 	for (const statement of splitStatements(sql, options)) {
 		const result = runRules(RULES, {
+			...(schema === undefined ? {} : { schema }),
 			statement: statementInputFor({
 				documentId,
 				dialect,
@@ -92,14 +126,45 @@ function evaluate(
 	return { findings, failed: [...failed] };
 }
 
+/** What the last analysis of a document was given, so it can be redone. */
+type LastAnalysis = {
+	sql: string;
+	dialect: SqlDialect;
+	connectionId: string | undefined;
+};
+
 export const useGripesStore = create<GripesState>()((set, get) => {
-	const apply = (documentId: string, sql: string, dialect: string) => {
-		const { findings, failed } = evaluate(documentId, sql, dialect);
+	const lastAnalysis = new Map<string, LastAnalysis>();
+
+	const apply = (
+		documentId: string,
+		sql: string,
+		dialect: SqlDialect,
+		connectionId: string | undefined,
+	) => {
+		lastAnalysis.set(documentId, { sql, dialect, connectionId });
+		const { findings, failed } = evaluateDocument(
+			documentId,
+			sql,
+			dialect,
+			connectionId,
+		);
 		set({
 			byDocument: { ...get().byDocument, [documentId]: findings },
 			failed,
 		});
 	};
+
+	// The catalog loads a table's columns on demand, so a schema rule's
+	// first look usually knows nothing and correctly stays silent. Redo
+	// the analysis when the answer arrives, or the finding never appears.
+	catalog.subscribe((connectionId) => {
+		for (const [documentId, last] of lastAnalysis) {
+			if (last.connectionId === connectionId) {
+				apply(documentId, last.sql, last.dialect, last.connectionId);
+			}
+		}
+	});
 
 	return {
 		byDocument: {},
@@ -107,21 +172,22 @@ export const useGripesStore = create<GripesState>()((set, get) => {
 		failed: [],
 		dismissals: [],
 
-		analyse(documentId, sql, dialect) {
+		analyse(documentId, sql, dialect, connectionId) {
 			debouncer.schedule(
 				documentId,
-				() => apply(documentId, sql, dialect),
+				() => apply(documentId, sql, dialect, connectionId),
 				ANALYSE_DELAY_MS,
 			);
 		},
 
-		analyseNow(documentId, sql, dialect) {
+		analyseNow(documentId, sql, dialect, connectionId) {
 			debouncer.cancel(documentId);
-			apply(documentId, sql, dialect);
+			apply(documentId, sql, dialect, connectionId);
 		},
 
 		forget(documentId) {
 			debouncer.cancel(documentId);
+			lastAnalysis.delete(documentId);
 			const { [documentId]: _dropped, ...byDocument } = get().byDocument;
 			set({ byDocument });
 		},

@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import type { SchemaInput } from "@datagripe/gripes";
 import { useDocumentsStore } from "./documents";
-import { allFindings, findingCount, useGripesStore } from "./gripes";
+import {
+	allFindings,
+	evaluateDocument,
+	findingCount,
+	useGripesStore,
+} from "./gripes";
 
 /**
  * The client-side runner (docs/spec/gripes.md). `analyseNow` skips the
@@ -159,5 +165,68 @@ describe("a deleted document's findings do not linger", () => {
 			documents: { "doc-1": { ...doc, title: "renamed.sql" } },
 		});
 		expect(findingCount(useGripesStore.getState())).toBe(1);
+	});
+});
+
+describe("schema rules", () => {
+	/** A schema that knows one thing, as a loaded catalog would. */
+	const schema: SchemaInput = {
+		rowsFor: () => null,
+		indexLeadsWith: () => null,
+		isNullable: (_schema, table, column) =>
+			table === "film" && column === "release_year" ? true : null,
+	};
+
+	test("fire once the schema can answer", () => {
+		const { findings } = evaluateDocument(
+			"doc-1",
+			"select title from film where release_year <> 2006",
+			"postgres",
+			"conn-1",
+			() => schema,
+		);
+		expect(findings.map((finding) => finding.ruleId)).toEqual([
+			"column.nullable-inequality",
+		]);
+		expect(findings[0]?.facts).toEqual({ column: "release_year" });
+	});
+
+	test("stay silent while the schema knows nothing", () => {
+		// The catalog loads columns on demand, so this is the normal state
+		// on first sight and it must not produce a finding.
+		const { findings } = evaluateDocument(
+			"doc-1",
+			"select title from film where release_year <> 2006",
+			"postgres",
+			"conn-1",
+			() => ({
+				rowsFor: () => null,
+				indexLeadsWith: () => null,
+				isNullable: () => null,
+			}),
+		);
+		expect(findings).toEqual([]);
+	});
+
+	test("do not run at all without a connection", () => {
+		const { findings } = evaluateDocument(
+			"doc-1",
+			"select title from film where release_year <> 2006",
+			"postgres",
+			undefined,
+		);
+		expect(findings).toEqual([]);
+	});
+});
+
+describe("dialect gating", () => {
+	test("a Postgres-only rule does not fire on MySQL", () => {
+		const sql = "create index idx_film_title on film (title)";
+		expect(
+			evaluateDocument("doc-1", sql, "postgres", undefined).findings,
+		).toHaveLength(1);
+		expect(evaluateDocument("doc-1", sql, "mysql", undefined).findings).toEqual(
+			[],
+		);
 	});
 });

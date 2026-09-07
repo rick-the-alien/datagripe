@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { scanTokens, splitOptionsForDialect } from "./index";
+import { type SqlDialect, scanTokens, splitOptionsForDialect } from "./index";
 
 /** Tokens for static lint rules (docs/spec/gripes.md). */
 
-function words(sql: string, dialect = "postgres"): string[] {
+function words(sql: string, dialect: SqlDialect = "postgres"): string[] {
 	return scanTokens(sql, splitOptionsForDialect(dialect))
 		.filter((token) => token.kind === "word")
 		.map((token) => token.text);
@@ -124,5 +124,41 @@ describe("scanTokens", () => {
 
 	test("an unterminated literal does not hang or leak words", () => {
 		expect(words("select 'unterminated from t")).toEqual(["select"]);
+	});
+});
+
+describe("operators", () => {
+	test("multi-character operators are one token", () => {
+		for (const [sql, expected] of [
+			["a <> 1", "<>"],
+			["a != 1", "!="],
+			["a <= 1", "<="],
+			["a >= 1", ">="],
+			["a || b", "||"],
+			["a::text", "::"],
+			["data -> 'k'", "->"],
+			["data ->> 'k'", "->>"],
+			["a <-> b", "<->"],
+		] as const) {
+			const texts = scanTokens(sql).map((token) => token.text);
+			expect(texts).toContain(expected);
+		}
+	});
+
+	test("an inequality is distinguishable from an equality", () => {
+		// `!` was not punctuation and unrecognised characters were dropped,
+		// so `a != 1` used to tokenize identically to `a = 1`. A rule about
+		// equality would have fired on its opposite.
+		expect(scanTokens("a != 1").map((token) => token.text)).not.toEqual(
+			scanTokens("a = 1").map((token) => token.text),
+		);
+	});
+
+	test("offsets still span the whole operator", () => {
+		const token = scanTokens("a ->> b").find(
+			(candidate) => candidate.kind === "punct",
+		);
+		expect(token?.start).toBe(2);
+		expect(token?.end).toBe(5);
 	});
 });

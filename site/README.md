@@ -18,8 +18,22 @@ One-time setup: **Settings → Pages → Source = "GitHub Actions"**.
 
 ## Custom domain
 
-`CNAME` claims `datagripe.com`, which is only half of it — the DNS has
-to point here too. For the apex domain, four A records:
+`CNAME` does **not** claim the domain. For Actions-based Pages the file
+only preserves a domain that is already set, so all three of these are
+needed and in this order:
+
+1. DNS pointing at GitHub (below).
+2. The domain set on the Pages site itself —
+   `gh api -X PUT repos/OWNER/REPO/pages -f cname=datagripe.com`, or
+   Settings → Pages → Custom domain.
+3. A **re-deploy**. The domain does not bind to the existing
+   deployment; until the workflow runs again, GitHub answers "Site not
+   found" for a domain it does not yet associate with this repo.
+
+Skipping (2) and (3) looks exactly like broken DNS, which is the wrong
+place to go looking.
+
+For the apex domain, four A records:
 
 ```
 185.199.108.153
@@ -37,9 +51,11 @@ and, if the registrar supports AAAA:
 2606:50c0:8003::153
 ```
 
-Plus a CNAME for `www` → `rick-the-alien.github.io`. Once DNS resolves,
-tick **Enforce HTTPS** in the Pages settings; the certificate can take a
-few minutes to issue.
+Plus a CNAME for `www` → `rick-the-alien.github.io`, which GitHub
+redirects to the apex. Then tick **Enforce HTTPS** (or
+`-F https_enforced=true`); the certificate is usually issued within
+minutes of the domain verifying, and enforcement cannot be set before
+it exists.
 
 ## Downloads
 

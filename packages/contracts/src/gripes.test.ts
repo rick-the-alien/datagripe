@@ -15,7 +15,13 @@ const documentFinding: Finding = {
 const objectFinding: Finding = {
 	ruleId: "table.no-primary-key",
 	severity: "warning",
-	at: { kind: "object", connectionId: "c", schema: "shop", name: "orders" },
+	at: {
+		kind: "object",
+		connectionId: "c",
+		schema: "shop",
+		name: "orders",
+		objectKind: "table",
+	},
 	facts: {},
 };
 

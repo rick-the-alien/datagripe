@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { objectKindSchema } from "./objects";
 
 /**
  * Gripe contracts (docs/spec/gripes.md). These are the wire types: a
@@ -67,6 +68,13 @@ export const gripeLocationSchema = z.discriminatedUnion("kind", [
 		connectionId: z.string().min(1).max(255),
 		schema: z.string().min(1).max(255),
 		name: z.string().min(1).max(1024),
+		/**
+		 * The object's own kind, which the object view needs before its
+		 * describe lands in order to know which tabs exist. Without it a
+		 * finding names a place that cannot be navigated to, which is not
+		 * much of a location.
+		 */
+		objectKind: objectKindSchema,
 		/** Which object-view tab this annotates, when it is tab-specific. */
 		tab: z.string().max(40).optional(),
 	}),

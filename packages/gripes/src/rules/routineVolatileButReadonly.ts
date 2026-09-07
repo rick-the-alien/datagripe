@@ -1,4 +1,4 @@
-import type { Rule } from "../types";
+import { objectLocation, type Rule } from "../types";
 
 /**
  * `routine.volatile-but-readonly` — a routine that only reads but is
@@ -75,13 +75,7 @@ export const routineVolatileButReadonly: Rule = {
 			{
 				ruleId: routineVolatileButReadonly.id,
 				severity: routineVolatileButReadonly.severity,
-				at: {
-					kind: "object",
-					connectionId: object.connectionId,
-					schema: object.schema,
-					name: object.name,
-					tab: "ddl",
-				},
+				at: objectLocation(object, "ddl"),
 				facts: { routine: object.name },
 			},
 		];

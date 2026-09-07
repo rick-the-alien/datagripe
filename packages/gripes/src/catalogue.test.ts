@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ATTITUDE_LEVELS } from "@datagripe/contracts";
+import type { ObjectTab } from "@datagripe/contracts";
+import { ATTITUDE_LEVELS, tabsForKind } from "@datagripe/contracts";
 import { RULES } from "./catalogue";
 import { MESSAGES } from "./messages";
 import { renderFinding, renderFooter } from "./render";
@@ -15,6 +16,8 @@ import { statementInputFor } from "./statement";
  * are four separate edits per rule (docs/spec/gripes.md), and forgetting
  * one of them is the likeliest mistake when adding one.
  */
+
+const OBJECT_KINDS = ["table", "view", "function", "procedure", "sequence"];
 
 /** A table with no key and one redundant index. */
 const OFFENDING_TABLE = objectFor({
@@ -101,6 +104,26 @@ describe("the catalogue, end to end", () => {
 			}),
 		});
 		expect(result.findings).toEqual([]);
+	});
+
+	test("every object finding names somewhere you can navigate to", () => {
+		// The panel opens the object view from this location alone, and the
+		// view needs the kind before its describe lands to know which tabs
+		// exist. A tab naming one the kind does not have would land nowhere.
+		for (const finding of allFindings()) {
+			if (finding.at.kind !== "object") {
+				continue;
+			}
+			expect(finding.at.connectionId).not.toBe("");
+			expect(finding.at.schema).not.toBe("");
+			expect(finding.at.name).not.toBe("");
+			expect(OBJECT_KINDS).toContain(finding.at.objectKind);
+			if (finding.at.tab !== undefined) {
+				expect(tabsForKind(finding.at.objectKind)).toContain(
+					finding.at.tab as ObjectTab,
+				);
+			}
+		}
 	});
 
 	test("every finding renders at every level with no placeholder left", () => {

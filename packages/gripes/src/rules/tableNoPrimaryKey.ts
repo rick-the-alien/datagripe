@@ -1,4 +1,4 @@
-import type { Rule } from "../types";
+import { objectLocation, type Rule } from "../types";
 
 /**
  * `table.no-primary-key` — a base table with no primary key.
@@ -29,13 +29,7 @@ export const tableNoPrimaryKey: Rule = {
 			{
 				ruleId: tableNoPrimaryKey.id,
 				severity: tableNoPrimaryKey.severity,
-				at: {
-					kind: "object",
-					connectionId: object.connectionId,
-					schema: object.schema,
-					name: object.name,
-					tab: "columns",
-				},
+				at: objectLocation(object, "columns"),
 				facts: { table: object.name },
 			},
 		];

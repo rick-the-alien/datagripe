@@ -101,6 +101,27 @@ export interface Rule {
 	evaluate: (context: GripeContext) => Finding[];
 }
 
+/**
+ * Convenience for a rule building an object-scoped finding.
+ *
+ * `tab` is the object-view tab the finding's subject lives in, so an
+ * index complaint stays on `indexes` rather than following the reader to
+ * `grants`. Omit it for something that belongs to the object as a whole.
+ */
+export function objectLocation(
+	object: ObjectInput,
+	tab?: string,
+): GripeLocation {
+	return {
+		kind: "object",
+		connectionId: object.connectionId,
+		schema: object.schema,
+		name: object.name,
+		objectKind: object.kind,
+		...(tab === undefined ? {} : { tab }),
+	};
+}
+
 /** Convenience for a rule building a document-ranged finding. */
 export function documentLocation(
 	statement: StatementInput,

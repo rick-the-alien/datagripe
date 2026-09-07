@@ -18,6 +18,7 @@ function finding(severity: GripeSeverity, tab?: ObjectTab): Finding {
 			connectionId: "conn-1",
 			schema: "shop",
 			name: "orders",
+			objectKind: "table",
 			...(tab === undefined ? {} : { tab }),
 		},
 		facts: {},

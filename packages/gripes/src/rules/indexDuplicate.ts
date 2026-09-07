@@ -1,5 +1,5 @@
 import type { Finding } from "@datagripe/contracts";
-import type { Rule } from "../types";
+import { objectLocation, type Rule } from "../types";
 
 /**
  * `index.duplicate` — an index whose key columns are a leading prefix of
@@ -57,13 +57,7 @@ export const indexDuplicate: Rule = {
 			findings.push({
 				ruleId: indexDuplicate.id,
 				severity: indexDuplicate.severity,
-				at: {
-					kind: "object",
-					connectionId: object.connectionId,
-					schema: object.schema,
-					name: object.name,
-					tab: "indexes",
-				},
+				at: objectLocation(object, "indexes"),
 				facts: { index: candidate.name, covering: covering.name },
 			});
 		}

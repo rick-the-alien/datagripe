@@ -13,6 +13,7 @@ import {
 	renderFooter,
 } from "@datagripe/gripes";
 import { revealInEditor } from "../app/editorPanels";
+import { openObjectView } from "../app/viewPanels";
 import { useBrandingStore } from "../stores/branding";
 import { useDocumentsStore } from "../stores/documents";
 import { hiddenCount, useGripesStore } from "../stores/gripes";
@@ -69,8 +70,23 @@ function GripeRow(props: {
 				type="button"
 				className="dg-gripe-main"
 				onClick={() => {
+					// A document finding has an offset to put the caret on; an
+					// object finding has a tab, so the equivalent of jumping to
+					// the line is landing on the tab its subject lives in.
 					if (finding.at.kind === "document") {
 						revealInEditor(finding.at.documentId, finding.at.start);
+						return;
+					}
+					if (finding.at.kind === "object") {
+						openObjectView(
+							{
+								connectionId: finding.at.connectionId,
+								schema: finding.at.schema,
+								name: finding.at.name,
+								kind: finding.at.objectKind,
+							},
+							finding.at.tab,
+						);
 					}
 				}}
 			>

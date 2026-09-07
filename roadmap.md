@@ -147,6 +147,66 @@ still open — the brand spec reserves it for its own pass.
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage
 
+## Phase 12 — Domains · planned
+
+Designed in `docs/spec/domains.md`. Replaces the hand-maintained
+`pull_schema.sh` pattern: the object-to-domain map becomes data in the
+app, and the directory tree it produces becomes a button.
+
+- [ ] `domains` + `domain_tags` (migration 0010), scoped to
+      workspace × datasource, one domain per object, team-wide
+- [ ] `domain.list` / `upsert` / `delete` / `tag` and
+      `packages/contracts/src/domains.ts`
+- [ ] Context-menu `domain ▸` submenu, applying to a multi-selection
+- [ ] Colour rail on tree rows — eight palette slots, hues reserved for
+      the brand pass, never the four project accents
+- [ ] Domain manager: order, description, `include data`, and the drift
+      report (untagged objects, stale tags)
+- [ ] Group-by-domain toggle with a permanent `untagged` bucket
+- [ ] `domain.export` — deterministic tree from object-view DDL, no
+      external binary, dry run before prune, `DOMAIN_EXPORT_ROOTS`
+      allowlist and `owner` role
+- [ ] Per-object files carry their grants, `PUBLIC` written out
+      explicitly so PostgreSQL's implicit `EXECUTE` default is visible
+- [ ] `domain.import` — the manifest round-trips tagging through git
+- [ ] Sync tab: target, plan, progress, refusals, and `domain_exports`
+      run history in place of a parsed `pull_log.txt`
+- [ ] `domain.git` behind `DOMAIN_EXPORT_GIT` — argv not shell, `add`
+      scoped to the domain root, push always a separate press, git's
+      own stderr shown verbatim and no credential management
+- [ ] Suggestions: glob patterns propose a domain, a person accepts it
+
+Exit: re-exporting an unchanged database produces an empty `git diff`,
+and an object added since the last export shows up as untagged rather
+than silently missing.
+
+## Phase 13 — Access report · planned
+
+Designed in `docs/spec/access-report.md`. The role × object matrix,
+resolved rather than granted — which matters most under PostgREST,
+where the grant graph is the API surface.
+
+- [ ] Effective privileges from `has_*_privilege`, with the ACL parse
+      used only to explain *why* — `via PUBLIC`, `via member of …`,
+      `owner`, `superuser`
+- [ ] Fixes the direct-grants blind spot in the object view's grants
+      tab: `information_schema.role_table_grants` cannot see a grant to
+      `PUBLIC` or one inherited through a role
+- [ ] Schema `USAGE` gates every cell, so the report never claims
+      access a role does not have
+- [ ] RLS state, zero-policy tables, `security_invoker` views,
+      `SECURITY DEFINER` routines, column grants, `pg_default_acl`
+- [ ] Per-datasource role set (`datasource_roles`, migration 0011) with
+      untrusted and authenticator marks, suggested and never assumed
+- [ ] Eight `grant.*` rules in the gripes catalogue, loudest for
+      `grant.public-execute` — the one nobody chose
+- [ ] `access: <datasource>` tab, domain-filtered, "differences only"
+- [ ] `access/` in the domain dump, with no `Generated:` date in the
+      body so a real change is not buried under a timestamp
+
+Exit: a function created today shows `anon` reaching it via `PUBLIC`
+before anybody has run a query against it.
+
 ## Unscheduled / parking lot
 - SQLite type/nullability/default changes — need the 12-step table rebuild
 - Index, constraint and trigger editing — the preview-then-apply shape is
@@ -155,5 +215,7 @@ still open — the brand spec reserves it for its own pass.
   (`docs/spec/object-view.md` "Danger zone")
 - AI query generation (explicit MVP non-goal; revisit after Phase 4)
 - Arrow-based result transport (only after profiling JSON batches)
-- Visual schema design, migration generation, DBA workflows
+- Visual schema design, DBA workflows
+- Migration generation — the domain export is a structure snapshot, not
+  an ordered rebuild (`docs/spec/domains.md` "What the export is not")
 - SSH tunnels, cloud IAM auth, customer network agents

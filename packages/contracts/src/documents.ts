@@ -21,11 +21,37 @@ export const documentOriginSchema = z.object({
 
 export type DocumentOrigin = z.infer<typeof documentOriginSchema>;
 
+/**
+ * The second language, and the rule for picking it, are
+ * docs/spec/markdown-documents.md: the extension of the *name* decides,
+ * in every files area. A `.md` file in a checkout is a runbook whose SQL
+ * blocks are runnable in place; everything else stays `sql`.
+ */
+export const documentLanguageSchema = z.enum(["sql", "markdown"]);
+
+export type DocumentLanguage = z.infer<typeof documentLanguageSchema>;
+
+/** Extensions that make a document markdown. Case-insensitive. */
+const MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+
+/**
+ * The one rule, shared by the server and the client so they cannot
+ * disagree: a document is markdown when its name ends in one of the
+ * markdown extensions, and `sql` otherwise. Applied to a file-backed
+ * document's path, and to a workspace file or scratchpad's title.
+ */
+export function languageForName(name: string): DocumentLanguage {
+	const lower = name.toLowerCase();
+	return MARKDOWN_EXTENSIONS.some((ext) => lower.endsWith(ext))
+		? "markdown"
+		: "sql";
+}
+
 export const documentSchema = z.object({
 	id: z.uuid(),
 	workspaceId: z.uuid(),
 	title: z.string().min(1).max(255),
-	language: z.literal("sql"),
+	language: documentLanguageSchema,
 	content: z.string(),
 	revision: z.number().int().nonnegative(),
 	defaultConnectionId: z.uuid().optional(),

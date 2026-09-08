@@ -5,6 +5,7 @@ import type {
 	DocumentOrigin,
 	FileOpenResult,
 } from "@datagripe/contracts";
+import { languageForName } from "@datagripe/contracts";
 import { create } from "zustand";
 import { WsError, type WsRequestFn, wsClient } from "../api/ws";
 import { db } from "../persistence/db";
@@ -75,6 +76,14 @@ export type DocumentsState = {
 	openFile: (origin: DocumentOrigin) => Promise<EditorDocument | null>;
 	/** Answer the disk-changed banner: take the file, or keep this copy. */
 	resolveDiskChange: (id: string, choice: "disk" | "mine") => Promise<void>;
+	/**
+	 * Re-run the open check for every file-backed document from one
+	 * datasource, after a pull moved HEAD
+	 * (docs/spec/git-datasources.md "After a pull"). Nothing new happens
+	 * here: `openFile` already adopts a file that only changed on disk and
+	 * raises the banner when both sides moved.
+	 */
+	resyncFilesFrom: (connectionRef: string) => Promise<void>;
 	renameDocument: (id: string, title: string) => void;
 	updateContent: (id: string, content: string) => void;
 	saveDocument: (id: string) => Promise<void>;
@@ -176,6 +185,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									revision,
 									updatedAt: result.document.updatedAt,
 									origin: result.document.origin,
+									language: result.document.language,
 								},
 							},
 						});
@@ -196,6 +206,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									revision: 0,
 									updatedAt: now(),
 									origin: null,
+									language: languageForName(doc.title),
 								},
 							},
 						});
@@ -370,7 +381,9 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						const doc: EditorDocument = {
 							id: fetched.id,
 							title: fetched.title,
-							language: "sql",
+							language: languageForName(
+								fetched.origin?.filePath ?? fetched.title,
+							),
 							savedContent: fetched.content,
 							currentContent: fetched.content,
 							revision: fetched.revision,
@@ -519,6 +532,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									revision: 0,
 									updatedAt: local.updatedAt,
 									origin: null,
+									language: languageForName(local.title),
 								},
 							},
 						});
@@ -540,6 +554,9 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							revision: change.revision,
 							updatedAt: change.updatedAt,
 							origin: change.origin,
+							language: languageForName(
+								change.origin?.filePath ?? change.title,
+							),
 						},
 					},
 				});
@@ -566,7 +583,9 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					const doc: EditorDocument = {
 						id: fetched.id,
 						title: fetched.title,
-						language: "sql",
+						language: languageForName(
+							fetched.origin?.filePath ?? fetched.title,
+						),
 						savedContent: fetched.content,
 						currentContent: fetched.content,
 						revision: fetched.revision,
@@ -698,7 +717,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 				const doc: EditorDocument = {
 					id: newId(),
 					title: resolvedTitle,
-					language: "sql",
+					language: languageForName(resolvedTitle),
 					savedContent: "",
 					currentContent: "",
 					revision: 0,
@@ -743,6 +762,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 										title: doc.title,
 										revision: 0,
 										updatedAt: doc.updatedAt,
+										language: languageForName(doc.title),
 										origin: null,
 									},
 								},
@@ -751,6 +771,22 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						.catch(() => {});
 				}
 				return doc;
+			},
+
+			async resyncFilesFrom(connectionRef) {
+				const origins = Object.values(get().documents)
+					.map((doc) => doc.origin)
+					.filter(
+						(origin): origin is DocumentOrigin =>
+							origin !== null && origin.connectionRef === connectionRef,
+					);
+				for (const origin of origins) {
+					// One at a time and never in parallel: each open can produce
+					// a revision the next one needs to have seen.
+					await get()
+						.openFile(origin)
+						.catch(() => null);
+				}
 			},
 
 			async openFile(origin) {
@@ -772,7 +808,9 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						? {
 								id: fetched.id,
 								title: fetched.title,
-								language: "sql",
+								language: languageForName(
+									fetched.origin?.filePath ?? fetched.title,
+								),
 								savedContent: fetched.content,
 								currentContent: fetched.content,
 								revision: fetched.revision,
@@ -824,6 +862,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							title: doc.title,
 							revision: doc.revision,
 							updatedAt: doc.updatedAt,
+							language: doc.language,
 							origin: doc.origin,
 						},
 					},

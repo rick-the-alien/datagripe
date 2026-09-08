@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type {
 	Domain,
 	DomainExportRequest,
@@ -5,7 +7,7 @@ import type {
 	DomainTarget,
 	ExportPlan,
 } from "@datagripe/contracts";
-import { domainTargetKey } from "@datagripe/contracts";
+import { DOMAINS_FILE, domainTargetKey } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import {
 	renderDefaultAcl,
@@ -17,6 +19,8 @@ import { buildReport } from "../access/service";
 import type { ConnectionsService, WorkspaceRef } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
+import { domainsPath } from "../git/config";
+import type { GitDatasourcesService } from "../git/types";
 import { listDismissals } from "../gripes/dismissals";
 import { log } from "../log";
 import {
@@ -42,10 +46,61 @@ import { appendPullLog, applyExport } from "./writer";
 export interface ExportDeps {
 	appDb: AppDb;
 	connections: ConnectionsService;
+	/** Present when git datasources are on; their sync dir comes from the
+	 * repository rather than from `datasource_export_paths`. */
+	gitDatasources?: GitDatasourcesService;
 	hostFs: HostFsPolicy;
 	maxDataRows: number;
 	maxCells: number;
 	onProgress?: (done: number, total: number, current: string) => void;
+}
+
+export interface ExportTarget {
+	/** The directory the dump is written into. */
+	root: string;
+	/**
+	 * Absolute path of `.datagripe/domains.yaml` for a git datasource, or
+	 * null when the domain file belongs inside the dump because there is
+	 * no `.datagripe/` to put it in.
+	 */
+	domainsFile: string | null;
+}
+
+/**
+ * Where this datasource's dump goes.
+ *
+ * For a git datasource the repository says: `sync.yaml`'s `dir`, already
+ * resolved and proven inside the checkout. `datasource_export_paths` is
+ * not consulted for one — the repo defines its own sync target, and a
+ * second answer in the app database would be a way for two people to
+ * disagree about where the dump lives.
+ */
+export async function resolveExportTarget(
+	deps: Pick<ExportDeps, "appDb" | "gitDatasources" | "hostFs">,
+	workspaceId: string,
+	connectionRef: string,
+): Promise<ExportTarget> {
+	const entry =
+		deps.gitDatasources === undefined
+			? null
+			: await deps.gitDatasources.entryFor(workspaceId, connectionRef);
+	if (entry !== null) {
+		if (entry.syncPath === null) {
+			throw new ServiceError(
+				ErrorCodes.BadRequest,
+				"This repository has no .datagripe/sync.yaml yet — set a sync directory on the datasource page",
+			);
+		}
+		return {
+			root: await resolveHostDirectory(entry.syncPath, deps.hostFs),
+			domainsFile: domainsPath(entry.repoPath),
+		};
+	}
+	const configured = await exportPath(deps.appDb, workspaceId, connectionRef);
+	return {
+		root: await resolveHostDirectory(configured, deps.hostFs),
+		domainsFile: null,
+	};
 }
 
 /** Every schema the tagged objects live in, for the batched reads. */
@@ -93,12 +148,12 @@ export async function runExport(
 	userId: string,
 	request: DomainExportRequest,
 ): Promise<DomainExportResult> {
-	const configured = await exportPath(
-		deps.appDb,
+	const target = await resolveExportTarget(
+		deps,
 		workspace.id,
 		request.connectionRef,
 	);
-	const root = await resolveHostDirectory(configured, deps.hostFs);
+	const root = target.root;
 
 	const { domains, tags } = await listDomains(
 		deps.appDb,
@@ -201,8 +256,21 @@ export async function runExport(
 
 	let plan: ExportPlan;
 	try {
-		const built = await buildExport(domains, byDomain, source, deps.onProgress);
+		const built = await buildExport(
+			domains,
+			byDomain,
+			source,
+			deps.onProgress,
+			// A git datasource keeps its domain file in the repository's own
+			// `.datagripe/`, beside the config that defines the datasource,
+			// rather than inside the dump.
+			target.domainsFile === null ? DOMAINS_FILE : null,
+		);
 		plan = await applyExport(root, built, { dryRun: request.dryRun });
+		if (target.domainsFile !== null && !request.dryRun) {
+			await mkdir(path.dirname(target.domainsFile), { recursive: true });
+			await writeFile(target.domainsFile, built.domainsFile, "utf8");
+		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		if (!request.dryRun) {

@@ -1,4 +1,8 @@
-import { documentOriginSchema } from "@datagripe/contracts";
+import {
+	documentLanguageSchema,
+	documentOriginSchema,
+	languageForName,
+} from "@datagripe/contracts";
 import { z } from "zod";
 import type { StoredDocument, StoredDraft } from "./db";
 
@@ -11,7 +15,9 @@ import type { StoredDocument, StoredDraft } from "./db";
 export const recoveredDocumentSchema = z.object({
 	id: z.uuid(),
 	title: z.string().min(1).max(255),
-	language: z.literal("sql"),
+	/** Derived from the name, never stored: one rule, one place
+	 * (docs/spec/markdown-documents.md "Where a language comes from"). */
+	language: documentLanguageSchema,
 	savedContent: z.string(),
 	currentContent: z.string(),
 	revision: z.number().int().nonnegative(),
@@ -40,7 +46,9 @@ export function mergeDrafts(
 		recovered.push({
 			id: doc.id,
 			title: doc.title,
-			language: "sql",
+			// A file-backed document is named by its path; everything else by
+			// its title.
+			language: languageForName(doc.origin?.filePath ?? doc.title),
 			savedContent: doc.content,
 			currentContent: draftWins ? draft.content : doc.content,
 			revision: doc.revision,

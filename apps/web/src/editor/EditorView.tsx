@@ -4,6 +4,8 @@ import { MESSAGES, renderFinding, renderFooter } from "@datagripe/gripes";
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useMemo, useRef } from "react";
 import { wsClient } from "../api/ws";
+import { openEditorPanel } from "../app/editorPanels";
+import { MarkdownView } from "../components/MarkdownView";
 import { db } from "../persistence/db";
 import { createDebouncer } from "../persistence/debounce";
 import { useBrandingStore } from "../stores/branding";
@@ -18,6 +20,8 @@ import { useExecutionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
 import { registerEditorHandle, unregisterEditorHandle } from "./handles";
+import { maskNonSql } from "./markdown/blocks";
+import { resolveRelativeFile } from "./markdown/links";
 import { monaco } from "./monacoSetup";
 import { modelRegistry } from "./registry";
 import { remoteViewDecorations } from "./remoteCursors";
@@ -113,6 +117,42 @@ export function EditorView(props: IDockviewPanelProps) {
 	const title = useDocumentsStore((state) =>
 		documentId === undefined ? undefined : state.documents[documentId]?.title,
 	);
+	const language = useDocumentsStore((state) =>
+		documentId === undefined
+			? undefined
+			: state.documents[documentId]?.language,
+	);
+	const content = useDocumentsStore((state) =>
+		documentId === undefined
+			? undefined
+			: state.documents[documentId]?.currentContent,
+	);
+
+	/**
+	 * View or edit, for a markdown document
+	 * (docs/spec/markdown-documents.md "Two modes").
+	 *
+	 * Per *view*, not per document: splitting a runbook to read it beside
+	 * its own source is a thing people do, and it is free if mode is a
+	 * view property. It rides on the Dockview panel parameters so it
+	 * persists with the layout without a store of its own.
+	 */
+	const savedMode =
+		params !== null &&
+		typeof params === "object" &&
+		"mode" in params &&
+		(params.mode === "view" || params.mode === "edit")
+			? params.mode
+			: undefined;
+	// Markdown opens rendered, because a runbook is something you read.
+	const mode = savedMode ?? (language === "markdown" ? "view" : "edit");
+	const rendered = language === "markdown" && mode === "view";
+	const setMode = (next: "view" | "edit") => {
+		props.api.updateParameters({
+			...(params !== null && typeof params === "object" ? params : {}),
+			mode: next,
+		});
+	};
 
 	useEffect(() => {
 		if (title !== undefined) {
@@ -122,7 +162,9 @@ export function EditorView(props: IDockviewPanelProps) {
 
 	useEffect(() => {
 		const container = containerRef.current;
-		if (container === null || documentId === undefined) {
+		// In view mode there is no editor at all: the pane is rendered
+		// markdown, and the container it would mount into is not there.
+		if (container === null || documentId === undefined || rendered) {
 			return;
 		}
 		const doc = useDocumentsStore.getState().documents[documentId];
@@ -259,7 +301,7 @@ export function EditorView(props: IDockviewPanelProps) {
 			editor.dispose();
 			modelRegistry.release(documentId);
 		};
-	}, [documentId, props.api]);
+	}, [documentId, props.api, rendered]);
 
 	// Remote view of the followed member, only when it targets this doc.
 	const remoteView = usePresenceStore((state) => {
@@ -350,11 +392,15 @@ export function EditorView(props: IDockviewPanelProps) {
 		const connectionId = connectionIdForDocument(documentId);
 		analyse(
 			documentId,
-			documentContent,
+			// A runbook is analysed through its `sql` fences with everything
+			// else blanked out, so a `delete` with no `where` in one is a
+			// blocker at the offset it actually occupies
+			// (docs/spec/markdown-documents.md "SQL blocks").
+			language === "markdown" ? maskNonSql(documentContent) : documentContent,
 			dialectForConnection(connectionId),
 			connectionId,
 		);
-	}, [documentId, documentContent, analyse]);
+	}, [documentId, documentContent, analyse, language]);
 
 	// Dismissed findings must leave the gutter too, or dismissing one
 	// silences the panel and leaves the squiggle arguing with it.
@@ -442,6 +488,38 @@ export function EditorView(props: IDockviewPanelProps) {
 		}
 	}, [syncedContent, props.api]);
 
+	/**
+	 * A relative link in a runbook is a file in the same checkout — the
+	 * case that makes a `docs/` folder worth reading in here at all
+	 * (docs/spec/markdown-documents.md "Rendering").
+	 *
+	 * It resolves against the *directory* of the document, and a link that
+	 * would climb out of the configured path is inert: `resolveInside` on
+	 * the server would refuse it anyway, and refusing here means no
+	 * request goes out at all.
+	 */
+	const openRelative = async (href: string): Promise<void> => {
+		const doc =
+			documentId === undefined
+				? undefined
+				: useDocumentsStore.getState().documents[documentId];
+		const origin = doc?.origin;
+		if (origin === undefined || origin === null) {
+			return;
+		}
+		const target = resolveRelativeFile(origin.filePath, href);
+		if (target === null) {
+			return;
+		}
+		const opened = await useDocumentsStore
+			.getState()
+			.openFile({ ...origin, filePath: target })
+			.catch(() => null);
+		if (opened !== null && opened !== undefined) {
+			openEditorPanel(props.containerApi, opened);
+		}
+	};
+
 	if (documentId === undefined || title === undefined) {
 		return (
 			<div className="editor-missing">
@@ -516,7 +594,27 @@ export function EditorView(props: IDockviewPanelProps) {
 					</button>
 				</div>
 			)}
-			<div ref={containerRef} className="editor-container" />
+			{rendered ? (
+				<MarkdownView
+					documentId={documentId}
+					viewId={props.api.id}
+					content={content ?? ""}
+					onOpenRelative={(href) => void openRelative(href)}
+				/>
+			) : (
+				<div ref={containerRef} className="editor-container" />
+			)}
+			{/* Bottom right, same place in both modes, two labels. A control
+				    that moves when you press it costs people the second press. */}
+			{language === "markdown" && (
+				<button
+					type="button"
+					className="dg-md-mode"
+					onClick={() => setMode(rendered ? "edit" : "view")}
+				>
+					{rendered ? "edit" : "view"}
+				</button>
+			)}
 		</div>
 	);
 }

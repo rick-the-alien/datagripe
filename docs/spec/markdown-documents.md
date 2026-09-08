@@ -1,6 +1,6 @@
 # Spec — Markdown documents
 
-**Status:** draft
+**Status:** current
 **Phase:** 14
 **Supersedes:** the "the language stays `sql`" paragraph in
 `docs/spec/datasource-paths.md` "The file as a document" (extends
@@ -104,11 +104,12 @@ mode it stays in the same place and says `view`. One control, one
 position, two labels — a control that moves when you press it costs
 people the second press.
 
-Mode is per **view**, not per document, and lives with the rest of the
-view state (`docs/spec/editor-workspace.md`). Splitting a markdown
-document to read it beside its own source is a thing people do, and it
-is free if mode is a view property. It persists in the layout, so a tab
-you left in edit mode reopens in edit mode.
+Mode is per **view**, not per document. Splitting a markdown document to
+read it beside its own source is a thing people do, and it is free if
+mode is a view property. It rides on the Dockview panel's parameters —
+which are already serialised with the layout — rather than a store of
+its own, so a tab you left in edit mode reopens in edit mode with no new
+persistence to keep in sync.
 
 A `sql` document has no button and no mode. Nothing in the pane moves
 for the language that does not need it.
@@ -167,12 +168,13 @@ A SQL block is:
   back to the workspace default. A markdown document with no connection
   shows the run button disabled with the reason, in the same words the
   editor uses.
-- **Analysed.** The gripes runner (`docs/spec/gripes.md`) sees block
-  contents with offsets translated back to document coordinates, so a
+- **Analysed.** The gripes runner (`docs/spec/gripes.md`) sees the
+  document with everything that is not a `sql` fence **blanked out,
+  character for character** — same length, same line breaks. So a
   `delete` with no `where` in a runbook is a blocker in the gripes panel
-  and in the status bar count, and clicking the row reveals it — which
-  in view mode means scrolling to the block and flashing it, and in edit
-  mode means putting the caret on it.
+  and in the status bar count, at the offset it actually occupies.
+  Blanking beats extracting: an extract needs an offset map, and an
+  offset map is a thing that can be wrong.
 
 Multiple blocks do not share a session. Running the third block does not
 run the first two, and there is no "run all" — a runbook is a set of
@@ -207,10 +209,8 @@ Save, revision guard, presence, followed cursors and the disk-conflict
 banner are unchanged — a markdown document is a document
 (`docs/spec/multiplayer.md`, `docs/spec/datasource-paths.md`).
 
-Followed cursors across modes are honest about what they can do: a
-follower in view mode is shown the leader's block, not their caret, and
-switching to edit gives them the caret. Pretending to have a cursor in
-rendered prose would be a lie about a position that does not exist.
+Followed cursors are an edit-mode thing. A follower in view mode simply
+does not see the leader's caret — see "What is not built".
 
 ### The sidebar and the tabs
 
@@ -265,6 +265,14 @@ rendered prose would be a lie about a position that does not exist.
   file manager (`docs/spec/datasource-paths.md` "Non-goals"), so a new
   `.md` in a checkout is made by the tool that owns the checkout. A
   workspace file or scratchpad named `.md` is the way in for now.
+- **Followed cursors in view mode.** A leader's caret is a position in
+  the source, and the rendered pane has no such position to put it in.
+  Showing "the block they are in" was specified and then dropped: it is
+  a second, weaker notion of following that would have to be explained
+  every time somebody noticed the difference. Switching to edit gives a
+  follower the real thing.
+- **A dirty dot in the rendered pane.** The mode button is the only
+  chrome the pane has; the tab already carries the dot.
 
 ## Open questions
 

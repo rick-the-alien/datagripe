@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import type { ExecutionStartRequest } from "@datagripe/contracts";
+import type {
+	ConnectionSource,
+	ExecutionStartRequest,
+} from "@datagripe/contracts";
 import {
 	PostgresAdapter,
 	type ResolvedConnection,
@@ -32,7 +35,7 @@ async function probe(): Promise<boolean> {
 const reachable = await probe();
 const pgTest = reachable ? test : test.skip;
 
-const TARGET: ResolvedConnection & { source: "managed" | "predefined" } = {
+const TARGET: ResolvedConnection & { source: ConnectionSource } = {
 	adapter: "postgres",
 	host: "localhost",
 	port: 5432,

@@ -83,6 +83,7 @@ describe("scratch vs shared", () => {
 					revision: 2,
 					updatedAt: "2026-08-31T10:00:00.000Z",
 					origin: null,
+					language: "sql",
 				},
 			],
 			"ws-a",

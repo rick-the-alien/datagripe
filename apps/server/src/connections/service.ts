@@ -3,6 +3,7 @@ import type {
 	ConnectionAdapter,
 	ConnectionCreateRequest,
 	ConnectionMetadata,
+	ConnectionSource,
 	ConnectionTestRequest,
 	ConnectionTestResult,
 	ConnectionUpdateRequest,
@@ -34,6 +35,8 @@ import type { SecretKeyring } from "../crypto/keyring";
 import type { AppDb } from "../db/app/pool";
 import { exportPaths } from "../domains/runs";
 import { datasourcePathsByConnection } from "../files/store";
+import { idFromRef } from "../git/store";
+import type { GitDatasourcesService } from "../git/types";
 import { log } from "../log";
 import type { SsrfPolicy } from "../security/ssrf";
 import type { PredefinedEntry } from "./predefined";
@@ -80,6 +83,13 @@ export interface ConnectionsServiceDeps {
 	adapters: Readonly<Record<ConnectionAdapter, DatabaseAdapter>>;
 	predefined: ReadonlyMap<string, PredefinedEntry>;
 	ssrf: SsrfPolicy;
+	/**
+	 * Datasources whose definition lives in a repository
+	 * (docs/spec/git-datasources.md). Injected rather than imported so
+	 * the two services do not depend on each other; absent in the tests
+	 * and deployments that have no git.
+	 */
+	gitDatasources?: GitDatasourcesService;
 	/** Introspection cache TTL in ms (default 30s). */
 	introspectionCacheTtlMs?: number;
 	/** Bounds for table-view reads and writes; defaults match the
@@ -113,7 +123,7 @@ export interface ConnectionsService {
 	resolveForExecution: (
 		workspace: WorkspaceRef,
 		connectionId: string,
-	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
+	) => Promise<ResolvedConnection & { source: ConnectionSource }>;
 	/** Display name of a predefined connection, for history rendering. */
 	predefinedName: (connectionId: string) => string | undefined;
 	/** Adapter for a resolved connection's dialect. */
@@ -189,6 +199,9 @@ function rowToMetadata(
 		domainExportPath: exportPath,
 		paths,
 		source: "managed",
+		// Only a repository defines these (docs/spec/git-datasources.md).
+		branding: null,
+		unavailable: null,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};
@@ -198,6 +211,7 @@ export function createConnectionsService(
 	deps: ConnectionsServiceDeps,
 ): ConnectionsService {
 	const { appDb, keyring, adapters, predefined, ssrf } = deps;
+	const gitDatasources = deps.gitDatasources;
 	const tableLimits: TableLimits = deps.tableLimits ?? {
 		timeoutMs: 30_000,
 		maxRows: 5_000,
@@ -231,6 +245,8 @@ export function createConnectionsService(
 			domainExportPath: exportPath,
 			paths,
 			source: "predefined",
+			branding: null,
+			unavailable: null,
 			createdAt: entry.loadedAt,
 			updatedAt: entry.loadedAt,
 		};
@@ -245,6 +261,12 @@ export function createConnectionsService(
 	}
 
 	function requireManagedId(id: string): void {
+		if (idFromRef(id) !== null) {
+			throw new ServiceError(
+				ConnectionErrorCodes.ReadOnly,
+				`Connection '${id}' is defined by its repository's .datagripe/config.yaml and is read-only here — edit that file instead`,
+			);
+		}
 		if (predefined.has(id)) {
 			throw new ServiceError(
 				ConnectionErrorCodes.ReadOnly,
@@ -288,6 +310,12 @@ export function createConnectionsService(
 		workspace: WorkspaceRef,
 		id: string,
 	): Promise<ResolvedConnection> {
+		if (gitDatasources !== undefined && idFromRef(id) !== null) {
+			const resolved = await gitDatasources.resolve(workspace.id, id);
+			if (resolved !== null) {
+				return resolved;
+			}
+		}
 		const entry = predefined.get(id);
 		if (entry !== undefined) {
 			if (entry.resolved.host !== "") {
@@ -339,7 +367,12 @@ export function createConnectionsService(
 				exportPaths(appDb, workspace.id),
 				datasourcePathsByConnection(appDb, workspace.id),
 			]);
+			const fromRepos =
+				gitDatasources === undefined
+					? []
+					: await gitDatasources.listMetadata(workspace);
 			return [
+				...fromRepos,
 				...visiblePredefined(workspace).map((entry) =>
 					predefinedMetadata(
 						workspace,
@@ -506,7 +539,12 @@ export function createConnectionsService(
 			const resolved = await resolveConnection(workspace, connectionId);
 			return {
 				...resolved,
-				source: predefined.has(connectionId) ? "predefined" : "managed",
+				source:
+					idFromRef(connectionId) !== null
+						? "git"
+						: predefined.has(connectionId)
+							? "predefined"
+							: "managed",
 			};
 		},
 
@@ -519,6 +557,14 @@ export function createConnectionsService(
 		},
 
 		async hasConnectionRef(workspace, ref) {
+			if (idFromRef(ref) !== null) {
+				return (
+					gitDatasources !== undefined &&
+					(await gitDatasources
+						.entryFor(workspace.id, ref)
+						.catch(() => null)) !== null
+				);
+			}
 			if (ref.startsWith("predefined:")) {
 				const slug = ref.slice("predefined:".length);
 				const entry = predefined.get(slug);

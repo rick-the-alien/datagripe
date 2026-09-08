@@ -29,9 +29,28 @@ function tableKind(table: CatalogTable): monaco.languages.CompletionItemKind {
 	return table.kind === "view" ? KIND.Interface : KIND.Class;
 }
 
-export function registerSqlCompletion(
+/**
+ * Narrow a model to the region the SQL features apply to.
+ *
+ * `null` means "not somewhere SQL applies" and the provider returns
+ * nothing at all — markdown prose must not get table-name completion
+ * (docs/spec/markdown-documents.md "Editing"). The default scope is the
+ * whole model, which is what a `.sql` document is.
+ */
+export type CompletionScope = (
+	model: monaco.editor.ITextModel,
+	position: monaco.Position,
+) => { text: string; offset: number } | null;
+
+const WHOLE_MODEL: CompletionScope = (model, position) => ({
+	text: model.getValue(),
+	offset: model.getOffsetAt(position),
+});
+
+export function sqlCompletionProvider(
 	catalogInstance: Catalog = catalog,
-): monaco.IDisposable {
+	scope: CompletionScope = WHOLE_MODEL,
+): monaco.languages.CompletionItemProvider {
 	function keywordItems(
 		range: monaco.IRange,
 	): monaco.languages.CompletionItem[] {
@@ -117,9 +136,13 @@ export function registerSqlCompletion(
 		}));
 	}
 
-	return monaco.languages.registerCompletionItemProvider("sql", {
+	return {
 		triggerCharacters: ["."],
 		provideCompletionItems(model, position) {
+			const region = scope(model, position);
+			if (region === null) {
+				return { suggestions: [] };
+			}
 			const word = model.getWordUntilPosition(position);
 			const range = new monaco.Range(
 				position.lineNumber,
@@ -134,15 +157,15 @@ export function registerSqlCompletion(
 				catalogInstance.ensureCatalog(connectionId);
 			}
 
-			const text = model.getValue();
-			const statement = statementAt(text, model.getOffsetAt(position));
+			const text = region.text;
+			const statement = statementAt(text, region.offset);
 			const statementText = statement?.text ?? "";
 			const beforeCursor =
 				statement === null
 					? ""
 					: statement.text.slice(
 							0,
-							Math.max(0, model.getOffsetAt(position) - statement.start),
+							Math.max(0, region.offset - statement.start),
 						);
 			const context = completionContext(beforeCursor, statementText);
 			const { tables, aliasToTable } = parseStatementTables(statementText);
@@ -252,5 +275,14 @@ export function registerSqlCompletion(
 			suggestions.push(...keywordItems(range));
 			return { suggestions };
 		},
-	});
+	};
+}
+
+export function registerSqlCompletion(
+	catalogInstance: Catalog = catalog,
+): monaco.IDisposable {
+	return monaco.languages.registerCompletionItemProvider(
+		"sql",
+		sqlCompletionProvider(catalogInstance),
+	);
 }

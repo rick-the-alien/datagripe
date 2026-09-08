@@ -24,6 +24,7 @@
 		"@datagripe/gripes": "*",
 		"@datagripe/sql-tools": "*",
 		"embedded-postgres": "^18.4.0-beta.17",
+		"yaml": "^2.9.0",
 		"zod": "^4.1.5"
 	}
 }

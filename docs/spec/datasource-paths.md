@@ -33,13 +33,15 @@ they came from. Work persists with the project, in the right location.
   files with NUL bytes are refused rather than loaded and mangled on the
   next save.
 - Not per user. Paths are workspace-local configuration about a
-  datasource — everybody in the project sees the same sections, because
-  everybody is looking at the same server's disk.
+  datasource, so everybody in the project sees the same sections —
+  everybody is looking at the same server's disk. The exception is a git
+  datasource, whose repository defines them and whose rows here are a
+  mirror of that file (`docs/spec/git-datasources.md`).
 - Not a watcher. Nothing polls the filesystem; a change on disk is
   noticed the next time the file is opened (see "When the file moves
   underneath").
-- Not a git client. `docs/spec/domains.md` "Committing" already owns
-  the one place DataGripe runs git.
+- Not a git client. `docs/spec/domains.md` "Committing" and
+  `docs/spec/git-datasources.md` own the places DataGripe runs git.
 
 ## Where they live
 
@@ -145,9 +147,11 @@ machinery from `docs/spec/multiplayer.md`, untouched.
   they belong to their path's section, and one file in two lists with
   two different names for what it is helps nobody.
 
-The language stays `sql`, as it is for every document. A `.md` opened
-out of a path gets SQL highlighting — a wart, and the fix is a language
-field on the document rather than anything here.
+The language *was* `sql` for every document, so a `.md` opened out of a
+path got SQL highlighting — a wart this spec named and Phase 14 fixed.
+`documents.language` now follows the file's extension, and a markdown
+file opens rendered with its `sql` fences runnable in place
+(`docs/spec/markdown-documents.md`).
 
 ## When the file moves underneath
 

@@ -26,8 +26,15 @@ export const OWNED_DIRECTORIES = ["domains", "access"];
  * Files at the root the export owns. `pull.log` is deliberately absent:
  * it is append-only and is the one file allowed to be nondeterministic,
  * so the prune must never take it.
+ *
+ * `manifest.json` is here so an existing dump loses it on the first
+ * re-export: `domains.yaml` replaced it (docs/spec/git-datasources.md),
+ * and two files claiming to be the round-trip source of truth is worse
+ * than either. `domains.yaml` is here too, because a git datasource
+ * keeps its copy in the repo's `.datagripe/` and a stale one at the
+ * export root should go the same way.
  */
-export const OWNED_ROOT_FILES = ["manifest.json"];
+export const OWNED_ROOT_FILES = ["manifest.json", "domains.yaml"];
 
 async function existingFiles(root: string): Promise<Set<string>> {
 	const found = new Set<string>();

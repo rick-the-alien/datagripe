@@ -1,3 +1,5 @@
+import type { DocumentLanguage } from "@datagripe/contracts";
+
 /**
  * Monaco model registry — one text model per document, reference-counted
  * by live editor views. The factory is injected so the lifecycle logic is
@@ -11,7 +13,7 @@ export type ModelHandle = {
 
 export type RegistryDocument = {
 	id: string;
-	language: "sql";
+	language: DocumentLanguage;
 	currentContent: string;
 };
 
@@ -43,8 +45,16 @@ export type ModelRegistry<T extends ModelHandle = ModelHandle> = {
 	has: (documentId: string) => boolean;
 };
 
-export function documentModelUri(documentId: string): string {
-	return `datagripe://document/${documentId}.sql`;
+/**
+ * The extension follows the language, so a markdown document's model
+ * does not claim to be SQL to anything that reads the URI — Monaco's own
+ * tooling included.
+ */
+export function documentModelUri(
+	documentId: string,
+	language: DocumentLanguage = "sql",
+): string {
+	return `datagripe://document/${documentId}.${language === "markdown" ? "md" : "sql"}`;
 }
 
 /**
@@ -61,7 +71,7 @@ export function documentIdFromModelUri(uri: {
 	if (uri.scheme !== "datagripe" || uri.authority !== "document") {
 		return undefined;
 	}
-	return /^\/(.+)\.sql$/.exec(uri.path)?.[1];
+	return /^\/(.+)\.(?:sql|md)$/.exec(uri.path)?.[1];
 }
 
 type TimerHandle = ReturnType<typeof setTimeout>;
@@ -97,7 +107,7 @@ export function createModelRegistry<T extends ModelHandle = ModelHandle>(
 				return existing.model;
 			}
 			const model = deps.createModel(
-				documentModelUri(doc.id),
+				documentModelUri(doc.id, doc.language),
 				doc.currentContent,
 				doc.language,
 			);

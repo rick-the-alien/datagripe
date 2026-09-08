@@ -27,8 +27,17 @@ import {
 	executionCancelRequestSchema,
 	executionStartRequestSchema,
 	executionSubscribeRequestSchema,
+	exportConfigRequestSchema,
 	fileListRequestSchema,
 	fileOpenRequestSchema,
+	gitCommitRequestSchema,
+	gitDatasourceAddRequestSchema,
+	gitDatasourceReloadRequestSchema,
+	gitDatasourceRemoveRequestSchema,
+	gitPullRequestSchema,
+	gitPushRequestSchema,
+	gitStageRequestSchema,
+	gitStatusRequestSchema,
 	historyListRequestSchema,
 	hostPathCheckRequestSchema,
 	memberAddRequestSchema,
@@ -54,20 +63,14 @@ import { ServiceError } from "../connections/service";
 import { withIdempotency } from "../db/app/idempotency";
 import type { AppDb } from "../db/app/pool";
 import type { DocumentsService } from "../documents/service";
-import { runExport } from "../domains/export";
-import { runGit } from "../domains/git";
+import { resolveExportTarget, runExport } from "../domains/export";
 import { runImport } from "../domains/import";
 import {
 	type HostFsPolicy,
 	parseHostRoots,
 	resolveHostDirectory,
 } from "../domains/paths";
-import {
-	attachCommit,
-	exportPath,
-	listRuns,
-	setExportPath,
-} from "../domains/runs";
+import { attachCommit, listRuns, setExportPath } from "../domains/runs";
 import {
 	deleteDomain,
 	listDomains,
@@ -83,6 +86,16 @@ import {
 	writeTextFile,
 } from "../files/browse";
 import { getDatasourcePath, setDatasourcePaths } from "../files/service";
+import { isDatagripeFile, relativeToRepo, writeSync } from "../git/config";
+import { dirtyOriginPaths } from "../git/dirty";
+import { runGit } from "../git/export";
+import { runExportConfig } from "../git/exportConfig";
+import * as gitRepo from "../git/repo";
+import type { GitOptions } from "../git/run";
+import type {
+	GitDatasourceEntry,
+	GitDatasourcesServiceWithAdmin,
+} from "../git/types";
 import {
 	dismiss,
 	listDismissals,
@@ -131,6 +144,8 @@ export interface DispatcherDeps {
 	hub: SocketHub;
 	rateLimiter: RateLimiter;
 	config: AppConfig;
+	/** Present when GIT_ENABLED and the host filesystem is available. */
+	gitDatasources?: GitDatasourcesServiceWithAdmin;
 }
 
 const ROLE_RANK = { viewer: 0, editor: 1, owner: 2 } as const;
@@ -177,6 +192,24 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"domain.export": "owner",
 	"domain.import": "owner",
 	"domain.git": "owner",
+	// The repository section (docs/spec/git-datasources.md "Actions").
+	//
+	// `commit` and `pull` are a deliberate departure from
+	// docs/spec/domains.md, where every git verb is `owner`. That rule
+	// exists because `domain.git` writes a generated tree and pushes it;
+	// an editor who may already open a file, edit it and write it back to
+	// disk is not meaningfully more dangerous for being able to record
+	// that in the local history.
+	"git.status": "editor",
+	"git.stage": "editor",
+	"git.commit": "editor",
+	"git.pull": "editor",
+	"git.datasource.reload": "editor",
+	"datasource.export-config": "editor",
+	// These two reach the network, which is where the line is.
+	"git.push": "owner",
+	"git.datasource.add": "owner",
+	"git.datasource.remove": "owner",
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
@@ -207,6 +240,9 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 	// schema-tree budget rather than getting an unmetered one.
 	"file.list": "schema.children",
 	"file.open": "schema.children",
+	// A status is a `git` process, so it shares the same budget rather
+	// than being free to hammer from a refresh button.
+	"git.status": "schema.children",
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
@@ -288,6 +324,52 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 	}
 
 	/** Notify the workspace about a created/saved/archived document (6a). */
+	/**
+	 * Git datasources, or a named refusal. `GIT_ENABLED` gates the whole
+	 * feature, and the buttons are absent rather than
+	 * disabled-with-a-tooltip when it is off — so reaching here at all
+	 * means something went around the UI.
+	 */
+	function requireGit(): GitDatasourcesServiceWithAdmin {
+		if (deps.gitDatasources === undefined) {
+			throw new ServiceError(
+				ErrorCodes.Forbidden,
+				config.HOST_FS_DISABLED
+					? "Host filesystem access is disabled — HOST_FS_DISABLED is set"
+					: "Git is disabled — GIT_ENABLED is off",
+			);
+		}
+		return deps.gitDatasources;
+	}
+
+	function gitOptions(): GitOptions {
+		return { timeoutMs: config.GIT_TIMEOUT_MS };
+	}
+
+	function audit(context: AuthContext, connectionRef: string) {
+		return {
+			workspaceId: context.workspace.id,
+			userId: context.userId,
+			connectionRef,
+		};
+	}
+
+	/**
+	 * The repository behind a `{ connectionRef }` payload. Every git
+	 * action names its datasource the same way, and every one of them has
+	 * to prove the datasource belongs to this workspace before running a
+	 * process — socket authentication is not object authorization.
+	 */
+	async function requireRepo(
+		workspaceId: string,
+		payload: unknown,
+	): Promise<{ entry: GitDatasourceEntry }> {
+		const { connectionRef } = gitStatusRequestSchema.parse(payload);
+		return {
+			entry: await requireGit().requireEntry(workspaceId, connectionRef),
+		};
+	}
+
 	function broadcastDocumentChanged(
 		workspaceId: string,
 		entry: {
@@ -669,19 +751,24 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 
 			case "domain.runs": {
 				const request = domainRunsRequestSchema.parse(payload);
-				const configured = await exportPath(
-					appDb,
-					workspace.id,
-					request.connectionRef,
-				);
 				// The root is reported only when it currently resolves inside
 				// the allowlist, so the tab never shows a target it cannot
 				// actually write to.
 				let root: string | null = null;
 				if (!hostFs.disabled) {
-					root = await resolveHostDirectory(configured, hostFs).catch(
-						() => null,
-					);
+					root = await resolveExportTarget(
+						{
+							appDb,
+							...(deps.gitDatasources !== undefined
+								? { gitDatasources: deps.gitDatasources }
+								: {}),
+							hostFs,
+						},
+						workspace.id,
+						request.connectionRef,
+					)
+						.then((target) => target.root)
+						.catch(() => null);
 				}
 				return {
 					runs: await listRuns(
@@ -692,7 +779,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					),
 					root,
 					exportEnabled: !hostFs.disabled,
-					gitEnabled: config.DOMAIN_EXPORT_GIT,
+					gitEnabled: config.GIT_ENABLED,
 				};
 			}
 
@@ -703,6 +790,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						{
 							appDb,
 							connections,
+							...(deps.gitDatasources !== undefined
+								? { gitDatasources: deps.gitDatasources }
+								: {}),
 							hostFs,
 							maxDataRows: config.DOMAIN_EXPORT_MAX_DATA_ROWS,
 							maxCells: config.ACCESS_REPORT_MAX_CELLS,
@@ -744,7 +834,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				const request = domainImportRequestSchema.parse(payload);
 				const run = () =>
 					runImport(
-						{ appDb, connections, hostFs },
+						{
+							appDb,
+							connections,
+							...(deps.gitDatasources !== undefined
+								? { gitDatasources: deps.gitDatasources }
+								: {}),
+							hostFs,
+						},
 						workspace,
 						ctx.userId,
 						request,
@@ -785,12 +882,38 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						};
 					}
 				}
-				await setExportPath(
-					appDb,
-					workspace.id,
-					request.connectionRef,
-					request.path,
-				);
+				// A git datasource's sync target belongs to its repository, so
+				// this writes `.datagripe/sync.yaml` rather than a row. The
+				// repo stays the single answer to where its own dump goes.
+				const repo =
+					deps.gitDatasources === undefined
+						? null
+						: await deps.gitDatasources.entryFor(
+								workspace.id,
+								request.connectionRef,
+							);
+				if (repo === null) {
+					await setExportPath(
+						appDb,
+						workspace.id,
+						request.connectionRef,
+						request.path,
+					);
+				} else {
+					const relative = relativeToRepo(repo.repoPath, request.path);
+					await writeSync(repo.repoPath, {
+						version: 1,
+						sync: {
+							dir: relative,
+							includeAccessReports:
+								repo.sync?.sync.includeAccessReports ?? true,
+							...(repo.sync?.sync.maxDataRows !== undefined
+								? { maxDataRows: repo.sync.sync.maxDataRows }
+								: {}),
+						},
+					});
+					deps.gitDatasources?.invalidate(repo.repoPath);
+				}
 				// The connection list carries the path, so the caller gets the
 				// updated datasource back rather than having to refetch.
 				return { connections: await connections.listConnections(workspace) };
@@ -898,25 +1021,184 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				};
 			}
 
-			case "domain.git": {
-				if (!config.DOMAIN_EXPORT_GIT) {
-					throw new ServiceError(
-						ErrorCodes.Forbidden,
-						"Committing is disabled — DOMAIN_EXPORT_GIT is off",
-					);
-				}
-				const request = domainGitRequestSchema.parse(payload);
-				const configured = await exportPath(
-					appDb,
+			case "git.datasource.add": {
+				const service = requireGit();
+				const request = gitDatasourceAddRequestSchema.parse(payload);
+				const created = await service.add(workspace, ctx.userId, request);
+				// The datasource list is how the sidebar learns about the new
+				// sections, so everybody in the project gets told.
+				hub.broadcastToWorkspace(workspace.id, {
+					version: 1,
+					kind: "event",
+					eventId: crypto.randomUUID(),
+					topic: "connections.changed",
+					occurredAt: new Date().toISOString(),
+					payload: { connectionRef: created.id },
+				});
+				return created;
+			}
+
+			case "git.datasource.remove": {
+				const service = requireGit();
+				const request = gitDatasourceRemoveRequestSchema.parse(payload);
+				await service.remove(
+					workspace.id,
+					request.connectionRef,
+					request.deleteCheckout,
+				);
+				hub.broadcastToWorkspace(workspace.id, {
+					version: 1,
+					kind: "event",
+					eventId: crypto.randomUUID(),
+					topic: "connections.changed",
+					occurredAt: new Date().toISOString(),
+					payload: { connectionRef: request.connectionRef },
+				});
+				return { removed: true };
+			}
+
+			case "git.datasource.reload": {
+				const service = requireGit();
+				const request = gitDatasourceReloadRequestSchema.parse(payload);
+				const entry = await service.requireEntry(
 					workspace.id,
 					request.connectionRef,
 				);
-				const root = await resolveHostDirectory(configured, hostFs);
+				service.invalidate(entry.repoPath);
+				return (
+					(await service.describe(workspace.id, request.connectionRef)) ?? {}
+				);
+			}
+
+			case "git.status": {
+				const { entry } = await requireRepo(workspace.id, payload);
+				return gitRepo.status(entry.repoPath, gitOptions());
+			}
+
+			case "git.stage": {
+				const request = gitStageRequestSchema.parse(payload);
+				const { entry } = await requireRepo(workspace.id, payload);
+				return gitRepo.stage(
+					entry.repoPath,
+					request.paths,
+					request.staged,
+					gitOptions(),
+					audit(ctx, request.connectionRef),
+				);
+			}
+
+			case "git.commit": {
+				const request = gitCommitRequestSchema.parse(payload);
+				const { entry } = await requireRepo(workspace.id, payload);
+				return gitRepo.commit(
+					entry.repoPath,
+					request.message,
+					request.paths,
+					gitOptions(),
+					audit(ctx, request.connectionRef),
+				);
+			}
+
+			case "git.push": {
+				const request = gitPushRequestSchema.parse(payload);
+				const { entry } = await requireRepo(workspace.id, payload);
+				return gitRepo.push(
+					entry.repoPath,
+					request.setUpstream,
+					gitOptions(),
+					audit(ctx, request.connectionRef),
+				);
+			}
+
+			case "git.pull": {
+				const request = gitPullRequestSchema.parse(payload);
+				const { entry } = await requireRepo(workspace.id, payload);
+				// Offering to fast-forward over somebody's unsaved work is not
+				// a service. The incoming file list is already known, and so is
+				// which cached documents are ahead of their file.
+				const incoming = new Set(
+					await gitRepo.incomingPaths(entry.repoPath, gitOptions()),
+				);
+				const blocked = (
+					await dirtyOriginPaths(
+						appDb,
+						workspace.id,
+						request.connectionRef,
+						entry.repoPath,
+					)
+				).filter((file) => incoming.has(file));
+				if (blocked.length > 0) {
+					throw new ServiceError(
+						ErrorCodes.Conflict,
+						`The pull would change ${blocked.join(", ")}, which ${blocked.length === 1 ? "has" : "have"} unsaved edits here. Save or discard first.`,
+					);
+				}
+				const result = await gitRepo.pull(
+					entry.repoPath,
+					gitOptions(),
+					audit(ctx, request.connectionRef),
+				);
+				if (result.headMoved) {
+					// Reload the config: a `.datagripe/` file may have changed,
+					// and the sections come off the connection list.
+					requireGit().invalidate(entry.repoPath);
+					hub.broadcastToWorkspace(workspace.id, {
+						version: 1,
+						kind: "event",
+						eventId: crypto.randomUUID(),
+						topic: "repo.changed",
+						occurredAt: new Date().toISOString(),
+						payload: {
+							connectionRef: request.connectionRef,
+							changedPaths: result.changedPaths,
+							configChanged: result.changedPaths.some(isDatagripeFile),
+						},
+					});
+				}
+				return result;
+			}
+
+			case "datasource.export-config": {
+				const request = exportConfigRequestSchema.parse(payload);
+				return runExportConfig(
+					{
+						appDb,
+						connections,
+						hostFs,
+						gitOptions: gitOptions(),
+					},
+					workspace,
+					ctx.userId,
+					request,
+				);
+			}
+
+			case "domain.git": {
+				if (!config.GIT_ENABLED) {
+					throw new ServiceError(
+						ErrorCodes.Forbidden,
+						"Committing is disabled — GIT_ENABLED is off",
+					);
+				}
+				const request = domainGitRequestSchema.parse(payload);
+				// The same target the export writes to, so a commit can never
+				// be scoped to a different directory than the run it follows.
+				const { root } = await resolveExportTarget(
+					{
+						appDb,
+						...(deps.gitDatasources !== undefined
+							? { gitDatasources: deps.gitDatasources }
+							: {}),
+						hostFs,
+					},
+					workspace.id,
+					request.connectionRef,
+				);
 				const result = await runGit(
 					root,
 					request.operation,
 					request.message,
-					{ timeoutMs: config.DOMAIN_GIT_TIMEOUT_MS },
+					gitOptions(),
 					{ workspaceId: workspace.id, userId: ctx.userId },
 				);
 				if (request.runId !== undefined && result.commitSha !== null) {

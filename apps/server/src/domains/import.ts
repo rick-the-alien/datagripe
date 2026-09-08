@@ -4,14 +4,16 @@ import type {
 	DomainImportResult,
 	DomainManifest,
 } from "@datagripe/contracts";
-import { domainManifestSchema } from "@datagripe/contracts";
+import { DOMAINS_FILE } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type { ConnectionsService, WorkspaceRef } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
+import { readDomainsFile } from "../git/config";
+import type { GitDatasourcesService } from "../git/types";
 import { log } from "../log";
-import { type HostFsPolicy, resolveHostDirectory } from "./paths";
-import { exportPath } from "./runs";
+import { resolveExportTarget } from "./export";
+import type { HostFsPolicy } from "./paths";
 import { listDomains } from "./service";
 
 /**
@@ -25,38 +27,31 @@ import { listDomains } from "./service";
  * Tags for objects the datasource does not currently report are imported
  * anyway and show up as stale in the manager, because the alternative is
  * silently losing a tag while a migration is mid-flight.
+ *
+ * `manifest.json` is not read as a fallback (docs/spec/git-datasources.md):
+ * an existing dump is re-exported once, which writes `domains.yaml` and
+ * prunes the JSON in the same run.
  */
 
-async function readManifest(root: string): Promise<DomainManifest> {
-	const file = Bun.file(path.join(root, "manifest.json"));
-	if (!(await file.exists())) {
+async function readDomains(file: string): Promise<DomainManifest> {
+	const parsed = await readDomainsFile(file);
+	if (parsed === null) {
 		throw new ServiceError(
 			ErrorCodes.NotFound,
-			`No manifest.json in ${root} — export first, or point at a dump`,
+			`No ${DOMAINS_FILE} at ${file} — export first, or point at a dump`,
 		);
 	}
-	let parsed: unknown;
-	try {
-		parsed = await file.json();
-	} catch {
-		throw new ServiceError(
-			ErrorCodes.BadRequest,
-			"manifest.json is not valid JSON",
-		);
-	}
-	const result = domainManifestSchema.safeParse(parsed);
-	if (!result.success) {
-		throw new ServiceError(
-			ErrorCodes.BadRequest,
-			"manifest.json is not a DataGripe domain manifest",
-		);
-	}
-	return result.data;
+	return {
+		version: 1,
+		connection: parsed.connection,
+		domains: parsed.domains,
+	};
 }
 
 export interface ImportDeps {
 	appDb: AppDb;
 	connections: ConnectionsService;
+	gitDatasources?: GitDatasourcesService;
 	hostFs: HostFsPolicy;
 }
 
@@ -66,13 +61,15 @@ export async function runImport(
 	userId: string,
 	request: DomainImportRequest,
 ): Promise<DomainImportResult> {
-	const configured = await exportPath(
-		deps.appDb,
+	const target = await resolveExportTarget(
+		deps,
 		workspace.id,
 		request.connectionRef,
 	);
-	const root = await resolveHostDirectory(configured, deps.hostFs);
-	const manifest = await readManifest(root);
+	const root = target.root;
+	const manifest = await readDomains(
+		target.domainsFile ?? path.join(root, DOMAINS_FILE),
+	);
 
 	const connection = (await deps.connections.listConnections(workspace)).find(
 		(entry) => entry.id === request.connectionRef,

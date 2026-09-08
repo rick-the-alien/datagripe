@@ -96,11 +96,11 @@ describe("buildExport", () => {
 		const built = await buildExport([REFERENCE, AUTH], TAGS, source());
 		expect([...built.files.keys()].sort()).toEqual([
 			"access/matrix.md",
+			"domains.yaml",
 			"domains/auth/routines/public.login__text-text.sql",
 			"domains/auth/tables/basic_auth.users.sql",
 			"domains/reference/data/public.casinos.sql",
 			"domains/reference/tables/public.casinos.sql",
-			"manifest.json",
 		]);
 		expect(built.domainCount).toBe(2);
 		expect(built.objectCount).toBe(3);
@@ -247,20 +247,53 @@ describe("objectFileBody", () => {
 });
 
 describe("renderManifest", () => {
-	test("sorts keys so the JSON diff is the data changing", () => {
+	test("writes fixed key order so the diff is the data changing", () => {
 		const text = renderManifest({
 			version: 1,
 			connection: { ref: "r", name: "n", engine: "postgres" },
 			domains: [],
 		});
-		expect(text).toBe(
-			'{\n  "connection": {\n    "engine": "postgres",\n    "name": "n",\n    "ref": "r"\n  },\n  "domains": [],\n  "version": 1\n}\n',
-		);
+		// `version` first, where a reader looks for it, then the connection
+		// in a fixed order. Alphabetical would put `engine` above `name`
+		// and teach nobody anything.
+		expect(text.split("\n").filter((line) => !line.startsWith("#"))).toEqual([
+			"version: 1",
+			"connection:",
+			"  ref: r",
+			"  name: n",
+			"  engine: postgres",
+			"domains: []",
+			"",
+		]);
+	});
+
+	test("a long description is never folded", () => {
+		// Line folding is the trap: a description that grows by one
+		// character would reflow a paragraph and put a twelve-line diff in
+		// front of somebody who changed a word.
+		const description = `${"word ".repeat(40)}end`;
+		const text = renderManifest({
+			version: 1,
+			connection: { ref: "r", name: "n", engine: "postgres" },
+			domains: [
+				{
+					name: "auth",
+					colour: 1,
+					description,
+					includeData: false,
+					objects: [],
+				},
+			],
+		});
+		expect(text).toContain(`end`);
+		expect(
+			text.split("\n").filter((line) => line.includes("word word")),
+		).toHaveLength(1);
 	});
 
 	test("carries no host, port, user or password", async () => {
 		const built = await buildExport([AUTH], TAGS, source());
-		const manifest = built.files.get("manifest.json") ?? "";
+		const manifest = built.files.get("domains.yaml") ?? "";
 		for (const forbidden of ["host", "port", "password", "username"]) {
 			expect(manifest.toLowerCase()).not.toContain(forbidden);
 		}

@@ -10,7 +10,13 @@ export type { AdapterDialect, ConnectionAdapter } from "./adapters";
 
 export const tlsModeSchema = z.enum(["disable", "require", "verify-full"]);
 
-export const connectionSourceSchema = z.enum(["managed", "predefined"]);
+/**
+ * `git` is a datasource whose definition is read from a repository's
+ * `.datagripe/` directory (docs/spec/git-datasources.md). Like
+ * `predefined` it is read-only in the UI — you change it by editing the
+ * file — but unlike `predefined` it is added at runtime, per workspace.
+ */
+export const connectionSourceSchema = z.enum(["managed", "predefined", "git"]);
 
 export type ConnectionSource = z.infer<typeof connectionSourceSchema>;
 
@@ -54,6 +60,26 @@ export const connectionMetadataSchema = z.object({
 	 */
 	paths: z.array(datasourcePathSchema).default([]),
 	source: connectionSourceSchema,
+	/**
+	 * Optional presentation from a repo's `config.yaml` `branding` block
+	 * (docs/spec/git-datasources.md), so prod does not look like staging.
+	 * Null for everything else.
+	 */
+	branding: z
+		.object({
+			/** One of the eight palette slots domains use; never a hex value. */
+			colour: z.number().int().min(1).max(8).nullable(),
+			description: z.string().nullable(),
+		})
+		.nullable()
+		.default(null),
+	/**
+	 * Why this datasource cannot be connected to right now — an unset
+	 * `passwordEnv`, most often. It is listed and not connectable rather
+	 * than hidden: somebody who just cloned the repo needs to be told
+	 * which variable to set, not left wondering why the sidebar is empty.
+	 */
+	unavailable: z.string().nullable().default(null),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 });

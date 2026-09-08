@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { runGit } from "./git";
+import { runGit } from "./export";
 
 /**
  * Committing the dump (docs/spec/domains.md "Committing").
@@ -69,7 +69,7 @@ async function repoWithPendingWork(): Promise<{
 
 	const exportRoot = path.join(repo, "datasource", "schema");
 	await mkdir(exportRoot, { recursive: true });
-	await writeFile(path.join(exportRoot, "manifest.json"), "{}\n");
+	await writeFile(path.join(exportRoot, "domains.yaml"), "{}\n");
 	return { repo, exportRoot };
 }
 
@@ -96,7 +96,7 @@ describe("runGit", () => {
 		);
 		expect(result.exitCode).toBe(0);
 		expect(result.branch).toBe("main");
-		expect(result.changed.join("\n")).toContain("manifest.json");
+		expect(result.changed.join("\n")).toContain("domains.yaml");
 		expect(result.changed.join("\n")).not.toContain("unrelated.txt");
 	});
 
@@ -122,7 +122,7 @@ describe("runGit", () => {
 		});
 		const shown = await new Response(log.stdout).text();
 		await log.exited;
-		expect(shown).toContain("manifest.json");
+		expect(shown).toContain("domains.yaml");
 		expect(shown).not.toContain("unrelated.txt");
 		// And the pending edit is still pending, unstaged and uncommitted.
 		expect(await Bun.file(path.join(repo, "unrelated.txt")).text()).toBe(

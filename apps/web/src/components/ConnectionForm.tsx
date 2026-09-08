@@ -21,6 +21,9 @@ import {
 	useDatasourceStore,
 } from "../stores/datasource";
 import { type ConnectionDraft, useConnectionsStore } from "../stores/runtime";
+import { ExportConfigPanel } from "./ExportConfigPanel";
+import { GitDatasourceAdd } from "./GitDatasourceAdd";
+import { GitDatasourceRepo } from "./GitDatasourceRepo";
 import { RailFact, RailHelp, RailSection, TabShell } from "./TabRail";
 import { Toggle } from "./Toggle";
 
@@ -128,7 +131,14 @@ function ConnectionFormBody(props: {
 	workspaceName: string | null;
 }) {
 	const editing = props.connection;
-	const readOnly = editing?.source === "predefined";
+	/**
+	 * A git datasource is read-only here for the same reason a predefined
+	 * one is, with a different fix: you change it by editing
+	 * `.datagripe/config.yaml` in the repository, which is the whole point
+	 * of it being there (docs/spec/git-datasources.md).
+	 */
+	const fromRepo = editing?.source === "git";
+	const readOnly = editing?.source === "predefined" || fromRepo;
 	const editingId = editing?.source === "managed" ? editing.id : null;
 
 	const [draft, setDraft] = useState<ConnectionDraft>(() => {
@@ -230,7 +240,11 @@ function ConnectionFormBody(props: {
 	const [pathChecks, setPathChecks] = useState<Record<string, HostPathCheck>>(
 		{},
 	);
+	// A git datasource's paths come from its repository, so the form has
+	// nothing to save: `datasource.set-paths` would be overwritten by the
+	// next read of `config.yaml` anyway.
 	const pathsDirty =
+		!fromRepo &&
 		pathsSignature(paths) !== pathsSignature((editing?.paths ?? []).map(toRow));
 
 	const patchPath = (key: string, partial: Partial<PathRow>) => {
@@ -527,6 +541,12 @@ function ConnectionFormBody(props: {
 						Added to <b>{props.workspaceName ?? "this project"}</b>. Credentials
 						are stored in the project, not globally.
 					</>
+				) : fromRepo ? (
+					<>
+						Defined by <code>.datagripe/config.yaml</code> in its repository.
+						Edit that file to change it — the repository section in the left bar
+						commits the change.
+					</>
 				) : readOnly ? (
 					"Defined by server configuration — read-only."
 				) : (
@@ -536,6 +556,18 @@ function ConnectionFormBody(props: {
 					</>
 				)}
 			</p>
+
+			{/* A new datasource can also come from a repository, in which case
+				    none of the fields below apply: the file defines them
+				    (docs/spec/git-datasources.md). */}
+			{editing === null && (
+				<GitDatasourceAdd
+					onAdded={(created) => {
+						props.panel.api.setTitle(created.name);
+						props.panel.api.updateParameters({ connectionId: created.id });
+					}}
+				/>
+			)}
 
 			<fieldset className="dg-eng" aria-label="Engine">
 				{ADAPTERS.map((adapter) => (
@@ -709,6 +741,15 @@ function ConnectionFormBody(props: {
 							an export never crosses a datasource boundary, and two sharing a
 							directory would overwrite each other's tree. Saved with the rest
 							of the form.
+							{fromRepo && (
+								<>
+									{" "}
+									For this datasource it is written to{" "}
+									<code>.datagripe/sync.yaml</code> in the repository, relative
+									to the repository root, so a teammate who pulls gets the same
+									target.
+								</>
+							)}
 						</p>
 						<div className="dg-field-inline">
 							<button
@@ -734,7 +775,43 @@ function ConnectionFormBody(props: {
 			{/* Only on an existing datasource, for the same reason as the
 				    export directory: the rows are keyed by the connection ref,
 				    which a draft does not have yet. */}
-			{editing !== null && (
+			{editing !== null && !fromRepo && (
+				<ExportConfigPanel
+					connectionRef={editing.id}
+					{...(editing.domainExportPath !== null
+						? { suggestedDir: editing.domainExportPath }
+						: {})}
+				/>
+			)}
+
+			{editing !== null && fromRepo && (
+				<GitDatasourceRepo connection={editing} panel={props.panel} />
+			)}
+
+			{editing !== null && fromRepo && (
+				<div className="dg-form-section">
+					<span className="dg-form-section-title">paths</span>
+					<p className="dg-form-hint">
+						From <code>.datagripe/config.yaml</code>, relative to the repository
+						root. Add or remove them by editing that file; every teammate who
+						pulls the repo gets the same sections.
+					</p>
+					{editing.paths.length === 0 && (
+						<p className="dg-form-hint dg-rail-dim">
+							No <code>paths:</code> in the config yet.
+						</p>
+					)}
+					<ul className="dg-repo-paths">
+						{editing.paths.map((entry) => (
+							<li key={entry.id}>
+								<b>{entry.name}</b> <code>{entry.path}</code>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
+			{editing !== null && !fromRepo && (
 				<div className="dg-form-section">
 					<span className="dg-form-section-title">paths</span>
 					<p className="dg-form-hint">

@@ -47,7 +47,7 @@ label. Once it has the label, the script is a button.
 | Tag | The assignment of one object to one domain |
 | Untagged | An object the datasource reports that carries no tag |
 | Domain root | The allowlisted directory the export writes into |
-| Dump | The exported tree plus its manifest, as committed to git |
+| Dump | The exported tree plus its `domains.yaml`, as committed to git |
 | Drift | A tag whose object no longer exists, or an object no domain claims |
 
 ## Design
@@ -326,7 +326,7 @@ root:
 
 ```
 <domain root>/
-  manifest.json
+  domains.yaml
   domains/
     auth/
       tables/basic_auth.users.sql
@@ -384,8 +384,10 @@ byte-identical tree and an empty `git diff`:
 - No timestamps, hostnames, server versions, row counts, sizes or oids
   in any generated file body. `statistics` is live data and is never
   exported.
-- `manifest.json` is serialised with sorted keys, two-space indent, and
-  a trailing newline.
+- `domains.yaml` is serialised with a fixed key order, two-space indent,
+  block style, **no line folding**, and a trailing newline
+  (`docs/spec/git-datasources.md` "domains.yaml"). Folding is the trap:
+  a description that grows by one character would reflow a paragraph.
 - Every `.sql` file ends with exactly one newline.
 - Data dumps are ordered by primary key. A table with `includeData` and
   **no primary key** is refused with a named error rather than exported
@@ -398,21 +400,32 @@ byte-identical tree and an empty `git diff`:
 
 #### The manifest
 
-`manifest.json` is the round-trip source of truth and the only file the
-import reads:
+`domains.yaml` is the round-trip source of truth and the only file the
+import reads. It replaced `manifest.json` in Phase 14 — one
+serialisation format for everything DataGripe puts in a repository — and
+the JSON is not read as a fallback: an existing dump re-exports once,
+which writes the YAML and prunes the JSON in the same run. A git
+datasource keeps its copy in `.datagripe/domains.yaml` instead, beside
+the config that defines it (`docs/spec/git-datasources.md`).
 
-```json
-{
-  "version": 1,
-  "connection": { "ref": "predefined:wallet-prod", "name": "wallet-prod", "engine": "postgres" },
-  "domains": [
-    { "name": "auth", "colour": 1, "description": "", "includeData": false,
-      "objects": [
-        { "schema": "basic_auth", "name": "users", "kind": "table" },
-        { "schema": "public", "name": "login(text, text)", "kind": "function" }
-      ] }
-  ]
-}
+```yaml
+version: 1
+connection:
+  ref: predefined:wallet-prod
+  name: wallet-prod
+  engine: postgres
+domains:
+  - name: auth
+    colour: 1
+    description: ""
+    includeData: false
+    objects:
+      - schema: basic_auth
+        kind: table
+        name: users
+      - schema: public
+        kind: function
+        name: login(text, text)
 ```
 
 It records `ref` and `name` so an import can match by reference first
@@ -484,8 +497,16 @@ count and a written/deleted tally. It is excluded from the prune.
   access off with `HOST_FS_DISABLED`. The desktop app
   (`apps/desktop`) needs neither: the person choosing the directory owns
   the machine.
-- `DOMAIN_EXPORT_GIT` (default off) and `DOMAIN_GIT_TIMEOUT_MS` (default
-  60,000) gate and bound the commit path — see "Committing".
+- `GIT_ENABLED` (default off) and `GIT_TIMEOUT_MS` (default 60,000) gate
+  and bound the commit path — see "Committing". `DOMAIN_EXPORT_GIT` and
+  `DOMAIN_GIT_TIMEOUT_MS` are the pre-rename names and are still
+  honoured.
+- For a **git datasource** the domain root is not
+  `datasource_export_paths` at all: it is `sync.dir` from the
+  repository's own `.datagripe/sync.yaml`, resolved against the work
+  tree root (`docs/spec/git-datasources.md`). One resolver answers for
+  both cases, so an export and the commit that follows it can never be
+  scoped to different directories.
 
 ### The sync tab
 
@@ -566,8 +587,9 @@ feature to have.
 
 What it does have opinions about:
 
-- **Off by default.** `DOMAIN_EXPORT_GIT` gates it; the buttons are
-  absent, not disabled-with-a-tooltip, when it is off.
+- **Off by default.** `GIT_ENABLED` gates it (`DOMAIN_EXPORT_GIT` is
+  the pre-rename name, still honoured); the buttons are absent, not
+  disabled-with-a-tooltip, when it is off.
 - **`owner` role**, like export. It writes to the host and talks to a
   remote.
 - **argv, never a shell.** `Bun.spawn` with an argument array and no
@@ -587,7 +609,7 @@ What it does have opinions about:
   credential prompt is an error instead of a process that hangs until
   the timeout. `HOME`, `PATH` and `SSH_AUTH_SOCK` pass through, because
   that is where working credentials live.
-- Every invocation has a timeout (`DOMAIN_GIT_TIMEOUT_MS`, default
+- Every invocation has a timeout (`GIT_TIMEOUT_MS`, default
   60,000) and is killed at it.
 - stdout and stderr are streamed to the tab verbatim and the exit code
   is the verdict. No interpretation, no "something went wrong".
@@ -602,7 +624,8 @@ they run anything.
 
 ### Import
 
-`domain.import` reads `manifest.json` from the domain root and replaces
+`domain.import` reads `domains.yaml` from the domain root — or from
+`.datagripe/` for a git datasource — and replaces
 the datasource's domains and tags with what it finds. It is how a
 teammate who pulls the repo gets your tagging, and how tagging survives
 a workspace being recreated.
@@ -628,7 +651,9 @@ parking lot.
 ## Testing
 
 - Determinism: export twice against a fixture database, assert the two
-  trees are byte-identical, including the manifest.
+  trees are byte-identical, including `domains.yaml` — and that a
+  description long enough to tempt a line-folder still occupies one
+  line.
 - Path safety: a schema named `../../etc`, a name with a null byte, a
   domain root that is a symlink into `/tmp`, a root outside the
   allowlist, and the `/srv/repos-evil` prefix case each get a named

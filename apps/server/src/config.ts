@@ -79,13 +79,28 @@ const envSchema = z.object({
 		.enum(["true", "false"])
 		.default("false")
 		.transform((value) => value === "true"),
-	/** Gate the commit path. Off means the buttons are absent, not
-	 * disabled-with-a-tooltip. */
+	/**
+	 * Gate every git feature: the domain export's commit buttons and git
+	 * datasources (docs/spec/git-datasources.md). Off means the buttons
+	 * are absent, not disabled-with-a-tooltip.
+	 */
+	GIT_ENABLED: z.enum(["true", "false"]).optional(),
+	/** Pre-rename name for GIT_ENABLED; still honoured. */
 	DOMAIN_EXPORT_GIT: z
 		.enum(["true", "false"])
 		.default("false")
 		.transform((value) => value === "true"),
+	/**
+	 * Where `git.datasource.add` clones to, one directory per datasource.
+	 * Defaults beside the embedded data directory, which is `./data` in a
+	 * checkout and the OS app-data dir under the desktop shell.
+	 */
+	GIT_REPOS_DIR: z.string().min(1).optional(),
+	GIT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+	/** Pre-rename name for GIT_TIMEOUT_MS; still honoured. */
 	DOMAIN_GIT_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+	/** Clone gets its own budget: a big repository is not a hung one. */
+	GIT_CLONE_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
 	/** Per-table cap for `includeData` domains. Exceeding it fails that
 	 * table and reports it, rather than writing a truncated file that looks
 	 * complete. */
@@ -103,7 +118,12 @@ type EnvConfig = z.infer<typeof envSchema>;
 export interface AppConfig
 	extends Omit<
 		EnvConfig,
-		"AUTH_DISABLED" | "CONNECTION_ENCRYPTION_KEY" | "SESSION_SECRET"
+		| "AUTH_DISABLED"
+		| "CONNECTION_ENCRYPTION_KEY"
+		| "SESSION_SECRET"
+		| "GIT_ENABLED"
+		| "GIT_REPOS_DIR"
+		| "GIT_TIMEOUT_MS"
 	> {
 	/** external: APP_DATABASE_URL was provided. embedded: the server starts
 	 * and manages its own PostgreSQL cluster (EMBEDDED_PG_*). */
@@ -116,6 +136,12 @@ export interface AppConfig
 	/** Embedded cluster superuser password (generated with the local
 	 * secrets); only meaningful in embedded mode. */
 	EMBEDDED_PG_PASSWORD: string | undefined;
+	/** Resolved: explicit GIT_ENABLED wins, else the pre-rename
+	 * DOMAIN_EXPORT_GIT. */
+	GIT_ENABLED: boolean;
+	/** Resolved absolute path; clones go in one directory each under it. */
+	GIT_REPOS_DIR: string;
+	GIT_TIMEOUT_MS: number;
 }
 
 const REPO_ROOT = path.join(import.meta.dir, "../../..");
@@ -211,6 +237,26 @@ async function loadOrCreateLocalSecrets(
 	return generated;
 }
 
+function gitSettings(parsed: EnvConfig): {
+	GIT_ENABLED: boolean;
+	GIT_REPOS_DIR: string;
+	GIT_TIMEOUT_MS: number;
+} {
+	return {
+		GIT_ENABLED:
+			parsed.GIT_ENABLED === undefined
+				? parsed.DOMAIN_EXPORT_GIT
+				: parsed.GIT_ENABLED === "true",
+		// Beside the cluster directory, never inside it: initdb requires
+		// that one to be empty on first boot.
+		GIT_REPOS_DIR: resolveRepoPath(
+			parsed.GIT_REPOS_DIR ??
+				path.join(path.dirname(parsed.EMBEDDED_PG_DATA_DIR), "repos"),
+		),
+		GIT_TIMEOUT_MS: parsed.GIT_TIMEOUT_MS ?? parsed.DOMAIN_GIT_TIMEOUT_MS,
+	};
+}
+
 export interface LoadConfigOptions {
 	/** Merge the repository-root `.env` for missing keys (default true). */
 	envFile?: boolean;
@@ -260,6 +306,7 @@ export async function loadConfig(
 			CONNECTION_ENCRYPTION_KEY: parsed.CONNECTION_ENCRYPTION_KEY as string,
 			SESSION_SECRET: parsed.SESSION_SECRET as string,
 			EMBEDDED_PG_PASSWORD: undefined,
+			...gitSettings(parsed),
 		};
 	}
 
@@ -274,5 +321,6 @@ export async function loadConfig(
 			parsed.CONNECTION_ENCRYPTION_KEY ?? local.connectionEncryptionKey,
 		SESSION_SECRET: parsed.SESSION_SECRET ?? local.sessionSecret,
 		EMBEDDED_PG_PASSWORD: local.embeddedPgPassword,
+		...gitSettings(parsed),
 	};
 }

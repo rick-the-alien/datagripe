@@ -8,6 +8,7 @@ export * from "./errors";
 export * from "./executions";
 export * from "./explorer";
 export * from "./files";
+export * from "./git";
 export * from "./gripes";
 export * from "./multiplayer";
 export * from "./objects";

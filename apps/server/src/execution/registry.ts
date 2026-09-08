@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
 	ConnectionAdapter,
+	ConnectionSource,
 	ExecutionCancelResult,
 	ExecutionStartRequest,
 	ExecutionStartResult,
@@ -59,7 +60,7 @@ export interface ExecutionRegistryDeps {
 	resolveConnection: (
 		workspace: { id: string; name: string },
 		id: string,
-	) => Promise<ResolvedConnection & { source: "managed" | "predefined" }>;
+	) => Promise<ResolvedConnection & { source: ConnectionSource }>;
 	/** Broadcast a sequenced event for an execution. */
 	emit: (
 		target: { userId: string; workspaceId: string },

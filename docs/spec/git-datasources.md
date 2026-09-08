@@ -1,6 +1,6 @@
 # Spec — Git datasources
 
-**Status:** draft
+**Status:** current
 **Phase:** 14
 **Supersedes:** the `manifest.json` half of `docs/spec/domains.md`
 "The manifest" (extends `docs/spec/connection-sources.md`,
@@ -174,6 +174,15 @@ datasource, not only git ones — one serialisation format for the
 `.datagripe` directory is worth more than backwards compatibility with a
 file that has existed for one phase.
 
+It lives in **two places, by necessity**. A git datasource keeps it in
+`.datagripe/domains.yaml`, beside the config that defines the
+datasource, because that is where a reader looks for what this
+repository is. A managed or predefined datasource has no `.datagripe/`
+to put it in, so it goes at the export root, exactly where
+`manifest.json` was. The export root is what the import reads either
+way; the writer knows which case it is in and there is one function that
+decides.
+
 ```yaml
 version: 1
 connection:
@@ -205,7 +214,9 @@ front of somebody.
 `manifest.json` is not read as a fallback. An existing dump is
 re-exported once, which produces `domains.yaml` and deletes
 `manifest.json` in the same run — a prune, which the export already
-does for files it no longer generates.
+does for files it no longer generates. Both names are in
+`OWNED_ROOT_FILES`, so a stale copy at the export root goes the same
+way when the datasource keeps its own in `.datagripe/`.
 
 ### Adding one
 
@@ -286,10 +297,20 @@ list reloads when a `.datagripe/` file is saved or a pull changes one.
 Note the reversal against `docs/spec/datasource-paths.md`: there, paths
 were workspace-local configuration *about* a datasource, precisely so a
 read-only predefined connection could carry them. Here the datasource
-brings its own, and `datasource_paths` rows are ignored for a git
-datasource rather than merged. Merging would mean the sidebar showed
+brings its own, and the repo's list is **mirrored into
+`datasource_paths` rather than merged with it** — the table becomes a
+cache of what the file says, the form cannot edit it, and every reload
+rewrites it from the file. Merging would mean the sidebar showed
 sections a teammate did not have, from a file that claims to define the
 sidebar.
+
+Mirroring rather than special-casing is the whole reason this feature is
+small: `file.list`, `file.open`, the document origin and the
+archive-on-removal behaviour are the Phase 12 machinery, untouched. Rows
+are matched **by name**, so renaming a directory in `config.yaml` keeps
+the section's id and every file already open from it; a row whose name
+disappears archives its documents rather than deleting them, exactly as
+`datasource.set-paths` does.
 
 ### Exporting a config from an existing datasource
 
@@ -359,7 +380,13 @@ active one, above its path sections
 - A row's status letters are git's, unexplained and unabbreviated:
   ` M`, `M `, `??`, `A `, `D `, `R `, `UU`. People who use git read
   these already, and people who do not are not served by a paraphrase.
-- Clicking a row opens the file, when it is one the editor can open.
+- Clicking a row opens the file, **when a configured path covers it**.
+  The two path vocabularies meet here and nowhere else: git names files
+  relative to the work tree root, the editor names them relative to a
+  path pair. A row outside every pair says so and opens nothing, rather
+  than opening a different file. `git.status` carries the work tree root
+  for exactly this — without it the client has two vocabularies and no
+  way to relate them.
 - **`refresh` is the only way the list updates**, plus after any
   operation this section ran. Nothing polls. A status call per second
   across every open workspace is a `git` process per second.
@@ -410,6 +437,11 @@ CREATE TABLE git_datasources (
 	UNIQUE (workspace_id, repo_path)
 );
 ```
+
+Plus `git_datasource_secrets`, the escape hatch above: one encrypted
+password per datasource, same layout and same keyring as
+`connection_secrets`, cascading off the datasource row so removing the
+datasource takes the secret with it.
 
 A pointer, not a copy. Nothing from `config.yaml` is denormalised into
 this table, because then there would be two answers to what the
@@ -541,7 +573,8 @@ and writing a disk the person pressing the button may not own.
 - Whether the commit list should offer hunk-level staging. Almost
   certainly not — that is the point where a terminal is better — but it
   is the most likely request.
-- Whether `domains.yaml` should live in `.datagripe/` or beside the
-  sync dir it describes. It is in `.datagripe/` because it is
-  configuration that round-trips, not output; the counter-argument is
-  that it is written by the export and prunes like output.
+- Whether a managed datasource's `domains.yaml` should also move into a
+  `.datagripe/` directory at its export root, so there is one answer
+  instead of two. It would mean inventing that directory for a
+  datasource that has no repository, which reads like a promise the
+  feature does not make.

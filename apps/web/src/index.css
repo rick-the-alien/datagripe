@@ -1070,6 +1070,9 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
+	/* The markdown mode button is positioned against this
+		 (docs/spec/markdown-documents.md "Two modes"). */
+	position: relative;
 }
 
 .editor-panel .editor-container {
@@ -3971,4 +3974,344 @@ th.dg-tv-pk .dg-tv-th {
 
 .dg-ov-gripe .dg-gripe-body {
 	padding: 9px 13px 9px 10px;
+}
+
+/* ---------------------------------------------------------------------
+   The repository section (docs/spec/git-datasources.md).
+
+   A repository view, not a datasource view: the list is the whole work
+   tree, and nothing in it happens on a timer.
+   ------------------------------------------------------------------ */
+
+.dg-repo {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 4px 0 8px;
+}
+
+.dg-repo-head {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 0 10px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+}
+
+.dg-repo-branch {
+	color: var(--dg-cyan);
+}
+
+.dg-repo-track {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-repo-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dg-repo-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 1px 10px;
+}
+
+.dg-repo-row:hover {
+	background: var(--dg-raised);
+}
+
+.dg-repo-check {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+
+/* Git's letters, as git wrote them. The interpunct stands in for a
+	 space so ` M` and `M ` are told apart at a glance. */
+.dg-repo-status {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+	white-space: pre;
+}
+
+.dg-repo-path {
+	flex: 1;
+	min-width: 0;
+	text-align: left;
+	background: none;
+	border: 0;
+	padding: 0;
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	cursor: pointer;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.dg-repo-actions {
+	padding: 0 10px;
+	border-top: 1px solid var(--dg-rule-soft);
+	padding-top: 6px;
+}
+
+.dg-repo-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.dg-repo-message {
+	width: 100%;
+	resize: vertical;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 4px 6px;
+	margin-bottom: 4px;
+}
+
+.dg-repo-output {
+	padding: 0 10px;
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-repo-output pre {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 6px 8px;
+	margin: 4px 0 0;
+	overflow-x: auto;
+	white-space: pre-wrap;
+}
+
+.dg-repo-exit {
+	margin: 4px 0 0;
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+}
+
+.dg-repo-facts,
+.dg-repo-paths {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	color: var(--dg-ink-dim);
+}
+
+.dg-repo-paths {
+	list-style: none;
+	padding: 0;
+	margin: 4px 0 0;
+}
+
+.dg-export-config-file pre {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 8px 10px;
+	overflow-x: auto;
+	font-size: var(--dg-fs-meta);
+	white-space: pre-wrap;
+}
+
+.dg-export-config-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+/* ---------------------------------------------------------------------
+   Markdown documents (docs/spec/markdown-documents.md).
+
+   Not a document theme: DataGripe with markdown in it, on the same type
+   scale and the same tokens as everything else.
+   ------------------------------------------------------------------ */
+
+.dg-md-view {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding: 16px 24px 48px;
+	background: var(--dg-void);
+}
+
+.dg-md-prose {
+	max-width: 78ch;
+	color: var(--dg-ink);
+	font-family: var(--dg-font-sans);
+	font-size: var(--dg-fs-body);
+	line-height: var(--dg-lh-body);
+}
+
+.dg-md-prose h1,
+.dg-md-prose h2,
+.dg-md-prose h3,
+.dg-md-prose h4 {
+	font-weight: 500;
+	line-height: var(--dg-lh-heading);
+	margin: 1.2em 0 0.4em;
+}
+
+.dg-md-prose h1 {
+	font-size: var(--dg-fs-heading);
+}
+
+.dg-md-prose h2 {
+	font-size: 21px;
+	border-bottom: 1px solid var(--dg-rule);
+	padding-bottom: 4px;
+}
+
+.dg-md-prose h3 {
+	font-size: 17px;
+}
+
+.dg-md-prose code {
+	font-family: var(--dg-font-mono);
+	font-size: 0.9em;
+	color: var(--dg-cyan);
+	background: var(--dg-panel);
+	border-radius: 3px;
+	padding: 1px 4px;
+}
+
+.dg-md-prose a {
+	color: var(--dg-violet-text);
+}
+
+.dg-md-prose table {
+	border-collapse: collapse;
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-md-prose th,
+.dg-md-prose td {
+	border: 1px solid var(--dg-rule);
+	padding: 4px 8px;
+	text-align: left;
+}
+
+.dg-md-prose blockquote {
+	margin: 1em 0;
+	padding-left: 12px;
+	border-left: 2px solid var(--dg-rule);
+	color: var(--dg-ink-dim);
+}
+
+/* Not fetched: a remote image is a beacon and a relative one is a file
+	 the server would have to serve. */
+.dg-md-image {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-md-code {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-editor);
+	background: var(--dg-panel);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 8px 10px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+}
+
+.dg-md-code-lang {
+	display: block;
+	color: var(--dg-ink-faint);
+	font-size: var(--dg-fs-meta);
+	margin-bottom: 4px;
+}
+
+/* A runnable block: the same tokenizer, theme and font as the tab next
+	 door, which is what makes it read as the same SQL. */
+.dg-md-block {
+	max-width: 78ch;
+	margin: 12px 0;
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	overflow: hidden;
+}
+
+.dg-md-block-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 8px;
+	background: var(--dg-panel);
+	border-bottom: 1px solid var(--dg-rule);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+.dg-md-block-lang {
+	color: var(--dg-cyan);
+}
+
+.dg-md-block-dialect {
+	color: var(--dg-ink-faint);
+}
+
+.dg-md-block-run {
+	margin-left: auto;
+	background: none;
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-green);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	padding: 1px 8px;
+	cursor: pointer;
+}
+
+.dg-md-block-run:disabled {
+	color: var(--dg-ink-faint);
+	cursor: not-allowed;
+}
+
+.dg-md-block-editor {
+	min-height: 32px;
+	background: var(--dg-void);
+}
+
+.dg-md-block-error {
+	margin: 0;
+	padding: 4px 8px;
+	color: var(--dg-magenta);
+	font-size: var(--dg-fs-meta);
+}
+
+/* One control, one position, two labels: a control that moves when you
+	 press it costs people the second press. */
+.dg-md-mode {
+	position: absolute;
+	right: 14px;
+	bottom: 12px;
+	z-index: 4;
+	background: var(--dg-raised);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink-dim);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	padding: 3px 10px;
+	cursor: pointer;
+}
+
+.dg-md-mode:hover {
+	color: var(--dg-ink);
+	border-color: var(--dg-violet);
 }

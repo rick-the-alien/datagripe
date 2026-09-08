@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { documentOriginSchema } from "./documents";
+import { documentLanguageSchema, documentOriginSchema } from "./documents";
 
 /** Multiplayer contracts (docs/spec/multiplayer.md). */
 
@@ -46,6 +46,9 @@ export const documentListEntrySchema = z.object({
 	updatedAt: z.iso.datetime(),
 	/** Set for a file opened out of a datasource path. */
 	origin: documentOriginSchema.nullable().default(null),
+	/** So the sidebar can glyph a runbook differently from a query
+	 * before anything has been fetched (docs/spec/markdown-documents.md). */
+	language: documentLanguageSchema.default("sql"),
 });
 
 export type DocumentListEntry = z.infer<typeof documentListEntrySchema>;

@@ -5,7 +5,8 @@ import type {
 	ExportPlan,
 	ExportPlanEntry,
 } from "@datagripe/contracts";
-import { domainTargetKey } from "@datagripe/contracts";
+import { DOMAINS_FILE, domainTargetKey } from "@datagripe/contracts";
+import { renderDomainsFile } from "../git/domainsFile";
 import { objectDirectory, objectFileName, UnsafePathError } from "./paths";
 
 /**
@@ -68,6 +69,12 @@ export interface ExportSource {
 export interface BuiltExport {
 	/** Relative path (forward-slashed) to file contents. */
 	files: Map<string, string>;
+	/**
+	 * The domain file's contents, always, whether or not it was put in
+	 * `files`. A git datasource writes it to the repo's `.datagripe/`
+	 * rather than into the dump.
+	 */
+	domainsFile: string;
 	refusals: ExportPlanEntry[];
 	domainCount: number;
 	objectCount: number;
@@ -168,28 +175,21 @@ export function dataFileBody(target: DomainTarget, page: DataPage): string {
 }
 
 /**
- * `manifest.json` — the round-trip source of truth, and the only file
- * the import reads. Sorted keys, two-space indent, trailing newline. It
- * is committed to a repository, so it carries no host, no port, no user
- * and no credential of any kind.
+ * The domain file — the round-trip source of truth, and the only file
+ * the import reads. It is committed to a repository, so it carries no
+ * host, no port, no user and no credential of any kind.
+ *
+ * YAML since docs/spec/git-datasources.md: one serialisation format for
+ * everything DataGripe puts in a repository. `manifest.json` is not read
+ * as a fallback — an existing dump re-exports once, which writes
+ * `domains.yaml` and prunes the JSON in the same run.
  */
 export function renderManifest(manifest: DomainManifest): string {
-	return `${JSON.stringify(manifest, sortedKeys, 2)}\n`;
-}
-
-function sortedKeys(_key: string, value: unknown): unknown {
-	if (
-		value === null ||
-		typeof value !== "object" ||
-		Array.isArray(value) ||
-		value instanceof Date
-	) {
-		return value;
-	}
-	const entries = Object.entries(value as Record<string, unknown>).sort(
-		([a], [b]) => a.localeCompare(b),
-	);
-	return Object.fromEntries(entries);
+	return renderDomainsFile({
+		version: 1,
+		connection: manifest.connection,
+		domains: manifest.domains,
+	});
 }
 
 function sortTargets(targets: DomainTarget[]): DomainTarget[] {
@@ -206,6 +206,14 @@ export async function buildExport(
 	tagsByDomain: Map<string, DomainTarget[]>,
 	source: ExportSource,
 	onProgress?: (done: number, total: number, current: string) => void,
+	/**
+	 * Where the domain file goes inside the dump, or null when it does
+	 * not go in the dump at all. A git datasource keeps it in the repo's
+	 * own `.datagripe/` directory beside `config.yaml`, which is outside
+	 * the export root and so is written by the caller
+	 * (docs/spec/git-datasources.md).
+	 */
+	domainsFileName: string | null = DOMAINS_FILE,
 ): Promise<BuiltExport> {
 	const files = new Map<string, string>();
 	const refusals: ExportPlanEntry[] = [];
@@ -320,21 +328,22 @@ export async function buildExport(
 		files.set(`access/${name}`, terminate(contents));
 	}
 
-	files.set(
-		"manifest.json",
-		renderManifest({
-			version: 1,
-			connection: {
-				ref: source.connectionRef,
-				name: source.connectionName,
-				engine: source.engine,
-			},
-			domains: manifestDomains,
-		}),
-	);
+	const domainsFile = renderManifest({
+		version: 1,
+		connection: {
+			ref: source.connectionRef,
+			name: source.connectionName,
+			engine: source.engine,
+		},
+		domains: manifestDomains,
+	});
+	if (domainsFileName !== null) {
+		files.set(domainsFileName, domainsFile);
+	}
 
 	return {
 		files,
+		domainsFile,
 		refusals,
 		domainCount: ordered.length,
 		objectCount,

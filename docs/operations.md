@@ -93,16 +93,17 @@ Pipe to your log stack and alert on `auth.login.failure` bursts and any
 - `WEB_ORIGIN` set to the exact origin the app is served from; both
   HTTP and the WebSocket upgrade enforce it.
 
-### Domain export and git (docs/spec/domains.md)
+### Domain export and git (docs/spec/domains.md, docs/spec/git-datasources.md)
 
 Export is the one action in DataGripe that writes to the host
 filesystem, and `domain.git` is the only one that runs a subprocess.
 Both are **off by default** and both are `owner`-only.
 
 - `HOST_FS_DISABLED` (default `false`) — turns off **every**
-  host-filesystem feature: the domain export and import, and the
+  host-filesystem feature: the domain export and import, the
   datasource paths the sidebar browses
-  (`docs/spec/datasource-paths.md`). This is the switch a hosted,
+  (`docs/spec/datasource-paths.md`), and git datasources
+  (`docs/spec/git-datasources.md`). This is the switch a hosted,
   multi-tenant deployment sets; there, the person pressing the button
   does not own the disk.
 - `HOST_FS_ROOTS` — an **optional** colon-separated allowlist of
@@ -121,15 +122,23 @@ Both are **off by default** and both are `owner`-only.
   default: an empty value used to mean "export disabled" and now means
   "no allowlist". A deployment that relied on empty-means-off must set
   `HOST_FS_DISABLED=true`.
-- `DOMAIN_EXPORT_GIT` (default `false`) — enables `domain.git`. When
-  off, the commit controls are absent, not disabled. Git runs with
-  argv (never a shell), a fixed verb list, `add` scoped to the domain
-  root pathspec, and `GIT_TERMINAL_PROMPT=0` so a missing credential
-  errors instead of hanging. DataGripe manages no credentials: `HOME`,
-  `PATH` and `SSH_AUTH_SOCK` pass through and git's own stderr is shown
-  verbatim.
-- `DOMAIN_GIT_TIMEOUT_MS` (default 60000) — every git invocation is
-  killed at this.
+- `GIT_ENABLED` (default `false`) — enables **every** git feature:
+  `domain.git`'s commit controls and git datasources
+  (`docs/spec/git-datasources.md`). When off they are absent, not
+  disabled. Git runs with argv (never a shell), a fixed verb list,
+  every user-supplied value after a `--`, and `GIT_TERMINAL_PROMPT=0`
+  so a missing credential errors instead of hanging. DataGripe manages
+  no credentials: `HOME`, `PATH` and `SSH_AUTH_SOCK` pass through and
+  git's own stderr is shown verbatim. `DOMAIN_EXPORT_GIT` is the
+  pre-rename name and is still honoured.
+- `GIT_REPOS_DIR` (default `<data dir>/repos`) — where
+  `git.datasource.add` clones to, one directory per datasource.
+  DataGripe deletes a directory only when it created it and only under
+  this root; an adopted checkout is never deleted.
+- `GIT_TIMEOUT_MS` (default 60000) — every git invocation is killed at
+  this. `DOMAIN_GIT_TIMEOUT_MS` is the pre-rename name.
+- `GIT_CLONE_TIMEOUT_MS` (default 600000) — clone gets its own budget,
+  because a big repository is not a hung one.
 - `DOMAIN_EXPORT_MAX_DATA_ROWS` (default 10000) — per-table cap for
   `includeData` domains. Over it, the table is refused and reported
   rather than written truncated.
@@ -138,6 +147,6 @@ Both are **off by default** and both are `owner`-only.
   filter (docs/spec/access-report.md).
 
 In a hosted, multi-tenant deployment, set `HOST_FS_DISABLED=true` and
-leave `DOMAIN_EXPORT_GIT` unset. Host-filesystem access exists for the
+leave `GIT_ENABLED` unset. Host-filesystem access exists for the
 local and desktop shape, where the person pressing the button owns the
 checkout.

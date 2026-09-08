@@ -225,7 +225,7 @@ where the grant graph is the API surface.
 Exit: a function created today shows `anon` reaching it via `PUBLIC`
 before anybody has run a query against it.
 
-## Phase 14 — Git datasources and markdown · planned
+## Phase 14 — Git datasources and markdown · shipped 2026-09-08
 
 Designed in `docs/spec/git-datasources.md` and
 `docs/spec/markdown-documents.md`. The repository becomes the datasource
@@ -234,43 +234,50 @@ same sidebar sections and the same domains without configuring anything
 — and the `.md` runbook that explains the database becomes something you
 can read and run in place.
 
-- [ ] `.datagripe/` in the work tree root: `config.yaml` (connection,
+- [x] `.datagripe/` in the work tree root: `config.yaml` (connection,
       branding, path pairs — all repo-relative), `sync.yaml` (sync dir
       and export options), `domains.yaml` (generated)
-- [ ] `domains.yaml` replaces `manifest.json` everywhere, with a fixed
+- [x] `domains.yaml` replaces `manifest.json` everywhere, with a fixed
       YAML serialiser configuration so an unchanged export still diffs
       empty — line folding is the trap
-- [ ] Add by clone (into `GIT_REPOS_DIR`, SSRF-checked URL) or by
+- [x] Add by clone (into `GIT_REPOS_DIR`, SSRF-checked URL) or by
       adopting an existing checkout; `git_datasources` (migration 0014)
       is a pointer, never a copy of what the file says
-- [ ] `connectionSourceSchema` gains `"git"`; ids are `git:<uuid>` so
+- [x] `connectionSourceSchema` gains `"git"`; ids are `git:<uuid>` so
       nothing branches on id shape
-- [ ] Secrets stay `passwordEnv`; an unset variable lists the datasource
+- [x] Secrets stay `passwordEnv`; an unset variable lists the datasource
       and names the variable rather than hiding it. Inline `password:`
       is refused, not deprecated
-- [ ] `export config` on any managed/predefined datasource: generate,
+- [x] `export config` on any managed/predefined datasource: generate,
       preview, write the `.datagripe/` set — never the password
-- [ ] Repository section in the left bar: branch, ahead/behind,
+- [x] Repository section in the left bar: branch, ahead/behind,
       porcelain rows with checkboxes, `commit…` / `push` / `pull` /
       `refresh`. Nothing is checked by default, nothing runs on a timer,
       and `pull` is `--ff-only`
-- [ ] `apps/server/src/domains/git.ts` → `apps/server/src/git/`, same
+- [x] `apps/server/src/domains/git.ts` → `apps/server/src/git/`, same
       argv-not-shell / fixed-verb-list / no-credential-management rules,
       new verbs. `GIT_ENABLED` gates it (`DOMAIN_EXPORT_GIT` still
       honoured)
-- [ ] After a pull, `repo.changed` re-runs the existing three-case disk
+- [x] After a pull, `repo.changed` re-runs the existing three-case disk
       check per open file-backed document; a pull that would touch a
       dirty one is refused
-- [ ] `documents.language` (migration 0015) with `sql | markdown`,
+- [x] `documents.language` (migration 0015) with `sql | markdown`,
       decided by the name's extension in every files area
-- [ ] Markdown opens rendered (`marked`, raw HTML escaped, no image
+- [x] Markdown opens rendered (`marked`, raw HTML escaped, no image
       fetching); one bottom-right button flips to the editor and back,
       per view and persisted in the layout
-- [ ] `sql` fences are read-only Monaco blocks with a run button on the
+- [x] `sql` fences are read-only Monaco blocks with a run button on the
       real `execution.start` path, analysed by the gripes runner at
       document offsets
-- [ ] In edit mode, completion/format/hover delegate to the SQL
+- [x] In edit mode, completion and formatting delegate to the SQL
       providers inside a `sql` fence and return nothing outside one
+- [x] The repo's path list is *mirrored* into `datasource_paths` rather
+      than merged with it, so `file.list`, `file.open`, the document
+      origin and archive-on-removal are the Phase 12 machinery untouched
+- [ ] Branch switching, conflict resolution, hunk-level staging — all
+      the points where a terminal is the better tool
+- [ ] Followed cursors in view mode (`docs/spec/markdown-documents.md`
+      "What is not built"); highlighting for non-SQL fences
 
 Exit: clone a repo, get a working datasource with its sections and
 domains; open its `maintenance.md`, run the query in it, tick the file

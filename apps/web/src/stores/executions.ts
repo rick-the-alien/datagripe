@@ -82,7 +82,17 @@ export type ExecutionsState = {
 	/** A member's execution opened from history (6d); overrides the
 	 * active document's latest execution in the results panel. */
 	viewingExecutionId: string | null;
-	run: (viewId: string, mode: RunMode) => Promise<void>;
+	/**
+	 * `block` runs SQL the caller already has in hand — a `sql` fence in
+	 * a rendered markdown document (docs/spec/markdown-documents.md).
+	 * Same action, same registry, same limits, same results panel: a
+	 * block is a selection that happens to be delimited by backticks.
+	 */
+	run: (
+		viewId: string,
+		mode: RunMode,
+		block?: { sql: string; start: number; end: number },
+	) => Promise<void>;
 	cancel: (executionId: string) => Promise<void>;
 	/** Replay another member's execution into the results panel and
 	 * subscribe this socket to its live row batches. */
@@ -274,20 +284,27 @@ export function createExecutionsStore(request: WsRequestFn) {
 			earlyEvents: {},
 			viewingExecutionId: null,
 
-			async run(viewId, mode) {
+			async run(viewId, mode, block) {
 				const view = useViewsStore.getState().views[viewId];
 				const documentId = view?.documentId;
 				if (documentId === undefined) {
 					return;
 				}
 				const handle = getEditorHandle(viewId);
-				if (handle === undefined) {
+				// A markdown pane in view mode has no editor handle: the block
+				// arrives with its text and its document offsets instead.
+				if (handle === undefined && block === undefined) {
 					return;
 				}
 
 				let sql: string;
 				let ranges: Array<{ start: number; end: number }> = [];
-				if (mode === "document") {
+				if (block !== undefined) {
+					sql = block.sql;
+					ranges = [{ start: block.start, end: block.end }];
+				} else if (handle === undefined) {
+					return;
+				} else if (mode === "document") {
 					sql = handle.getText();
 					ranges = splitStatements(sql).map((statement) => ({
 						start: statement.start,

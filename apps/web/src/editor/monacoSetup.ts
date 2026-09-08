@@ -3,6 +3,7 @@ import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { registerSqlCompletion } from "./completion/provider";
 import { registerSqlFormatting } from "./formatting";
+import { registerMarkdownSqlSupport } from "./markdown/providers";
 
 /**
  * Monaco bundled locally (no CDN loader). SQL needs no worker of its own
@@ -47,6 +48,13 @@ monaco.editor.defineTheme("datagripe-dark", {
 		{ token: "string.value.json", foreground: "C4A6FF" },
 		{ token: "number.json", foreground: "5EEAD4" },
 		{ token: "keyword.json", foreground: "FF3EA5" },
+		// Markdown, for a runbook in edit mode: headings in the brand
+		// magenta, code and links in the same violet/cyan pairing SQL uses.
+		{ token: "keyword.md", foreground: "FF3EA5", fontStyle: "bold" },
+		{ token: "string.md", foreground: "C4A6FF" },
+		{ token: "string.link.md", foreground: "5EEAD4" },
+		{ token: "variable.md", foreground: "C4A6FF" },
+		{ token: "comment.md", foreground: "3D4759", fontStyle: "italic" },
 	],
 	colors: {
 		"editor.background": "#0B0E14",
@@ -74,5 +82,8 @@ monaco.editor.defineTheme("datagripe-dark", {
 
 registerSqlCompletion();
 registerSqlFormatting();
+// Inside a `sql` fence, and nowhere else
+// (docs/spec/markdown-documents.md "Editing").
+registerMarkdownSqlSupport();
 
 export { monaco };

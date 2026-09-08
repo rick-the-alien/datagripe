@@ -5,6 +5,7 @@ import type {
 	DocumentOrigin,
 	DocumentSaveRequest,
 } from "@datagripe/contracts";
+import { languageForName } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
@@ -40,6 +41,7 @@ type DocumentRow = {
 	origin_path_id: string | null;
 	origin_file_path: string | null;
 	disk_content_hash: string | null;
+	language: "sql" | "markdown";
 	updated_at: string | Date;
 };
 
@@ -64,7 +66,7 @@ function rowToDocument(row: DocumentRow): Document {
 		id: row.id,
 		workspaceId: row.workspace_id,
 		title: row.title,
-		language: "sql",
+		language: row.language,
 		content: row.content,
 		revision: row.revision,
 		...(row.default_connection_id !== null
@@ -82,6 +84,7 @@ function rowToEntry(row: DocumentRow): DocumentListEntry {
 		revision: row.revision,
 		updatedAt: new Date(row.updated_at).toISOString(),
 		origin: rowToOrigin(row),
+		language: row.language,
 	};
 }
 
@@ -171,7 +174,7 @@ export function createDocumentsService(appDb: AppDb): DocumentsService {
 			const rows = await appDb<DocumentRow[]>`
 				SELECT id, title, revision, updated_at, workspace_id, content,
 					default_connection_id, origin_connection_ref, origin_path_id,
-					origin_file_path, disk_content_hash
+					origin_file_path, disk_content_hash, language
 				FROM documents
 				WHERE workspace_id = ${workspaceId} AND archived_at IS NULL
 				ORDER BY created_at
@@ -190,11 +193,15 @@ export function createDocumentsService(appDb: AppDb): DocumentsService {
 				INSERT INTO documents (
 					workspace_id, title, content, origin_connection_ref,
 					origin_path_id, origin_file_path, disk_content_hash,
-					disk_synced_at
+					disk_synced_at, language
 				) VALUES (
 					${workspaceId}, ${request.title}, ${request.content},
 					${request.origin.connectionRef}, ${request.origin.pathId},
-					${request.origin.filePath}, ${request.diskHash}, now()
+					${request.origin.filePath}, ${request.diskHash}, now(),
+					-- The file's own path decides, not its title
+					-- (docs/spec/markdown-documents.md "Where a language
+					-- comes from").
+					${languageForName(request.origin.filePath)}
 				)
 				-- Two people opening the same file at the same moment must
 				-- land on one row, not two caches of one file.
@@ -250,8 +257,8 @@ export function createDocumentsService(appDb: AppDb): DocumentsService {
 
 		async createDocument(workspaceId, request) {
 			const rows = await appDb<DocumentRow[]>`
-				INSERT INTO documents (${request.id !== undefined ? appDb`id, ` : appDb``}workspace_id, title, content)
-				VALUES (${request.id !== undefined ? appDb`${request.id}, ` : appDb``}${workspaceId}, ${request.title}, ${request.content})
+				INSERT INTO documents (${request.id !== undefined ? appDb`id, ` : appDb``}workspace_id, title, content, language)
+				VALUES (${request.id !== undefined ? appDb`${request.id}, ` : appDb``}${workspaceId}, ${request.title}, ${request.content}, ${languageForName(request.title)})
 				ON CONFLICT (id) DO NOTHING
 				RETURNING *
 			`;
@@ -277,7 +284,16 @@ export function createDocumentsService(appDb: AppDb): DocumentsService {
 					content = ${request.content},
 					revision = revision + 1,
 					updated_at = now()
-					${request.title !== undefined ? appDb`, title = ${request.title}` : appDb``}
+					${
+						// The language is recomputed with the title, never
+						// separately: renaming notes.sql to notes.md is exactly
+						// how somebody asks for markdown. A file-backed document
+						// keeps the language its path gave it — its title is the
+						// filename and does not move.
+						request.title !== undefined
+							? appDb`, title = ${request.title}, language = CASE WHEN origin_file_path IS NULL THEN ${languageForName(request.title)} ELSE language END`
+							: appDb``
+					}
 				WHERE id = ${request.id}
 				RETURNING *
 			`;

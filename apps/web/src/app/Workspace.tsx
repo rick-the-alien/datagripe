@@ -32,6 +32,7 @@ import { PathTree } from "../components/PathTree";
 import { PresenceSidebar } from "../components/PresenceSidebar";
 import { ProjectPrompt } from "../components/ProjectPrompt";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
+import { RepoSection } from "../components/RepoSection";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { SidebarSections } from "../components/SidebarSections";
 import { StatusBar } from "../components/StatusBar";
@@ -45,6 +46,7 @@ import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { useDatasourceStore } from "../stores/datasource";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
 import { useFilesStore } from "../stores/files";
+import { useRepoStore } from "../stores/git";
 import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
 import {
@@ -224,6 +226,13 @@ export function Workspace() {
 			state.connections.find((entry) => entry.id === activeConnectionId)
 				?.paths ?? EMPTY_PATHS,
 	);
+	// A repository-backed datasource brings a repository section with it
+	// (docs/spec/git-datasources.md).
+	const isGitDatasource = useConnectionsStore(
+		(state) =>
+			state.connections.find((entry) => entry.id === activeConnectionId)
+				?.source === "git",
+	);
 	const followingUserId = usePresenceStore((state) => state.followingUserId);
 	const followedBy = usePresenceStore((state) => state.followedBy);
 	const presenceUsers = usePresenceStore((state) => state.users);
@@ -251,6 +260,9 @@ export function Workspace() {
 			// Directory listings are per workspace *and* per host: a
 			// reconnect may be to a different server with different paths.
 			useFilesStore.getState().reset();
+			// Status is per host as much as per workspace: a reconnect may be
+			// to a different server with different checkouts.
+			useRepoStore.getState().reset();
 			usePresenceStore.getState().reset();
 			useExecutionsStore.getState().reset();
 			// Dismissals are workspace-wide, so they rescope with everything
@@ -303,6 +315,37 @@ export function Workspace() {
 				void useDocumentsStore
 					.getState()
 					.applyServerChange(event.payload as DocumentChangedPayload);
+				return;
+			}
+			// A datasource was added or removed by somebody in this project
+			// (docs/spec/git-datasources.md). The sidebar's sections come off
+			// the connection list, so a stale one leaves them behind.
+			if (event.topic === "connections.changed") {
+				void useConnectionsStore.getState().load();
+				return;
+			}
+			// A pull moved HEAD. Files on disk changed under whatever is
+			// open, so the listings are dropped and every file-backed
+			// document from that datasource re-runs the open check — which
+			// is the existing three-case rule, not a new one
+			// (docs/spec/datasource-paths.md "When the file moves
+			// underneath").
+			if (event.topic === "repo.changed") {
+				const payload = event.payload as {
+					connectionRef: string;
+					changedPaths: string[];
+					configChanged: boolean;
+				};
+				useFilesStore.getState().reset();
+				// Status is per host as much as per workspace: a reconnect may be
+				// to a different server with different checkouts.
+				useRepoStore.getState().reset();
+				if (payload.configChanged) {
+					void useConnectionsStore.getState().load();
+				}
+				void useDocumentsStore
+					.getState()
+					.resyncFilesFrom(payload.connectionRef);
 				return;
 			}
 			useExecutionsStore.getState().handleEvent(event);
@@ -484,9 +527,17 @@ export function Workspace() {
 					</div>
 					<SidebarSections
 						sections={[
-							// The active datasource's paths come first: they are the
-							// project's own files, and the workspace files below them
-							// are DataGripe's (docs/spec/datasource-paths.md).
+							// The repository, then its own files, then DataGripe's
+							// (docs/spec/git-datasources.md, docs/spec/datasource-paths.md).
+							...(isGitDatasource && activeConnectionId !== null
+								? [
+										{
+											id: `repo:${activeConnectionId}`,
+											title: "repository",
+											body: <RepoSection connectionRef={activeConnectionId} />,
+										},
+									]
+								: []),
 							...datasourcePaths.map((path) => ({
 								id: `path:${path.id}`,
 								title: path.name,

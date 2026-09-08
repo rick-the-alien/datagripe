@@ -91,6 +91,7 @@ function serverEntry(doc: Document): DocumentListEntry {
 		revision: doc.revision,
 		updatedAt: doc.updatedAt,
 		origin: doc.origin,
+		language: doc.language,
 	};
 }
 

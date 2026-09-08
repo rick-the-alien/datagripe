@@ -22,6 +22,7 @@ import { migrate } from "./db/app/migrate";
 import { createAppDb } from "./db/app/pool";
 import { createDocumentsService } from "./documents/service";
 import { createExecutionRegistry } from "./execution/registry";
+import { createGitDatasourcesService } from "./git/service";
 import { createAuthRoutes, sessionFromRequest } from "./http/auth";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
@@ -114,12 +115,37 @@ const rateLimiter = createRateLimiter({
  */
 const TABLE_COUNT_ESTIMATE_THRESHOLD = 100_000;
 
+const ssrf = createSsrfPolicy(
+	config.TARGET_HOST_ALLOWLIST,
+	config.SSRF_DISABLED,
+);
+
+/**
+ * Git datasources (docs/spec/git-datasources.md). Created even when off,
+ * so the refusal carries the reason — the buttons are absent, but a
+ * request that goes around the UI gets told which switch to look at.
+ */
+const gitDatasources = createGitDatasourcesService({
+	appDb,
+	keyring,
+	ssrf,
+	env: Bun.env,
+	reposDir: config.GIT_REPOS_DIR,
+	gitOptions: { timeoutMs: config.GIT_TIMEOUT_MS },
+	cloneOptions: { timeoutMs: config.GIT_CLONE_TIMEOUT_MS },
+	enabled: config.GIT_ENABLED && !config.HOST_FS_DISABLED,
+	disabledReason: config.HOST_FS_DISABLED
+		? "Host filesystem access is disabled — HOST_FS_DISABLED is set"
+		: "Git is disabled — GIT_ENABLED is off",
+});
+
 const connections = createConnectionsService({
 	appDb,
 	keyring,
 	adapters,
 	predefined,
-	ssrf: createSsrfPolicy(config.TARGET_HOST_ALLOWLIST, config.SSRF_DISABLED),
+	gitDatasources,
+	ssrf,
 	tableLimits: {
 		timeoutMs: config.QUERY_TIMEOUT_MS,
 		maxRows: Math.min(config.QUERY_MAX_ROWS, TABLE_PAGE_MAX_ROWS),
@@ -161,6 +187,9 @@ const dispatch = createDispatcher({
 	hub,
 	rateLimiter,
 	config,
+	// Absent, not present-and-disabled: the dispatcher's own gate reads
+	// "is this here", and there is one place that decides.
+	...(config.GIT_ENABLED && !config.HOST_FS_DISABLED ? { gitDatasources } : {}),
 });
 const auth = createAuthRoutes({
 	appDb,

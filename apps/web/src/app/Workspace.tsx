@@ -34,6 +34,7 @@ import { ProjectPrompt } from "../components/ProjectPrompt";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { RepoSection } from "../components/RepoSection";
 import { ResultsPanel } from "../components/ResultsPanel";
+import { RunPanel } from "../components/RunPanel";
 import { SidebarSections } from "../components/SidebarSections";
 import { StatusBar } from "../components/StatusBar";
 import { SyncPanel } from "../components/SyncPanel";
@@ -49,6 +50,7 @@ import { useFilesStore } from "../stores/files";
 import { useRepoStore } from "../stores/git";
 import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
+import { useRepoRunsStore } from "../stores/repoRuns";
 import {
 	useConnectionsStore,
 	useExecutionsStore,
@@ -123,6 +125,7 @@ const components = {
 	projectSettings: ProjectSettingsPanel,
 	domainManager: DomainManager,
 	syncPanel: SyncPanel,
+	runPanel: RunPanel,
 	accessPanel: AccessPanel,
 };
 
@@ -228,6 +231,10 @@ export function Workspace() {
 	);
 	// A repository-backed datasource brings a repository section with it
 	// (docs/spec/git-datasources.md).
+	const activeDatasourceName = useConnectionsStore(
+		(state) =>
+			state.connections.find((entry) => entry.id === activeConnectionId)?.name,
+	);
 	const isGitDatasource = useConnectionsStore(
 		(state) =>
 			state.connections.find((entry) => entry.id === activeConnectionId)
@@ -263,6 +270,7 @@ export function Workspace() {
 			// Status is per host as much as per workspace: a reconnect may be
 			// to a different server with different checkouts.
 			useRepoStore.getState().reset();
+			useRepoRunsStore.getState().reset();
 			usePresenceStore.getState().reset();
 			useExecutionsStore.getState().reset();
 			// Dismissals are workspace-wide, so they rescope with everything
@@ -340,12 +348,18 @@ export function Workspace() {
 				// Status is per host as much as per workspace: a reconnect may be
 				// to a different server with different checkouts.
 				useRepoStore.getState().reset();
+				useRepoRunsStore.getState().reset();
 				if (payload.configChanged) {
 					void useConnectionsStore.getState().load();
 				}
 				void useDocumentsStore
 					.getState()
 					.resyncFilesFrom(payload.connectionRef);
+				return;
+			}
+			// Output from a repository command (docs/spec/repo-commands.md).
+			if (event.topic.startsWith("repo.run.")) {
+				useRepoRunsStore.getState().handleEvent(event);
 				return;
 			}
 			useExecutionsStore.getState().handleEvent(event);
@@ -534,7 +548,19 @@ export function Workspace() {
 										{
 											id: `repo:${activeConnectionId}`,
 											title: "repository",
-											body: <RepoSection connectionRef={activeConnectionId} />,
+											body: (
+												<RepoSection
+													connectionRef={activeConnectionId}
+													datasourceName={
+														activeDatasourceName ?? activeConnectionId
+													}
+													onOpen={(doc) => {
+														if (dockApi !== null) {
+															openEditorPanel(dockApi, doc);
+														}
+													}}
+												/>
+											),
 										},
 									]
 								: []),

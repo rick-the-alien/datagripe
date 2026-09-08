@@ -72,6 +72,15 @@ export const repoDatasourceSchema = z.object({
 	username: z.string().max(255).optional(),
 	/** Indirection into the server's environment. The only secret path. */
 	passwordEnv: z.string().min(1).max(255).optional(),
+	/**
+	 * This database takes no password at all — a `trust`-auth cluster on
+	 * loopback, which is what a self-contained example checkout runs.
+	 *
+	 * Explicit rather than inferred from a missing `passwordEnv`, because
+	 * inferring it would turn a typo in a variable name into a silent
+	 * attempt to connect with no credential.
+	 */
+	noPassword: z.boolean().default(false),
 	tlsMode: tlsModeSchema.default("disable"),
 	readOnly: z.boolean().default(true),
 	showAllSchemas: z.boolean().default(false),
@@ -105,12 +114,36 @@ export type RepoPath = z.infer<typeof repoPathSchema>;
  * when it rewrites the file. Unknown keys inside a block DataGripe owns
  * are an error, because that is almost always a typo.
  */
-export const repoConfigSchema = z.looseObject({
-	version: z.literal(1),
-	datasource: repoDatasourceSchema,
-	branding: repoBrandingSchema.optional(),
-	paths: z.array(repoPathSchema).max(20).default([]),
-});
+export const repoConfigSchema = z
+	.looseObject({
+		version: z.literal(1),
+		datasource: repoDatasourceSchema,
+		branding: repoBrandingSchema.optional(),
+		paths: z.array(repoPathSchema).max(20).default([]),
+	})
+	.check((ctx) => {
+		const source = ctx.value.datasource;
+		// One of the two, never both and never neither: "which credential
+		// does this use" must have exactly one answer in the file.
+		if (source.noPassword && source.passwordEnv !== undefined) {
+			ctx.issues.push({
+				code: "custom",
+				message:
+					"noPassword and passwordEnv are alternatives — set one, not both",
+				path: ["datasource", "noPassword"],
+				input: source,
+			});
+		}
+		if (!source.noPassword && source.passwordEnv === undefined) {
+			ctx.issues.push({
+				code: "custom",
+				message:
+					"set passwordEnv to name an environment variable, or noPassword: true if this database takes none",
+				path: ["datasource", "passwordEnv"],
+				input: source,
+			});
+		}
+	});
 
 export type RepoConfig = z.infer<typeof repoConfigSchema>;
 

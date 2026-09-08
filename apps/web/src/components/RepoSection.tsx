@@ -4,6 +4,7 @@ import type { EditorDocument } from "../stores/documents";
 import { useRepoStore } from "../stores/git";
 import { openRepoFile } from "../stores/openRepoFile";
 import { useConnectionsStore } from "../stores/runtime";
+import { RepoCommands } from "./RepoCommands";
 
 /**
  * The repository section (docs/spec/git-datasources.md
@@ -21,6 +22,8 @@ import { useConnectionsStore } from "../stores/runtime";
 
 export interface RepoSectionProps {
 	connectionRef: string;
+	/** For the run tab's title. */
+	datasourceName: string;
 	/** Clicking a row opens the file, when the sidebar can reach it. */
 	onOpen?: (doc: EditorDocument) => void;
 }
@@ -236,6 +239,15 @@ export function RepoSection(props: RepoSectionProps) {
 					</div>
 				)}
 			</div>
+
+			{/* Commands the repository declares, behind their own approval
+				    (docs/spec/repo-commands.md). Below the git buttons because
+				    they are a different kind of thing: git moves files around,
+				    this runs a program. */}
+			<RepoCommands
+				connectionRef={connectionRef}
+				datasourceName={props.datasourceName}
+			/>
 
 			{/* Git's verdict, verbatim: no interpretation, no "something went
 				    wrong". A push that failed for want of credentials shows

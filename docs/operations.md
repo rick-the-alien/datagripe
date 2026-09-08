@@ -139,6 +139,25 @@ Both are **off by default** and both are `owner`-only.
   this. `DOMAIN_GIT_TIMEOUT_MS` is the pre-rename name.
 - `GIT_CLONE_TIMEOUT_MS` (default 600000) — clone gets its own budget,
   because a big repository is not a hung one.
+- `REPO_COMMANDS_ENABLED` (default `false`) — lets a repository's
+  `.datagripe/run.yaml` declare commands DataGripe can run
+  (`docs/spec/repo-commands.md`). **Its own switch on purpose:** every
+  other git feature reads and writes files, and this one executes a
+  program somebody else wrote, arriving over the network on `git pull`.
+  Wanting git datasources is not the same decision as wanting arbitrary
+  execution. Needs `GIT_ENABLED` as well.
+
+  Even on, nothing runs until somebody approves the command list, and
+  any change to it — including one a pull brought in — needs a fresh
+  approval. Commands run as the server user with `owner` role, with an
+  allowlisted environment that excludes `CONNECTION_ENCRYPTION_KEY` and
+  `SESSION_SECRET`. The approval *is* the security boundary; there is
+  no sandbox.
+- `REPO_COMMAND_TIMEOUT_MS` (default 600000) — hard ceiling for one
+  non-background command, whatever it asked for.
+- `REPO_COMMAND_DEFAULT_TIMEOUT_MS` (default 120000) — used when a
+  command declares no `timeoutSeconds`. A `background: true` command has
+  no deadline at all and runs until stopped or the server exits.
 - `DOMAIN_EXPORT_MAX_DATA_ROWS` (default 10000) — per-table cap for
   `includeData` domains. Over it, the table is refused and reported
   rather than written truncated.
@@ -147,6 +166,6 @@ Both are **off by default** and both are `owner`-only.
   filter (docs/spec/access-report.md).
 
 In a hosted, multi-tenant deployment, set `HOST_FS_DISABLED=true` and
-leave `GIT_ENABLED` unset. Host-filesystem access exists for the
+leave `GIT_ENABLED` and `REPO_COMMANDS_ENABLED` unset. Host-filesystem access exists for the
 local and desktop shape, where the person pressing the button owns the
 checkout.

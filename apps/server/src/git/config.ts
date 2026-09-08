@@ -311,6 +311,9 @@ export function renderConfig(
 	if (config.datasource.passwordEnv !== undefined) {
 		datasource.passwordEnv = config.datasource.passwordEnv;
 	}
+	if (config.datasource.noPassword) {
+		datasource.noPassword = true;
+	}
 	datasource.tlsMode = config.datasource.tlsMode;
 	datasource.readOnly = config.datasource.readOnly;
 	datasource.showAllSchemas = config.datasource.showAllSchemas;

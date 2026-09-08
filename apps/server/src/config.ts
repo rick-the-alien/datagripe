@@ -101,6 +101,31 @@ const envSchema = z.object({
 	DOMAIN_GIT_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
 	/** Clone gets its own budget: a big repository is not a hung one. */
 	GIT_CLONE_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
+	/**
+	 * Let a repository's `.datagripe/run.yaml` declare commands DataGripe
+	 * can run (docs/spec/repo-commands.md).
+	 *
+	 * Its own switch, deliberately separate from `GIT_ENABLED`: every
+	 * other git feature reads and writes files, and this one executes a
+	 * program somebody else wrote. A deployment that wants git
+	 * datasources does not thereby want arbitrary execution, and the two
+	 * decisions should not share a checkbox.
+	 *
+	 * Even on, nothing runs until a person approves the command list, and
+	 * any change to it needs a fresh approval.
+	 */
+	REPO_COMMANDS_ENABLED: z
+		.enum(["true", "false"])
+		.default("false")
+		.transform((value) => value === "true"),
+	/** Hard ceiling per run, whatever the command asked for. */
+	REPO_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
+	/** Used when a command declares no `timeoutSeconds` of its own. */
+	REPO_COMMAND_DEFAULT_TIMEOUT_MS: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(120_000),
 	/** Per-table cap for `includeData` domains. Exceeding it fails that
 	 * table and reports it, rather than writing a truncated file that looks
 	 * complete. */

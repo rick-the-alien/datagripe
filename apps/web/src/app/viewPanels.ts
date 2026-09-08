@@ -40,6 +40,7 @@ let projectSettingsOpener: (() => void) | null = null;
 let domainManagerOpener: ((connectionRef: string) => void) | null = null;
 let syncOpener: ((connectionRef: string, name: string) => void) | null = null;
 let accessOpener: ((connectionRef: string, name: string) => void) | null = null;
+let runOpener: ((connectionRef: string, name: string) => void) | null = null;
 
 function focusOrAdd(
 	api: DockviewApi,
@@ -152,6 +153,14 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 			params: { view: "sync", connectionRef, connectionName: name },
 		});
 	};
+	runOpener = (connectionRef, name) => {
+		focusOrAdd(api, {
+			id: `run:${connectionRef}`,
+			component: "runPanel",
+			title: `run: ${name}`,
+			params: { view: "run", connectionRef, connectionName: name },
+		});
+	};
 	accessOpener = (connectionRef, name) => {
 		focusOrAdd(api, {
 			id: `access:${connectionRef}`,
@@ -191,6 +200,10 @@ export function openProjectSettings(): void {
 
 export function openDomainManager(connectionRef: string): void {
 	domainManagerOpener?.(connectionRef);
+}
+
+export function openRunPanel(connectionRef: string, name: string): void {
+	runOpener?.(connectionRef, name);
 }
 
 export function openSyncPanel(connectionRef: string, name: string): void {

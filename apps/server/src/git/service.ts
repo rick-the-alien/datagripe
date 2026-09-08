@@ -215,6 +215,7 @@ export function createGitDatasourcesService(
 						tlsMode: "disable",
 						readOnly: true,
 						showAllSchemas: false,
+						noPassword: false,
 					},
 					paths: [],
 				} as RepoConfig,
@@ -319,6 +320,12 @@ export function createGitDatasourcesService(
 		datasourceId: string,
 		config: RepoConfig,
 	): Promise<{ password: string } | { unavailable: string }> {
+		// A `trust`-auth cluster on loopback — what a self-contained
+		// example checkout runs — takes no credential at all. Declared
+		// explicitly in the file, never inferred from a missing variable.
+		if (config.datasource.noPassword) {
+			return { password: "" };
+		}
 		const name = config.datasource.passwordEnv;
 		if (name !== undefined) {
 			const value = env[name];

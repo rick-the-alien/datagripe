@@ -78,8 +78,13 @@ At the work tree root, committed, hand-editable:
 .datagripe/
   config.yaml     connection identity, fields, branding, paths
   sync.yaml       where the domain export writes, and how   (optional)
+  run.yaml        commands DataGripe can run                (optional)
   domains.yaml    domains, colours and tagged objects        (generated)
 ```
+
+`run.yaml` is the one file here DataGripe *executes* rather than
+interprets, and it has its own gate, its own approval and its own
+document: `docs/spec/repo-commands.md`.
 
 Three files rather than one, and the split is by feature rather than by
 size. A config that is "really just connection info and branding" stays
@@ -260,6 +265,15 @@ removes the row and touches nothing on disk.
 The repository names an environment variable; the server resolves it.
 This is `passwordEnv` from `docs/spec/connection-sources.md`, and it is
 the documented path.
+
+**`noPassword: true`** is the other one: this database takes no
+credential at all. It exists for the self-contained case — a trust-auth
+cluster on loopback that the repository starts for itself
+(`docs/spec/repo-commands.md`), which is what makes `datagripe-example`
+importable with nothing to configure. Explicit rather than inferred from
+a missing `passwordEnv`, because inferring it would turn a typo in a
+variable name into a silent attempt to connect with no credential. The
+two are alternatives: setting both, or neither, refuses the file.
 
 When the variable is not set, the datasource is **listed and not
 connectable**, with the variable's name in the message. It is not hidden

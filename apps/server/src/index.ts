@@ -22,6 +22,7 @@ import { migrate } from "./db/app/migrate";
 import { createAppDb } from "./db/app/pool";
 import { createDocumentsService } from "./documents/service";
 import { createExecutionRegistry } from "./execution/registry";
+import { CommandRunner } from "./git/runner";
 import { createGitDatasourcesService } from "./git/service";
 import { createAuthRoutes, sessionFromRequest } from "./http/auth";
 import { errorResponse } from "./http/errors";
@@ -177,6 +178,35 @@ const executions = createExecutionRegistry({
 	},
 });
 const documents = createDocumentsService(appDb);
+
+/**
+ * The command runner (docs/spec/repo-commands.md). Output is streamed to
+ * the whole workspace rather than to the socket that pressed the button:
+ * a run that starts a database is something everybody in the project is
+ * affected by, and the person who pressed it may well close the tab.
+ */
+const commandRunner = new CommandRunner({
+	maxTimeoutMs: config.REPO_COMMAND_TIMEOUT_MS,
+	defaultTimeoutMs: config.REPO_COMMAND_DEFAULT_TIMEOUT_MS,
+	onOutput: (target, stream, chunk) =>
+		hub.broadcastToWorkspace(target.workspaceId, {
+			version: 1,
+			kind: "event",
+			eventId: crypto.randomUUID(),
+			topic: "repo.run.output",
+			occurredAt: new Date().toISOString(),
+			payload: { runId: target.runId, stream, chunk },
+		}),
+	onExit: (target, exitCode, killed, reason) =>
+		hub.broadcastToWorkspace(target.workspaceId, {
+			version: 1,
+			kind: "event",
+			eventId: crypto.randomUUID(),
+			topic: "repo.run.exit",
+			occurredAt: new Date().toISOString(),
+			payload: { runId: target.runId, exitCode, killed, reason },
+		}),
+});
 const dispatch = createDispatcher({
 	appDb,
 	connections,
@@ -190,6 +220,13 @@ const dispatch = createDispatcher({
 	// Absent, not present-and-disabled: the dispatcher's own gate reads
 	// "is this here", and there is one place that decides.
 	...(config.GIT_ENABLED && !config.HOST_FS_DISABLED ? { gitDatasources } : {}),
+	// A separate switch on purpose: git datasources read and write files,
+	// this executes a program from a repository.
+	...(config.REPO_COMMANDS_ENABLED &&
+	config.GIT_ENABLED &&
+	!config.HOST_FS_DISABLED
+		? { commandRunner }
+		: {}),
 });
 const auth = createAuthRoutes({
 	appDb,

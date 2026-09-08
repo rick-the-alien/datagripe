@@ -141,6 +141,7 @@ export async function runExportConfig(
 						? { username: connection.username }
 						: {}),
 					passwordEnv,
+					noPassword: false,
 					tlsMode: connection.tlsMode ?? "disable",
 					readOnly: connection.readOnly,
 					showAllSchemas: connection.showAllSchemas,

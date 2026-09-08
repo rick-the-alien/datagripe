@@ -4315,3 +4315,98 @@ th.dg-tv-pk .dg-tv-th {
 	color: var(--dg-ink);
 	border-color: var(--dg-violet);
 }
+
+/* ---------------------------------------------------------------------
+   Repository commands (docs/spec/repo-commands.md).
+
+   The one place DataGripe offers to run a program it did not write, so
+   the argv is on screen before the button is.
+   ------------------------------------------------------------------ */
+
+.dg-repo-commands {
+	border-top: 1px solid var(--dg-rule-soft);
+	margin-top: 6px;
+	padding: 6px 10px 0;
+}
+
+.dg-repo-commands-head {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+	text-transform: lowercase;
+	letter-spacing: 0.04em;
+	margin-bottom: 4px;
+}
+
+.dg-repo-commands-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dg-repo-command {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: 0;
+	padding: 2px 0;
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	cursor: pointer;
+}
+
+.dg-repo-command-run {
+	color: var(--dg-green);
+}
+
+.dg-repo-command-desc {
+	margin: 0 0 4px 18px;
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+}
+
+/* Not styled as a warning by default: most of the time this is a normal
+	 first-run step. It turns loud only when the list *changed*. */
+.dg-repo-trust {
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-repo-argv {
+	list-style: none;
+	margin: 4px 0;
+	padding: 0;
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-repo-argv li {
+	margin-bottom: 6px;
+}
+
+.dg-repo-argv code {
+	display: block;
+	font-family: var(--dg-font-mono);
+	color: var(--dg-cyan);
+	word-break: break-all;
+}
+
+.dg-repo-argv em {
+	color: var(--dg-ink-mute);
+	font-style: normal;
+}
+
+.dg-run-output {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 8px 10px;
+	margin-top: 8px;
+	max-height: 60vh;
+	overflow: auto;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	white-space: pre-wrap;
+	word-break: break-word;
+}

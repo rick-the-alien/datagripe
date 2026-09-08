@@ -274,15 +274,33 @@ can read and run in place.
 - [x] The repo's path list is *mirrored* into `datasource_paths` rather
       than merged with it, so `file.list`, `file.open`, the document
       origin and archive-on-removal are the Phase 12 machinery untouched
+- [x] `noPassword` in `config.yaml`, so a trust-auth cluster inside a
+      checkout can be imported with nothing to configure
+- [x] Repository commands (`docs/spec/repo-commands.md`, migration
+      0016): `.datagripe/run.yaml` declares argv-form commands, gated by
+      `REPO_COMMANDS_ENABLED` and by an explicit per-workspace approval
+      of a hash of the command list. A change — including one a pull
+      brought in — needs a fresh approval, because otherwise `git pull`
+      is remote code execution
+- [x] `background: true` for a service rather than a task: no deadline,
+      a stop button, and it is in the hash so flipping it re-earns trust
+- [x] Narrow environment (allowlist, not a filter), stdin ignored,
+      SIGTERM then SIGKILL, output streamed to the workspace, argv in
+      every audit line
+- [x] `datagripe-example`: a repository that starts its own embedded
+      PostgreSQL in the checkout and seeds it, and exercises every
+      feature above
 - [ ] Branch switching, conflict resolution, hunk-level staging — all
       the points where a terminal is the better tool
 - [ ] Followed cursors in view mode (`docs/spec/markdown-documents.md`
       "What is not built"); highlighting for non-SQL fences
 
-Exit: clone a repo, get a working datasource with its sections and
-domains; open its `maintenance.md`, run the query in it, tick the file
-in the repository section and commit it — with nothing having been
-committed, pushed or pulled that was not pressed.
+Exit: clone `datagripe-example`, approve its commands, press **start
+database**, and have a working project — schema, data, queries,
+runbooks, domains — without configuring anything. Open a runbook, run
+the query in it, tick a file in the repository section and commit it,
+with nothing having been committed, pushed, pulled or executed that was
+not pressed.
 
 ## Unscheduled / parking lot
 - SQLite type/nullability/default changes — need the 12-step table rebuild

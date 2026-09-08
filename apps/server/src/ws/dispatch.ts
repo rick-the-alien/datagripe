@@ -1,4 +1,8 @@
-import type { Document, DocumentOrigin } from "@datagripe/contracts";
+import type {
+	Document,
+	DocumentOrigin,
+	RepoCommandsState,
+} from "@datagripe/contracts";
 import {
 	accessReportRequestSchema,
 	accessRoleSetRequestSchema,
@@ -45,6 +49,10 @@ import {
 	objectAlterRequestSchema,
 	objectDescribeRequestSchema,
 	redisGetRequestSchema,
+	repoCommandsRequestSchema,
+	repoRunCancelRequestSchema,
+	repoRunRequestSchema,
+	repoTrustRequestSchema,
 	schemaChildrenRequestSchema,
 	tableMutateRequestSchema,
 	tableRowsRequestSchema,
@@ -86,12 +94,21 @@ import {
 	writeTextFile,
 } from "../files/browse";
 import { getDatasourcePath, setDatasourcePaths } from "../files/service";
+import {
+	clearTrust,
+	hashCommands,
+	readCommands,
+	readTrust,
+	setTrust,
+} from "../git/commands";
 import { isDatagripeFile, relativeToRepo, writeSync } from "../git/config";
 import { dirtyOriginPaths } from "../git/dirty";
 import { runGit } from "../git/export";
 import { runExportConfig } from "../git/exportConfig";
 import * as gitRepo from "../git/repo";
 import type { GitOptions } from "../git/run";
+import type { CommandRunner } from "../git/runner";
+import { idFromRef } from "../git/store";
 import type {
 	GitDatasourceEntry,
 	GitDatasourcesServiceWithAdmin,
@@ -146,6 +163,8 @@ export interface DispatcherDeps {
 	config: AppConfig;
 	/** Present when GIT_ENABLED and the host filesystem is available. */
 	gitDatasources?: GitDatasourcesServiceWithAdmin;
+	/** Present only when REPO_COMMANDS_ENABLED is on as well. */
+	commandRunner?: CommandRunner;
 }
 
 const ROLE_RANK = { viewer: 0, editor: 1, owner: 2 } as const;
@@ -206,6 +225,13 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"git.pull": "editor",
 	"git.datasource.reload": "editor",
 	"datasource.export-config": "editor",
+	// Approving a command list is the moment somebody vouches for code
+	// from a repository, and running one executes it on the host. Both
+	// are `owner`: this is the only feature in DataGripe that runs a
+	// program it did not write (docs/spec/repo-commands.md).
+	"repo.trust": "owner",
+	"repo.run": "owner",
+	"repo.run.cancel": "owner",
 	// These two reach the network, which is where the line is.
 	"git.push": "owner",
 	"git.datasource.add": "owner",
@@ -330,6 +356,46 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 	 * disabled-with-a-tooltip when it is off — so reaching here at all
 	 * means something went around the UI.
 	 */
+	/**
+	 * The command runner, or a named refusal. Its own gate, separate from
+	 * `GIT_ENABLED`: wanting git datasources is not the same decision as
+	 * wanting DataGripe to execute a program from a repository.
+	 */
+	function requireCommandsEnabled(): CommandRunner {
+		if (deps.commandRunner === undefined) {
+			throw new ServiceError(
+				ErrorCodes.Forbidden,
+				"Running a repository's commands is disabled — REPO_COMMANDS_ENABLED is off",
+			);
+		}
+		return deps.commandRunner;
+	}
+
+	/** What the panel needs: the list, its hash, and who vouched for it. */
+	async function commandsState(
+		workspaceId: string,
+		connectionRef: string,
+		repoPath: string,
+	): Promise<RepoCommandsState> {
+		const id = idFromRef(connectionRef);
+		const { commands } = await readCommands(repoPath);
+		const commandsHash = hashCommands(commands);
+		const trust = id === null ? null : await readTrust(appDb, workspaceId, id);
+		return {
+			connectionRef,
+			commands,
+			commandsHash,
+			approvedHash: trust?.commandsHash ?? null,
+			approvedBy: trust?.approvedBy ?? null,
+			approvedAt: trust?.approvedAt ?? null,
+			trusted: trust !== null && trust.commandsHash === commandsHash,
+			unavailable:
+				deps.commandRunner === undefined
+					? "Running a repository's commands is disabled — REPO_COMMANDS_ENABLED is off"
+					: null,
+		};
+	}
+
 	function requireGit(): GitDatasourcesServiceWithAdmin {
 		if (deps.gitDatasources === undefined) {
 			throw new ServiceError(
@@ -1019,6 +1085,109 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					diskChanged: true,
 					diskContent: onDisk.content,
 				};
+			}
+
+			case "repo.commands": {
+				const request = repoCommandsRequestSchema.parse(payload);
+				const { entry } = await requireRepo(workspace.id, payload);
+				return commandsState(
+					workspace.id,
+					request.connectionRef,
+					entry.repoPath,
+				);
+			}
+
+			case "repo.trust": {
+				const request = repoTrustRequestSchema.parse(payload);
+				requireCommandsEnabled();
+				const { entry } = await requireRepo(workspace.id, payload);
+				const id = idFromRef(request.connectionRef);
+				if (id === null) {
+					throw new ServiceError(ErrorCodes.BadRequest, "Not a git datasource");
+				}
+				if (!request.approve) {
+					await clearTrust(appDb, workspace.id, id);
+					return commandsState(
+						workspace.id,
+						request.connectionRef,
+						entry.repoPath,
+					);
+				}
+				const { commands } = await readCommands(entry.repoPath);
+				const current = hashCommands(commands);
+				// The client sends the hash it was shown. If the file moved
+				// in between, what they approved is not what is on disk, and
+				// approving it anyway is the whole hole this closes.
+				if (current !== request.commandsHash) {
+					throw new ServiceError(
+						ErrorCodes.Conflict,
+						"The command list changed while you were reading it — look again before approving",
+					);
+				}
+				await setTrust(appDb, workspace.id, id, current, ctx.userId);
+				log.audit("repo.trust", {
+					workspaceId: workspace.id,
+					userId: ctx.userId,
+					connectionRef: request.connectionRef,
+					commandsHash: current,
+					commands: commands.map((command) => command.run.join(" ")),
+				});
+				return commandsState(
+					workspace.id,
+					request.connectionRef,
+					entry.repoPath,
+				);
+			}
+
+			case "repo.run": {
+				const request = repoRunRequestSchema.parse(payload);
+				const runner = requireCommandsEnabled();
+				const { entry } = await requireRepo(workspace.id, payload);
+				const id = idFromRef(request.connectionRef);
+				if (id === null) {
+					throw new ServiceError(ErrorCodes.BadRequest, "Not a git datasource");
+				}
+				const { commands } = await readCommands(entry.repoPath);
+				const current = hashCommands(commands);
+				const trust = await readTrust(appDb, workspace.id, id);
+				// Re-checked here and not only in the UI: the list on disk
+				// now is what would run, and it may have moved since the
+				// panel rendered.
+				if (trust === null || trust.commandsHash !== current) {
+					throw new ServiceError(
+						ErrorCodes.Forbidden,
+						trust === null
+							? "Nobody has approved this repository's commands yet"
+							: "This repository's commands changed since they were approved — review and approve them again",
+					);
+				}
+				const command = commands.find(
+					(candidate) => candidate.name === request.name,
+				);
+				if (command === undefined) {
+					throw new ServiceError(
+						ErrorCodes.NotFound,
+						`No command called '${request.name}' in this repository`,
+					);
+				}
+				const handle = await runner.start(entry.repoPath, command, {
+					workspaceId: workspace.id,
+					userId: ctx.userId,
+					connectionRef: request.connectionRef,
+				});
+				return {
+					runId: handle.runId,
+					connectionRef: request.connectionRef,
+					name: command.name,
+					argv: handle.argv,
+					cwd: handle.cwd,
+				};
+			}
+
+			case "repo.run.cancel": {
+				const request = repoRunCancelRequestSchema.parse(payload);
+				const runner = requireCommandsEnabled();
+				return { cancelled: runner.stop(request.runId, "cancelled") };
 			}
 
 			case "git.datasource.add": {

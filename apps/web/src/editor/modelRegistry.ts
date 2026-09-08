@@ -47,6 +47,23 @@ export function documentModelUri(documentId: string): string {
 	return `datagripe://document/${documentId}.sql`;
 }
 
+/**
+ * The document id inside a model URI, or undefined for any other model
+ * — the table view's value editor uses `inmemory://value/…`. It lives
+ * beside `documentModelUri` so the parse and the build cannot drift, and
+ * takes the URI structurally so this module stays Monaco-free.
+ */
+export function documentIdFromModelUri(uri: {
+	scheme: string;
+	authority: string;
+	path: string;
+}): string | undefined {
+	if (uri.scheme !== "datagripe" || uri.authority !== "document") {
+		return undefined;
+	}
+	return /^\/(.+)\.sql$/.exec(uri.path)?.[1];
+}
+
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 export function createModelRegistry<T extends ModelHandle = ModelHandle>(

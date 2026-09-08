@@ -1,6 +1,7 @@
 import { statementAt } from "@datagripe/sql-tools";
 import * as monaco from "monaco-editor";
 import { connectionIdForDocument } from "../../stores/documentConnection";
+import { documentIdFromModelUri } from "../modelRegistry";
 import { type Catalog, type CatalogTable, catalog } from "./catalog";
 import { completionContext, parseStatementTables } from "./context";
 import { SQL_FUNCTIONS, SQL_KEYWORDS } from "./keywords";
@@ -127,12 +128,7 @@ export function registerSqlCompletion(
 				word.endColumn,
 			);
 
-			// datagripe://document/<id>.sql parses with authority="document";
-			// the document id is the path minus the .sql suffix.
-			const documentId =
-				model.uri.scheme === "datagripe" && model.uri.authority === "document"
-					? /^\/(.+)\.sql$/.exec(model.uri.path)?.[1]
-					: undefined;
+			const documentId = documentIdFromModelUri(model.uri);
 			const connectionId = connectionIdForDocument(documentId);
 			if (connectionId !== undefined) {
 				catalogInstance.ensureCatalog(connectionId);

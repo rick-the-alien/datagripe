@@ -2607,7 +2607,7 @@ th.dg-tv-pk .dg-tv-th {
 
 .dg-tv-side {
 	flex: none;
-	width: 320px;
+	width: 360px;
 	min-width: 200px;
 	display: flex;
 	flex-direction: column;
@@ -2633,25 +2633,63 @@ th.dg-tv-pk .dg-tv-th {
 	white-space: nowrap;
 }
 
-.dg-tv-side-body {
+/* The value editor itself (docs/spec/table-view.md "The value editor").
+   Monaco brings its own scrolling and its own background, so the pane
+   gives it the whole middle and no padding of its own. */
+.dg-tv-side-editor {
 	flex: 1;
 	min-height: 0;
-	overflow: auto;
-	margin: 0;
-	padding: 10px;
-	color: var(--dg-ink);
+	overflow: hidden;
+	background: var(--dg-void);
+	border-bottom: 1px solid var(--dg-rule-soft);
+}
+
+.dg-tv-side-type {
+	flex: none;
+	color: var(--dg-cyan);
+}
+
+/* The first JSON error, so a malformed jsonb value is a sentence here
+   rather than a failed transaction later. */
+.dg-tv-side-problem {
+	flex: none;
+	padding: 5px 10px;
+	color: var(--dg-magenta);
+	background: var(--dg-sev-blocker-bg);
 	font-family: var(--dg-font-mono);
-	font-size: var(--dg-fs-tree);
+	font-size: var(--dg-fs-meta);
 	line-height: var(--dg-lh-tree);
-	white-space: pre-wrap;
 	word-break: break-word;
 }
 
 .dg-tv-side-foot {
 	display: flex;
+	align-items: center;
 	gap: 6px;
 	padding: 6px 10px;
 	border-top: 1px solid var(--dg-rule);
+}
+
+/* ---- the cell menu ------------------------------------------------------
+ * docs/spec/table-view.md "The cell menu". The shared context-menu look,
+ * one step wider: its items are sentences ("show in value editor") and
+ * half of them carry a shortcut.
+ */
+
+.dg-cell-menu {
+	min-width: 216px;
+}
+
+.dg-cell-menu-slot {
+	display: contents;
+}
+
+.dg-cell-menu .dg-context-item:disabled {
+	color: var(--dg-ink-faint);
+}
+
+.dg-cell-menu .dg-context-item:disabled.dg-context-danger {
+	color: var(--dg-ink-faint);
 }
 
 /* ---- editable columns tab -----------------------------------------------

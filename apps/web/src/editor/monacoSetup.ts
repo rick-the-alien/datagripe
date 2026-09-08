@@ -1,14 +1,30 @@
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { registerSqlCompletion } from "./completion/provider";
 
 /**
- * Monaco bundled locally (no CDN loader). SQL is the only language we
- * register workers for; the base editor worker covers everything else.
+ * Monaco bundled locally (no CDN loader). SQL needs no worker of its own
+ * (its grammar and our completion provider run on the main thread), but
+ * JSON does: the table view's value editor
+ * (docs/spec/table-view.md "The value editor") gets its squiggles from
+ * the JSON language service, and without this worker a malformed `jsonb`
+ * value would look fine right up until the database refused it.
  */
 self.MonacoEnvironment = {
-	getWorker: () => new editorWorker(),
+	getWorker: (_workerId, label) =>
+		label === "json" ? new jsonWorker() : new editorWorker(),
 };
+
+monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+	validate: true,
+	// A database JSON value is data, not a config file: comments and
+	// trailing commas are errors, not tolerated extensions.
+	allowComments: false,
+	trailingCommas: "error",
+	schemaValidation: "error",
+	enableSchemaRequest: false,
+});
 
 monaco.editor.defineTheme("datagripe-dark", {
 	base: "vs-dark",
@@ -24,6 +40,12 @@ monaco.editor.defineTheme("datagripe-dark", {
 		{ token: "number.sql", foreground: "5EEAD4" },
 		{ token: "operator.sql", foreground: "9AA5B6" },
 		{ token: "predefined.sql", foreground: "5EEAD4" },
+		// JSON, for the value editor: keys cyan like a type, strings soft
+		// violet like SQL strings, literals magenta like keywords.
+		{ token: "string.key.json", foreground: "5EEAD4" },
+		{ token: "string.value.json", foreground: "C4A6FF" },
+		{ token: "number.json", foreground: "5EEAD4" },
+		{ token: "keyword.json", foreground: "FF3EA5" },
 	],
 	colors: {
 		"editor.background": "#0B0E14",

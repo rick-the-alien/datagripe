@@ -297,6 +297,101 @@ describe("postgres table view", () => {
 		expect(Number(rows[0]?.doubled)).toBe(23);
 	});
 
+	/**
+	 * A grid value is text, and bound straight at a jsonb column the
+	 * driver encodes it as a JSON *string* — the document silently becomes
+	 * a scalar. Only a real server can catch that, so it is tested here
+	 * rather than against the generated SQL.
+	 */
+	pgTest("a json document lands as a document, not a string", async () => {
+		await reseed();
+		const outcome = await adapter.mutateTable(
+			CONNECTION,
+			{
+				schema: "app",
+				table: "payments",
+				edits: [
+					{
+						type: "update",
+						key: { id: { kind: "text", text: "1" } },
+						values: {
+							meta: { kind: "text", text: '{\n  "a": 2,\n  "b": ["x"]\n}' },
+						},
+					},
+					{
+						type: "insert",
+						values: {
+							id: { kind: "text", text: "9" },
+							amount: { kind: "text", text: "1.00" },
+							meta: { kind: "text", text: '{"inserted": true}' },
+						},
+					},
+				],
+			},
+			LIMITS,
+		);
+		expect(outcome.applied).toBe(2);
+
+		const rows = await fixtures`
+			SELECT id, jsonb_typeof(meta) AS kind, meta->>'a' AS a,
+				meta->>'inserted' AS inserted
+			FROM app.payments WHERE id IN (1, 9) ORDER BY id`;
+		expect(rows[0]?.kind).toBe("object");
+		expect(rows[0]?.a).toBe("2");
+		expect(rows[1]?.kind).toBe("object");
+		expect(rows[1]?.inserted).toBe("true");
+	});
+
+	pgTest(
+		"malformed json fails the statement instead of being stored",
+		async () => {
+			await reseed();
+			await expect(
+				adapter.mutateTable(
+					CONNECTION,
+					{
+						schema: "app",
+						table: "payments",
+						edits: [
+							{
+								type: "update",
+								key: { id: { kind: "text", text: "1" } },
+								values: { meta: { kind: "text", text: '{"a":' } },
+							},
+						],
+					},
+					LIMITS,
+				),
+			).rejects.toThrow(/json/i);
+			const rows =
+				await fixtures`SELECT meta->>'a' AS a FROM app.payments WHERE id = 1`;
+			expect(rows[0]?.a).toBe("1");
+		},
+	);
+
+	pgTest("a null json value is still NULL", async () => {
+		await reseed();
+		await adapter.mutateTable(
+			CONNECTION,
+			{
+				schema: "app",
+				table: "payments",
+				edits: [
+					{
+						type: "update",
+						key: { id: { kind: "text", text: "1" } },
+						values: { meta: { kind: "null" } },
+					},
+				],
+			},
+			LIMITS,
+		);
+		const rows =
+			await fixtures`SELECT meta, jsonb_typeof(meta) AS kind FROM app.payments WHERE id = 1`;
+		expect(rows[0]?.meta).toBeNull();
+		expect(rows[0]?.kind).toBeNull();
+	});
+
 	pgTest("a whole batch rolls back when one edit misses", async () => {
 		await reseed();
 		await expect(

@@ -20,17 +20,46 @@ export interface TableDialect {
 	splitOptions: SplitOptions;
 	/** Tail of an INSERT that supplies no columns at all. */
 	defaultRow: string;
+	/**
+	 * How a bound value is written into a column, when the driver's own
+	 * parameter typing needs correcting. Returns the placeholder as-is
+	 * unless the column is one of the special cases.
+	 */
+	castParam?:
+		| ((column: TableColumn, placeholder: string) => string)
+		| undefined;
 }
 
 function doubleQuoted(identifier: string): string {
 	return `"${identifier.replaceAll('"', '""')}"`;
 }
 
+/**
+ * PostgreSQL JSON columns, which need the cast below. Matched against a
+ * fixed set rather than interpolated, so the type name in the generated
+ * SQL is ours and not the catalog's.
+ */
+const POSTGRES_JSON_CASTS: Record<string, string> = {
+	json: "::text::json",
+	jsonb: "::text::jsonb",
+};
+
 export const POSTGRES_TABLE_DIALECT: TableDialect = {
 	quote: doubleQuoted,
 	placeholder: (index) => `$${index}`,
 	splitOptions: {},
 	defaultRow: "DEFAULT VALUES",
+	/**
+	 * A grid value is always text, and for a `json`/`jsonb` column the
+	 * driver infers the parameter's type from the target and then encodes
+	 * our string *as a JSON string* — so `{"a":1}` lands as the scalar
+	 * document `"{\"a\":1}"` rather than an object, silently. Binding
+	 * through `text` puts the parse back where it belongs: the database
+	 * reads the document, and malformed JSON fails the statement instead
+	 * of being stored as a string.
+	 */
+	castParam: (column, placeholder) =>
+		`${placeholder}${POSTGRES_JSON_CASTS[column.dataType.trim().toLowerCase()] ?? ""}`,
 };
 
 export const MYSQL_TABLE_DIALECT: TableDialect = {
@@ -188,6 +217,24 @@ function inputValue(input: CellInput): string | null {
 }
 
 /**
+ * Bind a value for one column: the placeholder, cast if the dialect
+ * says the column needs it. Only write targets go through this — a key
+ * predicate compares a value the database itself gave us, and casting
+ * there would change which rows the statement addresses.
+ */
+function bindFor(
+	dialect: TableDialect,
+	binder: Binder,
+	column: TableColumn,
+	value: unknown,
+): string {
+	const placeholder = binder.bind(value);
+	return dialect.castParam === undefined
+		? placeholder
+		: dialect.castParam(column, placeholder);
+}
+
+/**
  * `key = value` terms for a row's primary key. A null key value becomes
  * `IS NULL`, which never matches in SQL for a real PK but keeps the
  * generated statement valid rather than silently matching everything.
@@ -275,13 +322,22 @@ export function updateStatement(
 	if (names.length === 0) {
 		throw new TableRequestError("An update needs at least one column");
 	}
+	const byName = new Map(
+		relation.columns.map((column) => [column.name, column]),
+	);
 	const binder = new Binder(dialect);
 	const assignments = names.map((name) => {
 		const input = edit.values[name] as CellInput;
 		if (input.kind === "default") {
 			return `${dialect.quote(name)} = DEFAULT`;
 		}
-		return `${dialect.quote(name)} = ${binder.bind(inputValue(input))}`;
+		const column = byName.get(name) as TableColumn;
+		return `${dialect.quote(name)} = ${bindFor(
+			dialect,
+			binder,
+			column,
+			inputValue(input),
+		)}`;
 	});
 	const where = keyPredicate(dialect, binder, edit.key, relation.keyColumns);
 	return {
@@ -307,9 +363,17 @@ export function insertStatement(
 	if (names.length === 0) {
 		return { sql: `INSERT INTO ${target} ${dialect.defaultRow}`, params: [] };
 	}
+	const byName = new Map(
+		relation.columns.map((column) => [column.name, column]),
+	);
 	const binder = new Binder(dialect);
 	const placeholders = names.map((name) =>
-		binder.bind(inputValue(explicit[name] as CellInput)),
+		bindFor(
+			dialect,
+			binder,
+			byName.get(name) as TableColumn,
+			inputValue(explicit[name] as CellInput),
+		),
 	);
 	return {
 		sql: `INSERT INTO ${target} (${names

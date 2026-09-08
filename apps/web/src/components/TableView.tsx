@@ -11,6 +11,13 @@ import { wsClient } from "../api/ws";
 import { readViewPanelParams } from "../app/viewPanels";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
+import { CellMenu, type CellMenuItem } from "./CellMenu";
+import {
+	canSetDefault,
+	cellLanguage,
+	filterPredicate,
+	rowTsv,
+} from "./cellActions";
 import { ExportControls } from "./ExportControls";
 import {
 	buildEdits,
@@ -27,6 +34,7 @@ import {
 	withNewRow,
 	withoutInsert,
 } from "./tableEdits";
+import { ValueEditor, type ValueProblem } from "./ValueEditor";
 
 /**
  * Table view (docs/spec/table-view.md, brand-system.md "Table view — the
@@ -34,9 +42,11 @@ import {
  * goes to data.
  *
  * The grid is the whole surface, so everything that is a mode rather
- * than a constant — transpose, the value panel, row insert/delete —
+ * than a constant — transpose, the value editor, row insert/delete —
  * lives in the overflow menu, and the commit/revert pair only appears
- * while there is something to commit.
+ * while there is something to commit. Everything that is about one cell
+ * — copy, paste, NULL, filter by this value, and the value editor —
+ * lives in that cell's right-click menu instead.
  */
 
 const ROW_LIMITS = [100, 200, 500, 1_000] as const;
@@ -47,6 +57,12 @@ type Focus = {
 	index: number;
 	column: string;
 };
+
+/** An open cell menu: where it was summoned, and over which cell. */
+type MenuAt = { x: number; y: number; target: Focus };
+
+/** The value editor's live text for one cell, and its first error. */
+type Draft = { cellKey: string; text: string; problem: ValueProblem | null };
 
 function sortDirection(
 	sort: TableSort[],
@@ -169,7 +185,7 @@ function OverflowMenu(props: {
 					{item("transpose", props.onToggleTranspose, {
 						ticked: props.transposed,
 					})}
-					{item("value panel", props.onTogglePanel, {
+					{item("value editor", props.onTogglePanel, {
 						ticked: props.panelOpen,
 					})}
 					<div className="dg-context-separator" />
@@ -198,6 +214,8 @@ function CellBody(props: {
 	onStartEdit: () => void;
 	onCommit: (value: CellInput) => void;
 	onCancel: () => void;
+	onCopy: () => void;
+	onPaste: () => void;
 }) {
 	const shown =
 		props.pending === undefined
@@ -266,6 +284,22 @@ function CellBody(props: {
 				if (props.editable && (event.key === "Enter" || event.key === "F2")) {
 					event.preventDefault();
 					props.onStartEdit();
+					return;
+				}
+				if (!(event.ctrlKey || event.metaKey)) {
+					return;
+				}
+				// The cell is a button, so the browser's own copy has nothing
+				// to act on: a focused cell copies its value, not its markup.
+				if (event.key === "c") {
+					event.preventDefault();
+					props.onCopy();
+				} else if (props.editable && event.key === "v") {
+					event.preventDefault();
+					props.onPaste();
+				} else if (props.editable && event.key === "Backspace") {
+					event.preventDefault();
+					props.onCommit({ kind: "null" });
 				}
 			}}
 		>
@@ -295,6 +329,13 @@ export function TableView(props: IDockviewPanelProps) {
 	const [transposed, setTransposed] = useState(false);
 	const [panelOpen, setPanelOpen] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [menu, setMenu] = useState<MenuAt | null>(null);
+	const [draft, setDraft] = useState<Draft | null>(null);
+	/**
+	 * Bumped on every fetch. The value editor keys its text on the cell,
+	 * and after a refresh the same cell address holds a different value.
+	 */
+	const [generation, setGeneration] = useState(0);
 
 	const capabilities =
 		connection === undefined
@@ -321,6 +362,8 @@ export function TableView(props: IDockviewPanelProps) {
 			// index no longer points at the row the user touched.
 			setEdits(NO_PENDING_EDITS);
 			setEditing(null);
+			setDraft(null);
+			setGeneration((value) => value + 1);
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : "Could not read rows");
 		} finally {
@@ -385,26 +428,197 @@ export function TableView(props: IDockviewPanelProps) {
 		setEditing(null);
 	};
 
-	const focusedValue = (): unknown => {
-		if (focus === null) {
-			return null;
-		}
+	/** The pending edit on a cell, in either orientation of row. */
+	const pendingOf = (target: Focus): CellInput | undefined =>
+		target.kind === "insert"
+			? edits.inserts[target.index]?.[target.column]
+			: pendingCell(edits, target.index, target.column);
+
+	/** What a cell currently holds: its pending edit if it has one. */
+	const cellValue = (target: Focus): unknown => {
 		const columnIndex = columns.findIndex(
-			(column) => column.name === focus.column,
+			(column) => column.name === target.column,
 		);
 		if (columnIndex < 0) {
 			return null;
 		}
-		if (focus.kind === "insert") {
-			const input = edits.inserts[focus.index]?.[focus.column];
-			return input === undefined || input.kind !== "text" ? null : input.text;
-		}
-		const pending = pendingCell(edits, focus.index, focus.column);
+		const pending = pendingOf(target);
 		if (pending !== undefined) {
 			return pending.kind === "text" ? pending.text : null;
 		}
-		return rows[focus.index]?.[columnIndex] ?? null;
+		if (target.kind === "insert") {
+			return null;
+		}
+		return rows[target.index]?.[columnIndex] ?? null;
 	};
+
+	const focusedValue = (): unknown =>
+		focus === null ? null : cellValue(focus);
+
+	const copyText = (text: string) => {
+		void navigator.clipboard.writeText(text).catch(() => {
+			setError("The clipboard is not available in this context");
+		});
+	};
+
+	/**
+	 * Paste lands in the pending set, not in the database — the same place
+	 * a typed edit lands, so it is still commit-or-revert.
+	 */
+	const pasteInto = (target: Focus) => {
+		void navigator.clipboard
+			.readText()
+			.then((text) => {
+				setCell(target, { kind: "text", text });
+				setFocus(target);
+			})
+			.catch(() => {
+				setError("Could not read the clipboard — paste needs permission");
+			});
+	};
+
+	/**
+	 * The cell menu (docs/spec/table-view.md "The cell menu"). Built here
+	 * rather than in the menu component because every item is a statement
+	 * about this grid's state: what is writable, what a viewer may do, and
+	 * what this engine's DEFAULT means.
+	 */
+	const menuItems = (target: Focus): CellMenuItem[] => {
+		const column = columns.find((entry) => entry.name === target.column);
+		if (column === undefined) {
+			return [];
+		}
+		const value = cellValue(target);
+		const editable = canEdit && !column.generated;
+		const isInsert = target.kind === "insert";
+		const marked = !isInsert && edits.deletes.includes(target.index);
+		const generatedNote = column.generated
+			? `${column.name} is generated — the database owns its value`
+			: undefined;
+
+		return [
+			{
+				label: "show in value editor",
+				onSelect: () => {
+					setFocus(target);
+					setPanelOpen(true);
+				},
+				title: "Open this cell in the side pane",
+			},
+			{
+				label: "edit cell",
+				kbd: "enter",
+				disabled: !editable,
+				title: generatedNote,
+				onSelect: () => {
+					setFocus(target);
+					setEditing(target);
+				},
+			},
+			{
+				label: "copy value",
+				kbd: "ctrl/cmd c",
+				separatorBefore: true,
+				onSelect: () => copyText(cellDetail(value)),
+			},
+			{
+				label: "copy row",
+				disabled: isInsert,
+				title: isInsert ? "A draft row has nothing to copy yet" : undefined,
+				onSelect: () => {
+					const row = rows[target.index];
+					if (row !== undefined) {
+						copyText(rowTsv(row));
+					}
+				},
+			},
+			{
+				label: "copy column name",
+				onSelect: () => copyText(column.name),
+			},
+			{
+				label: "paste into cell",
+				kbd: "ctrl/cmd v",
+				disabled: !editable,
+				title: generatedNote,
+				onSelect: () => pasteInto(target),
+			},
+			{
+				label: "set null",
+				kbd: "ctrl/cmd bksp",
+				separatorBefore: true,
+				disabled: !editable || !column.nullable,
+				title: column.nullable ? generatedNote : `${column.name} is NOT NULL`,
+				onSelect: () => setCell(target, { kind: "null" }),
+			},
+			{
+				label: "set default",
+				disabled:
+					!editable ||
+					!canSetDefault(capabilities?.sqlDialect ?? null, column, isInsert),
+				title:
+					capabilities?.sqlDialect === "postgres" || isInsert
+						? generatedNote
+						: "Only PostgreSQL can set a column back to DEFAULT in an update",
+				onSelect: () => setCell(target, { kind: "default" }),
+			},
+			{
+				label: "filter by this value",
+				separatorBefore: true,
+				disabled: role === "viewer" || isInsert,
+				title:
+					role === "viewer"
+						? "A predicate is arbitrary SQL, which viewers cannot run"
+						: "Replace the where … box with this cell's value",
+				onSelect: () => {
+					const dialect = capabilities?.sqlDialect;
+					if (dialect == null) {
+						return;
+					}
+					const predicate = filterPredicate(dialect, column.name, value);
+					setFilterDraft(predicate);
+					setOffset(0);
+					setFilter(predicate);
+				},
+			},
+			{
+				label: "insert row",
+				separatorBefore: true,
+				disabled: !canEdit,
+				onSelect: () =>
+					setEdits((current) => withNewRow(current, writableColumns)),
+			},
+			isInsert
+				? {
+						label: "discard draft row",
+						danger: true,
+						onSelect: () => {
+							setFocus(null);
+							setEdits((current) => withoutInsert(current, target.index));
+						},
+					}
+				: {
+						label: marked ? "restore row" : "delete row",
+						danger: !marked,
+						disabled: !canEdit,
+						onSelect: () =>
+							setEdits((current) => withDeleteToggled(current, target.index)),
+					},
+		];
+	};
+
+	/**
+	 * A cell's identity for the value editor: the address, plus what makes
+	 * the value at that address different — a pending edit, or a refetch.
+	 */
+	const cellKeyOf = (target: Focus): string =>
+		[
+			generation,
+			target.kind,
+			target.index,
+			target.column,
+			pendingOf(target)?.kind ?? "-",
+		].join(":");
 
 	if (capabilities !== undefined && capabilities.tableData == null) {
 		return (
@@ -453,7 +667,15 @@ export function TableView(props: IDockviewPanelProps) {
 			classes.push("dg-tv-focused");
 		}
 		return (
-			<td key={cellKey} className={classes.join(" ")}>
+			<td
+				key={cellKey}
+				className={classes.join(" ")}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					setFocus(target);
+					setMenu({ x: event.clientX, y: event.clientY, target });
+				}}
+			>
 				<CellBody
 					value={value}
 					pending={pending}
@@ -467,6 +689,8 @@ export function TableView(props: IDockviewPanelProps) {
 					onStartEdit={() => setEditing(target)}
 					onCommit={(next) => setCell(target, next)}
 					onCancel={() => setEditing(null)}
+					onCopy={() => copyText(cellDetail(cellValue(target)))}
+					onPaste={() => pasteInto(target)}
 				/>
 			</td>
 		);
@@ -487,6 +711,11 @@ export function TableView(props: IDockviewPanelProps) {
 			<td
 				key={column.name}
 				className={`dg-tv-cell dg-tv-new${isFocused ? " dg-tv-focused" : ""}`}
+				onContextMenu={(event) => {
+					event.preventDefault();
+					setFocus(target);
+					setMenu({ x: event.clientX, y: event.clientY, target });
+				}}
 			>
 				<CellBody
 					value={null}
@@ -501,6 +730,8 @@ export function TableView(props: IDockviewPanelProps) {
 					onStartEdit={() => setEditing(target)}
 					onCommit={(next) => setCell(target, next)}
 					onCancel={() => setEditing(null)}
+					onCopy={() => copyText(cellDetail(cellValue(target)))}
+					onPaste={() => pasteInto(target)}
 				/>
 			</td>
 		);
@@ -531,6 +762,21 @@ export function TableView(props: IDockviewPanelProps) {
 			</th>
 		);
 	};
+
+	/* ---- the value editor's view of the focused cell ------------------- */
+
+	const focusedColumn =
+		focus === null
+			? undefined
+			: columns.find((column) => column.name === focus.column);
+	const cellKey = focus === null ? "" : cellKeyOf(focus);
+	const valueText = focus === null ? "" : cellDetail(focusedValue());
+	// A draft belongs to the cell it was typed in; anything else is stale.
+	const valueDraft = draft?.cellKey === cellKey ? draft : undefined;
+	const problem = valueDraft?.problem ?? null;
+	const valueDirty = valueDraft !== undefined && valueDraft.text !== valueText;
+	const valueEditable =
+		canEdit && focusedColumn !== undefined && !focusedColumn.generated;
 
 	return (
 		<div className="dg-tv">
@@ -758,35 +1004,53 @@ export function TableView(props: IDockviewPanelProps) {
 				{panelOpen && (
 					<aside className="dg-tv-side">
 						<div className="dg-tv-side-head">
-							<span>{focus?.column ?? "no cell selected"}</span>
+							<span title={focusedColumn?.name}>
+								{focus?.column ?? "no cell selected"}
+							</span>
+							{focusedColumn !== undefined && (
+								<span className="dg-tv-side-type">
+									{focusedColumn.dataType}
+								</span>
+							)}
 							<button
 								type="button"
 								className="dg-tv-ico"
-								aria-label="Close value panel"
+								aria-label="Close value editor"
 								title="Close"
 								onClick={() => setPanelOpen(false)}
 							>
 								×
 							</button>
 						</div>
-						<pre className="dg-tv-side-body dg-scroll">
-							{focus === null ? "Click a cell." : cellDetail(focusedValue())}
-						</pre>
+						{focus === null ? (
+							<div className="dg-tree-note">Click a cell.</div>
+						) : (
+							<ValueEditor
+								cellKey={cellKey}
+								text={valueText}
+								language={cellLanguage(focusedColumn?.dataType, valueText)}
+								readOnly={!valueEditable}
+								onDraft={(text, problem) => {
+									setDraft({ cellKey, text, problem });
+								}}
+							/>
+						)}
+						{problem !== null && (
+							<div className="dg-tv-side-problem">
+								{problem.line}:{problem.column} {problem.message}
+							</div>
+						)}
 						<div className="dg-tv-side-foot">
 							<button
 								type="button"
 								disabled={focus === null}
-								onClick={() => {
-									void navigator.clipboard.writeText(
-										cellDetail(focusedValue()),
-									);
-								}}
+								onClick={() => copyText(valueDraft?.text ?? valueText)}
 							>
 								copy
 							</button>
 							<button
 								type="button"
-								disabled={!canEdit || focus === null}
+								disabled={!valueEditable}
 								onClick={() => {
 									if (focus !== null) {
 										setCell(focus, { kind: "null" });
@@ -795,10 +1059,40 @@ export function TableView(props: IDockviewPanelProps) {
 							>
 								set null
 							</button>
+							<span className="dg-modal-actions-spacer" />
+							<button
+								type="button"
+								className={valueDirty ? "dg-tv-apply" : ""}
+								disabled={!valueEditable || !valueDirty || problem !== null}
+								title={
+									problem === null
+										? "Put this text in the pending set"
+										: "Fix the error first — this value would not parse"
+								}
+								onClick={() => {
+									if (focus !== null && valueDraft !== undefined) {
+										setCell(focus, {
+											kind: "text",
+											text: valueDraft.text,
+										});
+									}
+								}}
+							>
+								apply
+							</button>
 						</div>
 					</aside>
 				)}
 			</div>
+
+			{menu !== null && (
+				<CellMenu
+					x={menu.x}
+					y={menu.y}
+					items={menuItems(menu.target)}
+					onClose={() => setMenu(null)}
+				/>
+			)}
 
 			<div className="dg-tv-foot">
 				<span>{data === null ? "…" : rowCountLabel(data, rows.length)}</span>

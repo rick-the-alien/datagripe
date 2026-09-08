@@ -258,6 +258,78 @@ describe("insert", () => {
 	});
 });
 
+/**
+ * PostgreSQL JSON columns (docs/spec/table-view.md "Capabilities"). A
+ * grid value is text, and bound straight at a `jsonb` column the driver
+ * encodes it as a JSON *string* — the document silently becomes a
+ * scalar. The cast makes the database do the parsing.
+ */
+describe("json columns", () => {
+	const jsonRelation: WritableRelation = {
+		schema: "public",
+		table: "events",
+		columns: [
+			column("id", { dataType: "integer", primaryKey: true, nullable: false }),
+			column("detail", { dataType: "jsonb" }),
+			column("meta", { dataType: "JSON" }),
+			column("note"),
+		],
+		keyColumns: ["id"],
+	};
+
+	test("an update casts a json value through text", () => {
+		const query = updateStatement(POSTGRES_TABLE_DIALECT, jsonRelation, {
+			key: { id: { kind: "text", text: "7" } },
+			values: {
+				detail: { kind: "text", text: '{"a":1}' },
+				meta: { kind: "text", text: "[]" },
+				note: { kind: "text", text: "plain" },
+			},
+		});
+		expect(query.sql).toBe(
+			'UPDATE "public"."events" SET "detail" = $1::text::jsonb, ' +
+				'"meta" = $2::text::json, "note" = $3 WHERE "id" = $4',
+		);
+		expect(query.params).toEqual(['{"a":1}', "[]", "plain", "7"]);
+	});
+
+	test("an insert casts too", () => {
+		const query = insertStatement(POSTGRES_TABLE_DIALECT, jsonRelation, {
+			values: { detail: { kind: "text", text: "{}" } },
+		});
+		expect(query.sql).toBe(
+			'INSERT INTO "public"."events" ("detail") VALUES ($1::text::jsonb)',
+		);
+	});
+
+	test("NULL still binds as NULL, not as the string 'null'", () => {
+		const query = updateStatement(POSTGRES_TABLE_DIALECT, jsonRelation, {
+			key: { id: { kind: "text", text: "7" } },
+			values: { detail: { kind: "null" } },
+		});
+		expect(query.sql).toBe(
+			'UPDATE "public"."events" SET "detail" = $1::text::jsonb WHERE "id" = $2',
+		);
+		expect(query.params).toEqual([null, "7"]);
+	});
+
+	test("the other engines need no cast", () => {
+		const query = updateStatement(MYSQL_TABLE_DIALECT, jsonRelation, {
+			key: { id: { kind: "text", text: "7" } },
+			values: { detail: { kind: "text", text: "{}" } },
+		});
+		expect(query.sql).toBe(
+			"UPDATE `public`.`events` SET `detail` = ? WHERE `id` = ?",
+		);
+		expect(
+			updateStatement(SQLITE_TABLE_DIALECT, jsonRelation, {
+				key: { id: { kind: "text", text: "7" } },
+				values: { detail: { kind: "text", text: "{}" } },
+			}).sql,
+		).toBe('UPDATE "public"."events" SET "detail" = ? WHERE "id" = ?');
+	});
+});
+
 describe("delete", () => {
 	test("addresses exactly the primary key", () => {
 		const query = deleteStatement(POSTGRES_TABLE_DIALECT, relation, {

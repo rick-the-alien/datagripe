@@ -25,7 +25,7 @@ import {
 	type ExportSource,
 	type ObjectDdl,
 } from "./exporter";
-import { resolveExportRoot } from "./paths";
+import { type HostFsPolicy, resolveHostDirectory } from "./paths";
 import { exportPath, recordRun } from "./runs";
 import { listDomains } from "./service";
 import { appendPullLog, applyExport } from "./writer";
@@ -42,7 +42,7 @@ import { appendPullLog, applyExport } from "./writer";
 export interface ExportDeps {
 	appDb: AppDb;
 	connections: ConnectionsService;
-	exportRoots: string[];
+	hostFs: HostFsPolicy;
 	maxDataRows: number;
 	maxCells: number;
 	onProgress?: (done: number, total: number, current: string) => void;
@@ -98,7 +98,7 @@ export async function runExport(
 		workspace.id,
 		request.connectionRef,
 	);
-	const root = await resolveExportRoot(configured, deps.exportRoots);
+	const root = await resolveHostDirectory(configured, deps.hostFs);
 
 	const { domains, tags } = await listDomains(
 		deps.appDb,

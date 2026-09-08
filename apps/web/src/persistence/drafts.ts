@@ -1,3 +1,4 @@
+import { documentOriginSchema } from "@datagripe/contracts";
 import { z } from "zod";
 import type { StoredDocument, StoredDraft } from "./db";
 
@@ -17,6 +18,9 @@ export const recoveredDocumentSchema = z.object({
 	dirty: z.boolean(),
 	/** Workspace-shared file (server-synced) vs local scratchpad. */
 	shared: z.boolean().default(false),
+	/** Set when this document *is* a file under a datasource path
+	 * (docs/spec/datasource-paths.md); saves write it back to disk. */
+	origin: documentOriginSchema.nullable().default(null),
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 });
@@ -42,6 +46,7 @@ export function mergeDrafts(
 			revision: doc.revision,
 			dirty: draftWins,
 			shared: doc.shared ?? false,
+			origin: doc.origin ?? null,
 			createdAt: doc.createdAt,
 			updatedAt: draftWins ? draft.updatedAt : doc.updatedAt,
 		});
@@ -64,6 +69,7 @@ export function mergeDrafts(
 			revision: draft.baseRevision,
 			dirty: true,
 			shared: false,
+			origin: null,
 			createdAt: draft.updatedAt,
 			updatedAt: draft.updatedAt,
 		});

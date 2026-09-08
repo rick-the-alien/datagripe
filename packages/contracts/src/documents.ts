@@ -2,6 +2,25 @@ import { z } from "zod";
 
 /** Document and editor-view domain contracts. */
 
+/**
+ * Where a document came from, when it did not come from nowhere.
+ *
+ * A file opened out of a datasource path (docs/spec/datasource-paths.md)
+ * is a normal workspace document — cached in the app database so it gets
+ * the same live multiplayer state as any shared file — that additionally
+ * knows which file on disk it *is*. Saves write both.
+ */
+export const documentOriginSchema = z.object({
+	/** `ConnectionMetadata.id`: a managed UUID or a predefined slug. */
+	connectionRef: z.string().min(1).max(255),
+	/** `DatasourcePath.id` — which configured root it lives under. */
+	pathId: z.uuid(),
+	/** POSIX-relative to that root. */
+	filePath: z.string().min(1).max(1024),
+});
+
+export type DocumentOrigin = z.infer<typeof documentOriginSchema>;
+
 export const documentSchema = z.object({
 	id: z.uuid(),
 	workspaceId: z.uuid(),
@@ -10,6 +29,8 @@ export const documentSchema = z.object({
 	content: z.string(),
 	revision: z.number().int().nonnegative(),
 	defaultConnectionId: z.uuid().optional(),
+	/** Null for scratchpads and plain workspace files. */
+	origin: documentOriginSchema.nullable().default(null),
 	updatedAt: z.iso.datetime(),
 });
 

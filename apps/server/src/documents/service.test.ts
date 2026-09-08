@@ -179,3 +179,86 @@ describe("documents service", () => {
 		).rejects.toMatchObject({ code: "NOT_FOUND" });
 	});
 });
+
+/**
+ * File-backed documents (docs/spec/datasource-paths.md). The row exists
+ * so a file opened from a datasource path gets the live multiplayer
+ * state every shared file has; the file on disk stays the artifact.
+ */
+describe("file-backed documents", () => {
+	const pathId = "11111111-1111-4111-8111-111111111111";
+	const origin = {
+		connectionRef: "predefined:wallet-prod",
+		pathId,
+		filePath: "migrations/0001.sql",
+	};
+
+	pgTest("one live document per file, however many opens", async () => {
+		// Two caches of one file means two people edit two copies and the
+		// last save wins silently.
+		const service = createDocumentsService(appDb);
+		const first = await service.createFileDocument(workspaceId, {
+			origin,
+			title: "0001.sql",
+			content: "select 1;",
+			diskHash: "hash-1",
+		});
+		const second = await service.createFileDocument(workspaceId, {
+			origin,
+			title: "0001.sql",
+			content: "select 1;",
+			diskHash: "hash-1",
+		});
+		expect(second.id).toBe(first.id);
+		expect(second.origin).toEqual(origin);
+	});
+
+	pgTest("the origin survives the list and the fetch", async () => {
+		const service = createDocumentsService(appDb);
+		const doc = await service.createFileDocument(workspaceId, {
+			origin: { ...origin, filePath: "migrations/0002.sql" },
+			title: "0002.sql",
+			content: "",
+			diskHash: "hash-2",
+		});
+		const listed = (await service.listDocuments(workspaceId)).find(
+			(entry) => entry.id === doc.id,
+		);
+		expect(listed?.origin?.filePath).toBe("migrations/0002.sql");
+		expect((await service.getDocument(workspaceId, doc.id)).origin).toEqual({
+			...origin,
+			filePath: "migrations/0002.sql",
+		});
+	});
+
+	pgTest("adopting disk bumps the revision and the recorded hash", async () => {
+		const service = createDocumentsService(appDb);
+		const doc = await service.createFileDocument(workspaceId, {
+			origin: { ...origin, filePath: "migrations/0003.sql" },
+			title: "0003.sql",
+			content: "old",
+			diskHash: "hash-old",
+		});
+		const adopted = await service.adoptFromDisk(
+			workspaceId,
+			doc.id,
+			"new",
+			"hash-new",
+		);
+		expect(adopted.content).toBe("new");
+		expect(adopted.revision).toBe(doc.revision + 1);
+		await expect(service.diskSyncState(workspaceId, doc.id)).resolves.toEqual({
+			hash: "hash-new",
+		});
+	});
+
+	pgTest("a plain document has no origin", async () => {
+		const service = createDocumentsService(appDb);
+		const doc = await service.createDocument(workspaceId, {
+			title: "plain.sql",
+			content: "",
+			idempotencyKey: "docs-test-0020",
+		});
+		expect(doc.origin).toBeNull();
+	});
+});

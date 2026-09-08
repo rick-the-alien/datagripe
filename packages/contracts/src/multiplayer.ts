@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentOriginSchema } from "./documents";
 
 /** Multiplayer contracts (docs/spec/multiplayer.md). */
 
@@ -28,6 +29,9 @@ export const documentChangedPayloadSchema = z.object({
 	revision: z.number().int().nonnegative(),
 	updatedAt: z.iso.datetime(),
 	archived: z.boolean().default(false),
+	/** File-backed documents belong to their path section, not the
+	 * workspace-files list, so the merge has to know on arrival. */
+	origin: documentOriginSchema.nullable().default(null),
 });
 
 export type DocumentChangedPayload = z.infer<
@@ -40,6 +44,8 @@ export const documentListEntrySchema = z.object({
 	title: z.string().min(1).max(255),
 	revision: z.number().int().nonnegative(),
 	updatedAt: z.iso.datetime(),
+	/** Set for a file opened out of a datasource path. */
+	origin: documentOriginSchema.nullable().default(null),
 });
 
 export type DocumentListEntry = z.infer<typeof documentListEntrySchema>;

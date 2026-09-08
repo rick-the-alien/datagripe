@@ -14,8 +14,10 @@ export type DocumentSidebarProps = {
 /**
  * Documents in two clearly separated sections: local scratchpads
  * (IndexedDB, never shared) and workspace files (server-side, shared
- * with every member). Closing a tab never discards a document — only
- * the explicit discard action here does.
+ * with every member). Files opened from a datasource path are shared
+ * too but live in their own section (docs/spec/datasource-paths.md), so
+ * they are excluded here rather than listed twice. Closing a tab never
+ * discards a document — only the explicit discard action here does.
  */
 export function DocumentSidebar(props: DocumentSidebarProps) {
 	const order = useDocumentsStore((state) => state.order);
@@ -71,7 +73,12 @@ export function DocumentSidebar(props: DocumentSidebarProps) {
 	}, [menu]);
 
 	const scratch = order.filter((id) => documents[id]?.shared !== true);
-	const shared = order.filter((id) => documents[id]?.shared === true);
+	// A file opened from a datasource path is a shared document too, but
+	// it belongs to its own path section — listing it here as well would
+	// show one file in two places with two different names for what it is.
+	const shared = order.filter(
+		(id) => documents[id]?.shared === true && documents[id]?.origin == null,
+	);
 
 	const renderRow = (doc: EditorDocument) => {
 		const isActive = doc.id === activeDocumentId;

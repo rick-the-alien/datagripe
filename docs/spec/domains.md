@@ -442,9 +442,16 @@ count and a written/deleted tally. It is excluded from the prune.
 
 #### Where it may write
 
-- `DOMAIN_EXPORT_ROOTS` — a colon-separated list of absolute
-  directories, empty by default. **Empty means export is disabled**, and
-  the UI says so rather than offering a button that always fails.
+- `HOST_FS_DISABLED` (default off) — turns export off outright, along
+  with every other host-filesystem feature. The sync tab says so rather
+  than offering a button that always fails.
+- `HOST_FS_ROOTS` — an *optional* colon-separated allowlist of absolute
+  directories, empty by default. **Empty means no allowlist**: the
+  export directory is already named explicitly per datasource, and
+  requiring the same thing twice bought nothing. Set it when the host
+  is shared. `DOMAIN_EXPORT_ROOTS` is the pre-rename name and is still
+  honoured. The gate is shared with the datasource paths the sidebar
+  browses (`docs/spec/datasource-paths.md`).
 - `datasource_export_paths` holds the chosen directory, keyed by
   `(workspace_id, connection_ref)` — **per datasource, not per project**
   (migration 0012). An export never crosses a datasource boundary, so a
@@ -458,11 +465,13 @@ count and a written/deleted tally. It is excluded from the prune.
   datasource — it is what this project does with it.
 - A table rather than a column on `connections`, because a predefined
   connection has no row there.
-- On every export the server resolves the path with `realpath`, then
-  requires the result to be a path-segment prefix match against one
-  allowlisted root — segment-wise, so `/srv/repos-evil` does not pass
-  for `/srv/repos`. Validation happens at export rather than at save, so
-  a directory created later still works.
+- On every export the server resolves the path with `realpath`. The
+  path must be absolute — with no allowlist a relative one would
+  quietly resolve against the server's working directory — and where an
+  allowlist *is* configured, the result must be a path-segment prefix
+  match against one of its roots, segment-wise, so `/srv/repos-evil`
+  does not pass for `/srv/repos`. Validation happens at export rather
+  than at save, so a directory created later still works.
 - The resolution happens per export, not once at configuration time, so
   a symlink swapped in afterwards is caught.
 - Every generated path is re-checked after joining, and any component
@@ -471,9 +480,10 @@ count and a written/deleted tally. It is excluded from the prune.
   named error, not a write.
 - Export is `owner`-only. It is the one action in the app that writes to
   the host filesystem.
-- The desktop app (`apps/desktop`) sets `DOMAIN_EXPORT_ROOTS` to the
-  user's home directory by default; hosted deployments set it
-  explicitly or leave export off.
+- Hosted deployments set `HOST_FS_ROOTS` explicitly, or turn host
+  access off with `HOST_FS_DISABLED`. The desktop app
+  (`apps/desktop`) needs neither: the person choosing the directory owns
+  the machine.
 - `DOMAIN_EXPORT_GIT` (default off) and `DOMAIN_GIT_TIMEOUT_MS` (default
   60,000) gate and bound the commit path — see "Committing".
 

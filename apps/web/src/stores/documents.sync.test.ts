@@ -49,6 +49,7 @@ function makeWs(server: FakeServer) {
 				workspaceId: "ws-1",
 				title: body.title as string,
 				language: "sql",
+				origin: null,
 				content: body.content as string,
 				revision: 0,
 				updatedAt: new Date().toISOString(),
@@ -89,6 +90,7 @@ function serverEntry(doc: Document): DocumentListEntry {
 		title: doc.title,
 		revision: doc.revision,
 		updatedAt: doc.updatedAt,
+		origin: doc.origin,
 	};
 }
 
@@ -125,6 +127,7 @@ describe("documents server sync", () => {
 			workspaceId: "ws-1",
 			title: "shared.sql",
 			language: "sql",
+			origin: null,
 			content: "select 42;",
 			revision: 3,
 			updatedAt: "2026-08-31T10:00:00.000Z",

@@ -99,14 +99,28 @@ Export is the one action in DataGripe that writes to the host
 filesystem, and `domain.git` is the only one that runs a subprocess.
 Both are **off by default** and both are `owner`-only.
 
-- `DOMAIN_EXPORT_ROOTS` — colon-separated absolute directories the
-  export may write into. **Empty (the default) disables export**, and
-  the sync tab says so rather than offering a button that always fails.
-  Keep it as narrow as the deployment allows; the datasource's chosen
-  path is re-resolved with `realpath` and checked segment-wise against
-  this list on *every* export, so a symlink swapped in later is caught.
-  The path itself is set per datasource on its edit page, not per
-  project — an export never crosses a datasource boundary.
+- `HOST_FS_DISABLED` (default `false`) — turns off **every**
+  host-filesystem feature: the domain export and import, and the
+  datasource paths the sidebar browses
+  (`docs/spec/datasource-paths.md`). This is the switch a hosted,
+  multi-tenant deployment sets; there, the person pressing the button
+  does not own the disk.
+- `HOST_FS_ROOTS` — an **optional** colon-separated allowlist of
+  absolute directories the server may read and write on behalf of a
+  workspace. Empty (the default) means no allowlist: the directory is
+  already named explicitly per datasource, and making people configure
+  the same thing twice bought nothing. Set it when the host is shared
+  with people who do not own it. Either way the configured directory
+  must be absolute, and is re-resolved with `realpath` and checked
+  segment-wise against this list on *every* access, so a symlink
+  swapped in later is caught. The paths themselves are set per
+  datasource on its edit page, not per project — an export never
+  crosses a datasource boundary.
+- `DOMAIN_EXPORT_ROOTS` — the pre-rename name for `HOST_FS_ROOTS`,
+  still honoured when `HOST_FS_ROOTS` is unset. Note the changed
+  default: an empty value used to mean "export disabled" and now means
+  "no allowlist". A deployment that relied on empty-means-off must set
+  `HOST_FS_DISABLED=true`.
 - `DOMAIN_EXPORT_GIT` (default `false`) — enables `domain.git`. When
   off, the commit controls are absent, not disabled. Git runs with
   argv (never a shell), a fixed verb list, `add` scoped to the domain
@@ -123,6 +137,7 @@ Both are **off by default** and both are `owner`-only.
   its cells first and refuses above this, asking for a schema or domain
   filter (docs/spec/access-report.md).
 
-In a hosted, multi-tenant deployment, leave both `DOMAIN_EXPORT_ROOTS`
-and `DOMAIN_EXPORT_GIT` unset. They exist for the local and desktop
-shape, where the person pressing the button owns the checkout.
+In a hosted, multi-tenant deployment, set `HOST_FS_DISABLED=true` and
+leave `DOMAIN_EXPORT_GIT` unset. Host-filesystem access exists for the
+local and desktop shape, where the person pressing the button owns the
+checkout.

@@ -1,3 +1,4 @@
+import type { Document, DocumentOrigin } from "@datagripe/contracts";
 import {
 	accessReportRequestSchema,
 	accessRoleSetRequestSchema,
@@ -6,6 +7,7 @@ import {
 	connectionDeleteRequestSchema,
 	connectionTestRequestSchema,
 	connectionUpdateRequestSchema,
+	datasourcePathsSetRequestSchema,
 	dismissalSchema,
 	dismissRequestSchema,
 	documentArchiveRequestSchema,
@@ -25,7 +27,10 @@ import {
 	executionCancelRequestSchema,
 	executionStartRequestSchema,
 	executionSubscribeRequestSchema,
+	fileListRequestSchema,
+	fileOpenRequestSchema,
 	historyListRequestSchema,
+	hostPathCheckRequestSchema,
 	memberAddRequestSchema,
 	memberRemoveRequestSchema,
 	objectAlterRequestSchema,
@@ -52,7 +57,11 @@ import type { DocumentsService } from "../documents/service";
 import { runExport } from "../domains/export";
 import { runGit } from "../domains/git";
 import { runImport } from "../domains/import";
-import { parseExportRoots, resolveExportRoot } from "../domains/paths";
+import {
+	type HostFsPolicy,
+	parseHostRoots,
+	resolveHostDirectory,
+} from "../domains/paths";
 import {
 	attachCommit,
 	exportPath,
@@ -67,6 +76,13 @@ import {
 } from "../domains/service";
 import { listHistory } from "../execution/history";
 import type { ExecutionRegistry } from "../execution/registry";
+import {
+	hashContent,
+	listDirectory,
+	readTextFile,
+	writeTextFile,
+} from "../files/browse";
+import { getDatasourcePath, setDatasourcePaths } from "../files/service";
 import {
 	dismiss,
 	listDismissals,
@@ -143,6 +159,16 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	// edit page. Using it still needs `owner`, because that is the step
 	// that writes to disk.
 	"domain.set-export-path": "editor",
+	// Same reasoning: configuring a datasource's paths is a datasource
+	// setting, sitting on the edit page with the rest of them. Reading
+	// what is inside one is a viewer action — the sidebar is how you find
+	// the query you were asked to run.
+	"datasource.set-paths": "editor",
+	"datasource.check-path": "editor",
+	// `file.open` caches the file as a workspace document, and a save
+	// writes it back to disk, so it is an editor action rather than a
+	// viewer one.
+	"file.open": "editor",
 	// Export writes to the host filesystem and git talks to a remote.
 	// Reading who can do what is not a mutation, so `access.report` and
 	// `domain.list` stay open to viewers: hiding the report from viewers
@@ -177,6 +203,10 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 	"object.alter": "object.alter",
 	"access.report": "object.describe",
 	"domain.export": "object.alter",
+	// Expanding a tree is a disk read per click, so it shares the
+	// schema-tree budget rather than getting an unmetered one.
+	"file.list": "schema.children",
+	"file.open": "schema.children",
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
@@ -191,7 +221,71 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 		rateLimiter,
 		config,
 	} = deps;
-	const exportRoots = parseExportRoots(config.DOMAIN_EXPORT_ROOTS);
+	// HOST_FS_ROOTS is an optional allowlist; DOMAIN_EXPORT_ROOTS is its
+	// pre-rename name, still honoured so an existing .env keeps working.
+	const hostFs: HostFsPolicy = {
+		roots: parseHostRoots(
+			config.HOST_FS_ROOTS === ""
+				? config.DOMAIN_EXPORT_ROOTS
+				: config.HOST_FS_ROOTS,
+		),
+		disabled: config.HOST_FS_DISABLED,
+	};
+
+	/**
+	 * Write a file-backed document's content to the file it came from.
+	 *
+	 * The datasource path is re-read and re-resolved on every write rather
+	 * than remembered when the file was opened: the pair can be repointed,
+	 * removed, or have a symlink swapped underneath it while a tab sits
+	 * open, and none of those may turn into a write somewhere else.
+	 */
+	async function writeDocumentToDisk(
+		workspaceId: string,
+		document: Document,
+	): Promise<void> {
+		const origin = document.origin;
+		if (origin === null) {
+			return;
+		}
+		const configured = await getDatasourcePath(
+			appDb,
+			workspaceId,
+			origin.pathId,
+		);
+		const root = await resolveHostDirectory(
+			configured.path,
+			hostFs,
+			"datasource path",
+		);
+		const written = await writeTextFile(
+			root,
+			origin.filePath,
+			document.content,
+		);
+		await documents.markDiskSynced(document.id, written.hash);
+	}
+
+	/**
+	 * Resolve one datasource path to a real directory, proving on the way
+	 * that it belongs to the datasource the caller named. Without that
+	 * check a path id is a workspace-wide handle, and the connection ref
+	 * in the request would be decoration.
+	 */
+	async function resolveDatasourcePath(
+		workspaceId: string,
+		connectionRef: string,
+		pathId: string,
+	): Promise<string> {
+		const configured = await getDatasourcePath(appDb, workspaceId, pathId);
+		if (configured.connectionRef !== connectionRef) {
+			throw new ServiceError(
+				ErrorCodes.Forbidden,
+				"That path belongs to a different datasource",
+			);
+		}
+		return resolveHostDirectory(configured.path, hostFs, "datasource path");
+	}
 
 	/** Notify the workspace about a created/saved/archived document (6a). */
 	function broadcastDocumentChanged(
@@ -201,6 +295,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 			title: string;
 			revision: number;
 			updatedAt: string;
+			origin?: DocumentOrigin | null;
 		},
 		archived: boolean,
 	): void {
@@ -216,6 +311,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				revision: entry.revision,
 				updatedAt: entry.updatedAt,
 				archived,
+				origin: entry.origin ?? null,
 			},
 		});
 	}
@@ -302,6 +398,14 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						document: await documents.saveDocument(workspace.id, request),
 					}),
 				);
+				// A file-backed document's artifact is the file, not the row:
+				// the row exists so the live multiplayer state survives, and
+				// the save is not finished until the file matches it. After
+				// the database write, so a refused write leaves the row and
+				// the disk both readable rather than the row silently ahead.
+				if (result.document.origin !== null) {
+					await writeDocumentToDisk(workspace.id, result.document);
+				}
 				broadcastDocumentChanged(workspace.id, result.document, false);
 				return result;
 			}
@@ -574,8 +678,8 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				// the allowlist, so the tab never shows a target it cannot
 				// actually write to.
 				let root: string | null = null;
-				if (exportRoots.length > 0) {
-					root = await resolveExportRoot(configured, exportRoots).catch(
+				if (!hostFs.disabled) {
+					root = await resolveHostDirectory(configured, hostFs).catch(
 						() => null,
 					);
 				}
@@ -587,7 +691,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						request.limit,
 					),
 					root,
-					exportEnabled: exportRoots.length > 0,
+					exportEnabled: !hostFs.disabled,
 					gitEnabled: config.DOMAIN_EXPORT_GIT,
 				};
 			}
@@ -599,7 +703,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						{
 							appDb,
 							connections,
-							exportRoots,
+							hostFs,
 							maxDataRows: config.DOMAIN_EXPORT_MAX_DATA_ROWS,
 							maxCells: config.ACCESS_REPORT_MAX_CELLS,
 							onProgress: (done, total, current) => {
@@ -640,7 +744,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				const request = domainImportRequestSchema.parse(payload);
 				const run = () =>
 					runImport(
-						{ appDb, connections, exportRoots },
+						{ appDb, connections, hostFs },
 						workspace,
 						ctx.userId,
 						request,
@@ -670,7 +774,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 						};
 					}
 					try {
-						const resolved = await resolveExportRoot(request.path, exportRoots);
+						const resolved = await resolveHostDirectory(request.path, hostFs);
 						return { ok: true, resolved, message: "allowed" };
 					} catch (error) {
 						return {
@@ -692,6 +796,108 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				return { connections: await connections.listConnections(workspace) };
 			}
 
+			case "datasource.check-path": {
+				const request = hostPathCheckRequestSchema.parse(payload);
+				if (request.path.trim() === "") {
+					return { ok: false, resolved: null, message: "Enter a directory" };
+				}
+				try {
+					return {
+						ok: true,
+						resolved: await resolveHostDirectory(
+							request.path,
+							hostFs,
+							"datasource path",
+						),
+						message: "allowed",
+					};
+				} catch (error) {
+					return {
+						ok: false,
+						resolved: null,
+						message:
+							error instanceof Error ? error.message : "Path is not allowed",
+					};
+				}
+			}
+
+			case "datasource.set-paths": {
+				const request = datasourcePathsSetRequestSchema.parse(payload);
+				await withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => setDatasourcePaths(appDb, workspace.id, request),
+				);
+				// Same shape as `domain.set-export-path`: the paths ride on the
+				// connection list, so the caller gets the datasource back
+				// rather than having to refetch it.
+				return { connections: await connections.listConnections(workspace) };
+			}
+
+			case "file.list": {
+				const request = fileListRequestSchema.parse(payload);
+				const root = await resolveDatasourcePath(
+					workspace.id,
+					request.connectionRef,
+					request.pathId,
+				);
+				return { entries: await listDirectory(root, request.subPath) };
+			}
+
+			case "file.open": {
+				const request = fileOpenRequestSchema.parse(payload);
+				const root = await resolveDatasourcePath(
+					workspace.id,
+					request.connectionRef,
+					request.pathId,
+				);
+				const onDisk = await readTextFile(root, request.filePath);
+				const existing = await documents.getDocumentByOrigin(
+					workspace.id,
+					request.pathId,
+					request.filePath,
+				);
+				if (existing === null) {
+					const created = await documents.createFileDocument(workspace.id, {
+						origin: {
+							connectionRef: request.connectionRef,
+							pathId: request.pathId,
+							filePath: request.filePath,
+						},
+						title: request.filePath.split("/").pop() ?? request.filePath,
+						content: onDisk.content,
+						diskHash: onDisk.hash,
+					});
+					broadcastDocumentChanged(workspace.id, created, false);
+					return { document: created, diskChanged: false, diskContent: null };
+				}
+				const synced = await documents.diskSyncState(workspace.id, existing.id);
+				if (synced.hash === onDisk.hash) {
+					return { document: existing, diskChanged: false, diskContent: null };
+				}
+				// The file moved under us. Adopting it is only safe when the
+				// cached copy is still exactly what was last synced — otherwise
+				// two people edited the same file two ways and picking one
+				// silently is how the other one's work disappears.
+				if (hashContent(existing.content) === synced.hash) {
+					const adopted = await documents.adoptFromDisk(
+						workspace.id,
+						existing.id,
+						onDisk.content,
+						onDisk.hash,
+					);
+					broadcastDocumentChanged(workspace.id, adopted, false);
+					return { document: adopted, diskChanged: false, diskContent: null };
+				}
+				return {
+					document: existing,
+					diskChanged: true,
+					diskContent: onDisk.content,
+				};
+			}
+
 			case "domain.git": {
 				if (!config.DOMAIN_EXPORT_GIT) {
 					throw new ServiceError(
@@ -705,7 +911,7 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					workspace.id,
 					request.connectionRef,
 				);
-				const root = await resolveExportRoot(configured, exportRoots);
+				const root = await resolveHostDirectory(configured, hostFs);
 				const result = await runGit(
 					root,
 					request.operation,

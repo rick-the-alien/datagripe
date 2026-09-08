@@ -46,6 +46,8 @@ function createTestDispatcher() {
 		hub: {} as never,
 		config: {
 			DOMAIN_EXPORT_ROOTS: "",
+			HOST_FS_ROOTS: "",
+			HOST_FS_DISABLED: false,
 			DOMAIN_EXPORT_GIT: false,
 			DOMAIN_GIT_TIMEOUT_MS: 60_000,
 			DOMAIN_EXPORT_MAX_DATA_ROWS: 10_000,

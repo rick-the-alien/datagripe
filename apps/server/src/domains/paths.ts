@@ -4,15 +4,25 @@ import { ErrorCodes } from "@datagripe/contracts/errors";
 import { ServiceError } from "../connections/service";
 
 /**
- * Where the export may write (docs/spec/domains.md "Where it may write").
+ * The gate on every host-filesystem path DataGripe touches — the domain
+ * export (docs/spec/domains.md "Where it may write") and the datasource
+ * paths the sidebar browses (docs/spec/datasource-paths.md). It lives
+ * under `domains/` because export was the first caller; both go through
+ * it now.
  *
- * Export is the one action in the app that writes to the host
- * filesystem, so the rules are stricter than anywhere else:
+ * The rules are stricter than anywhere else in the app:
  *
- * - `DOMAIN_EXPORT_ROOTS` is empty by default, and empty means disabled.
- * - The chosen directory is resolved with `realpath` on **every** export,
- *   not once at configuration time, so a symlink swapped in afterwards
- *   is caught rather than trusted.
+ * - `HOST_FS_DISABLED` turns both off outright, for deployments where
+ *   the person pressing the button does not own the host.
+ * - `HOST_FS_ROOTS` is an *optional* allowlist. Empty — the default —
+ *   means "no allowlist", because the directory is already named
+ *   explicitly per datasource and making people configure it twice bought
+ *   nothing. Set it when the host is shared.
+ * - The path must be absolute either way. With no allowlist a relative
+ *   one would quietly resolve against the server's working directory.
+ * - The directory is resolved with `realpath` on **every** call, not once
+ *   at configuration time, so a symlink swapped in afterwards is caught
+ *   rather than trusted.
  * - The allowlist check is segment-wise. A string prefix test would let
  *   `/srv/repos-evil` pass for an allowlisted `/srv/repos`.
  * - Every generated path component is re-checked after joining. Object
@@ -20,7 +30,7 @@ import { ServiceError } from "../connections/service";
  *   called `../../etc` gets a named error, not a write.
  */
 
-export function parseExportRoots(raw: string): string[] {
+export function parseHostRoots(raw: string): string[] {
 	return raw
 		.split(":")
 		.map((entry) => entry.trim())
@@ -44,39 +54,62 @@ export function isWithin(parent: string, child: string): boolean {
 	);
 }
 
+export interface HostFsPolicy {
+	/** Empty means no allowlist — any absolute directory is allowed. */
+	roots: string[];
+	/** Host filesystem access is off entirely for this deployment. */
+	disabled: boolean;
+}
+
 /**
- * Resolve the workspace's export path and prove it is allowed. Throws
- * rather than returning null: every caller has to stop, and a nullable
- * return invites a caller that forgets to check.
+ * Resolve a configured directory and prove the deployment allows it.
+ * Throws rather than returning null: every caller has to stop, and a
+ * nullable return invites a caller that forgets to check.
+ *
+ * `label` names the setting in the error, so "no directory set" tells
+ * the reader which field to go and fill in.
  */
-export async function resolveExportRoot(
+export async function resolveHostDirectory(
 	configuredPath: string | null,
-	allowedRoots: string[],
+	policy: HostFsPolicy,
+	label = "export directory",
 ): Promise<string> {
-	if (allowedRoots.length === 0) {
+	if (policy.disabled) {
 		throw new ServiceError(
 			ErrorCodes.Forbidden,
-			"Export is disabled — DOMAIN_EXPORT_ROOTS is not configured",
+			"Host filesystem access is disabled — HOST_FS_DISABLED is set",
 		);
 	}
 	if (configuredPath === null || configuredPath.trim() === "") {
 		throw new ServiceError(
 			ErrorCodes.BadRequest,
-			"This project has no export directory set",
+			`No ${label} is set for this datasource`,
+		);
+	}
+	const trimmed = configuredPath.trim();
+	if (!path.isAbsolute(trimmed)) {
+		throw new ServiceError(
+			ErrorCodes.BadRequest,
+			`The ${label} must be an absolute path: ${trimmed}`,
 		);
 	}
 	let resolved: string;
 	try {
 		// realpath, not resolve: a symlink pointing out of the allowlist
 		// must fail here rather than be followed on write.
-		resolved = await realpath(path.resolve(configuredPath));
+		resolved = await realpath(trimmed);
 	} catch {
 		throw new ServiceError(
 			ErrorCodes.BadRequest,
-			`Export directory does not exist: ${configuredPath}`,
+			`Directory does not exist: ${trimmed}`,
 		);
 	}
-	for (const root of allowedRoots) {
+	// No allowlist configured: the explicit per-datasource path is the
+	// whole policy.
+	if (policy.roots.length === 0) {
+		return resolved;
+	}
+	for (const root of policy.roots) {
 		let realRoot: string;
 		try {
 			realRoot = await realpath(root);
@@ -89,7 +122,7 @@ export async function resolveExportRoot(
 	}
 	throw new ServiceError(
 		ErrorCodes.Forbidden,
-		`Export directory is outside DOMAIN_EXPORT_ROOTS: ${configuredPath}`,
+		`Directory is outside HOST_FS_ROOTS: ${trimmed}`,
 	);
 }
 

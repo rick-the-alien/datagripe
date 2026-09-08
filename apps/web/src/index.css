@@ -646,6 +646,55 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	padding: 0;
 }
 
+/* Datasource path sections (docs/spec/datasource-paths.md). Rows reuse
+   the schema tree's shape so the sidebar reads as one surface rather
+   than two trees that happen to share a rail. */
+.dg-path-tree {
+	padding-bottom: 6px;
+}
+
+.dg-path-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.dg-path-row-button {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: none;
+	border: none;
+	padding: 0;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	color: inherit;
+}
+
+.dg-path-row-button:hover:not(:disabled) {
+	background: none;
+}
+
+.dg-path-row-button:disabled {
+	color: var(--dg-ink-mute);
+	cursor: default;
+}
+
+/* The configured directory, shown only when it will not open — the one
+   moment the absolute path is the useful thing to read. */
+.dg-path-root {
+	margin: 0 10px 8px;
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-mute);
+	overflow-wrap: anywhere;
+}
+
 .dg-document-row {
 	display: flex;
 	align-items: center;
@@ -2157,6 +2206,21 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	align-items: center;
 	gap: 9px;
 	margin-top: 8px;
+}
+
+/* One (name, directory) pair on the datasource page. Two fields side by
+   side because they are one thing — a section title and what it points
+   at — and stacking them reads as four unrelated inputs. */
+.dg-path-row {
+	display: grid;
+	grid-template-columns: minmax(120px, 1fr) minmax(200px, 2fr);
+	gap: 0 12px;
+	max-width: 640px;
+	padding-bottom: 12px;
+}
+
+.dg-path-row .dg-field-inline {
+	grid-column: 1 / -1;
 }
 
 .dg-field-checkbox {

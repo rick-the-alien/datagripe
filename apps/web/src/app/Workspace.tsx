@@ -1,4 +1,5 @@
 import type {
+	DatasourcePath,
 	DocumentChangedPayload,
 	PresenceUser,
 	ViewFollowedPayload,
@@ -27,6 +28,7 @@ import { Explorer } from "../components/Explorer";
 import { GripesPanel } from "../components/GripesPanel";
 import { NewProjectForm } from "../components/NewProjectForm";
 import { ObjectView } from "../components/ObjectView";
+import { PathTree } from "../components/PathTree";
 import { PresenceSidebar } from "../components/PresenceSidebar";
 import { ProjectPrompt } from "../components/ProjectPrompt";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
@@ -42,6 +44,7 @@ import { createDebouncer } from "../persistence/debounce";
 import { parseLayout, sanitizeLayout } from "../persistence/layout";
 import { useDatasourceStore } from "../stores/datasource";
 import { draftDebouncer, useDocumentsStore } from "../stores/documents";
+import { useFilesStore } from "../stores/files";
 import { useGripesStore } from "../stores/gripes";
 import { usePresenceStore } from "../stores/presence";
 import {
@@ -169,6 +172,9 @@ function saveActiveDocument(): void {
 	}
 }
 
+/** Stable empty array: a fresh `[]` per render would loop the selector. */
+const EMPTY_PATHS: DatasourcePath[] = [];
+
 export function Workspace() {
 	const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
 	const dockApiRef = useRef<DockviewApi | null>(null);
@@ -208,6 +214,16 @@ export function Workspace() {
 	const currentWorkspace = useSessionStore((state) => state.currentWorkspace);
 	const logout = useSessionStore((state) => state.logout);
 	const hydrated = useDocumentsStore((state) => state.hydrated);
+	// The path sections belong to the datasource the tree is scoped to:
+	// switching datasource swaps them, the way it swaps the tree.
+	const activeConnectionId = useDatasourceStore(
+		(state) => state.activeConnectionId,
+	);
+	const datasourcePaths = useConnectionsStore(
+		(state) =>
+			state.connections.find((entry) => entry.id === activeConnectionId)
+				?.paths ?? EMPTY_PATHS,
+	);
 	const followingUserId = usePresenceStore((state) => state.followingUserId);
 	const followedBy = usePresenceStore((state) => state.followedBy);
 	const presenceUsers = usePresenceStore((state) => state.users);
@@ -232,6 +248,9 @@ export function Workspace() {
 		const offOpen = wsClient.onOpen(() => {
 			useExplorerStore.getState().reset();
 			useDatasourceStore.getState().reset();
+			// Directory listings are per workspace *and* per host: a
+			// reconnect may be to a different server with different paths.
+			useFilesStore.getState().reset();
 			usePresenceStore.getState().reset();
 			useExecutionsStore.getState().reset();
 			// Dismissals are workspace-wide, so they rescope with everything
@@ -465,6 +484,24 @@ export function Workspace() {
 					</div>
 					<SidebarSections
 						sections={[
+							// The active datasource's paths come first: they are the
+							// project's own files, and the workspace files below them
+							// are DataGripe's (docs/spec/datasource-paths.md).
+							...datasourcePaths.map((path) => ({
+								id: `path:${path.id}`,
+								title: path.name,
+								body: (
+									<PathTree
+										connectionRef={activeConnectionId ?? ""}
+										path={path}
+										onOpen={(doc) => {
+											if (dockApi !== null) {
+												openEditorPanel(dockApi, doc);
+											}
+										}}
+									/>
+								),
+							})),
 							{
 								id: "files",
 								title: "Workspace files",

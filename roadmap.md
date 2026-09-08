@@ -168,8 +168,8 @@ app, and the directory tree it produces becomes a button.
       delete with the untag count
 - [x] Group-by-domain toggle with a permanent `untagged` bucket
 - [x] `domain.export` — deterministic tree from object-view DDL, no
-      external binary, dry run before prune, `DOMAIN_EXPORT_ROOTS`
-      allowlist and `owner` role
+      external binary, dry run before prune, `HOST_FS_ROOTS` allowlist
+      (optional; `HOST_FS_DISABLED` is the off switch) and `owner` role
 - [x] Export directory set per datasource on its edit page
       (`datasource_export_paths`, migration 0012) — one path per project
       would have two datasources overwriting each other's tree
@@ -181,6 +181,12 @@ app, and the directory tree it produces becomes a button.
 - [x] `domain.git` behind `DOMAIN_EXPORT_GIT` — argv not shell, `add`
       scoped to the domain root, push always a separate press, git's
       own stderr shown verbatim and no credential management
+- [x] Datasource paths (`docs/spec/datasource-paths.md`, migration
+      0013): `(name, directory)` pairs on the datasource page, each a
+      sidebar section above the workspace files with a lazy file tree
+- [x] A file opened from a path is a workspace document with an
+      `origin` — live multiplayer state, and every save writes the file
+      back to the checkout it came from
 - [ ] Suggestions: glob patterns propose a domain, a person accepts it
 - [ ] Stale-tag report in the manager; manual domain reordering
 

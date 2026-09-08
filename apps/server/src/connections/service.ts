@@ -6,6 +6,7 @@ import type {
 	ConnectionTestRequest,
 	ConnectionTestResult,
 	ConnectionUpdateRequest,
+	DatasourcePath,
 	ObjectAlterRequest,
 	ObjectAlterResult,
 	ObjectDescribeRequest,
@@ -32,6 +33,7 @@ import { TableRequestError } from "@datagripe/database-adapters";
 import type { SecretKeyring } from "../crypto/keyring";
 import type { AppDb } from "../db/app/pool";
 import { exportPaths } from "../domains/runs";
+import { datasourcePathsByConnection } from "../files/store";
 import { log } from "../log";
 import type { SsrfPolicy } from "../security/ssrf";
 import type { PredefinedEntry } from "./predefined";
@@ -170,6 +172,7 @@ export interface ConnectionsService {
 function rowToMetadata(
 	row: ConnectionRow,
 	exportPath: string | null = null,
+	paths: DatasourcePath[] = [],
 ): ConnectionMetadata {
 	return {
 		id: row.id,
@@ -184,6 +187,7 @@ function rowToMetadata(
 		readOnly: row.read_only,
 		showAllSchemas: row.show_all_schemas,
 		domainExportPath: exportPath,
+		paths,
 		source: "managed",
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
@@ -209,6 +213,7 @@ export function createConnectionsService(
 		workspace: WorkspaceRef,
 		entry: PredefinedEntry,
 		exportPath: string | null,
+		paths: DatasourcePath[],
 	): ConnectionMetadata {
 		const { definition } = entry;
 		return {
@@ -224,6 +229,7 @@ export function createConnectionsService(
 			readOnly: definition.readOnly,
 			showAllSchemas: definition.showAllSchemas,
 			domainExportPath: exportPath,
+			paths,
 			source: "predefined",
 			createdAt: entry.loadedAt,
 			updatedAt: entry.loadedAt,
@@ -329,16 +335,26 @@ export function createConnectionsService(
 			// One lookup for the whole list: the export path is workspace-local
 			// configuration keyed by connection ref, so it cannot come from the
 			// connection row (predefined ones have none).
-			const paths = await exportPaths(appDb, workspace.id);
+			const [exports, browsePaths] = await Promise.all([
+				exportPaths(appDb, workspace.id),
+				datasourcePathsByConnection(appDb, workspace.id),
+			]);
 			return [
 				...visiblePredefined(workspace).map((entry) =>
 					predefinedMetadata(
 						workspace,
 						entry,
-						paths.get(entry.definition.id) ?? null,
+						exports.get(entry.definition.id) ?? null,
+						browsePaths.get(entry.definition.id) ?? [],
 					),
 				),
-				...rows.map((row) => rowToMetadata(row, paths.get(row.id) ?? null)),
+				...rows.map((row) =>
+					rowToMetadata(
+						row,
+						exports.get(row.id) ?? null,
+						browsePaths.get(row.id) ?? [],
+					),
+				),
 			].sort((a, b) => a.name.localeCompare(b.name));
 		},
 

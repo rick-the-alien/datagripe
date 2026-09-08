@@ -2,7 +2,9 @@ import type {
 	ConnectionAdapter,
 	ConnectionMetadata,
 	ConnectionTestResult,
+	DatasourcePath,
 	DomainExportPathCheck,
+	HostPathCheck,
 } from "@datagripe/contracts";
 import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
@@ -61,6 +63,29 @@ const NAMESPACE_PLURALS: Record<ConnectionAdapter, string> = {
 	sqlite: "files",
 	redis: "keyspaces",
 };
+
+/**
+ * A path pair while the form has it. `key` is a render identity: a row
+ * added here has no server id yet, and two blank rows must still be two
+ * rows.
+ */
+interface PathRow {
+	key: string;
+	id?: string;
+	name: string;
+	path: string;
+}
+
+function toRow(path: DatasourcePath): PathRow {
+	return { key: path.id, id: path.id, name: path.name, path: path.path };
+}
+
+/** Order-sensitive: the list order is the sidebar's section order. */
+function pathsSignature(rows: PathRow[]): string {
+	return JSON.stringify(
+		rows.map((row) => [row.id ?? "", row.name.trim(), row.path.trim()]),
+	);
+}
 
 export function ConnectionForm(props: IDockviewPanelProps) {
 	const { connectionId } = readConnectionFormParams(props.params);
@@ -140,8 +165,9 @@ function ConnectionFormBody(props: {
 	 * (docs/brand/mocks/datasource-settings.html "The two save buttons").
 	 *
 	 * `check path` is a validation step, not a save: it asks the server
-	 * whether the directory resolves inside DOMAIN_EXPORT_ROOTS and shows
-	 * the answer inline.
+	 * whether it can actually write there — the directory has to exist,
+	 * be absolute, and be inside `HOST_FS_ROOTS` where a deployment set
+	 * one — and shows the answer inline.
 	 */
 	const [exportPath, setExportPath] = useState(editing?.domainExportPath ?? "");
 	const [pathCheck, setPathCheck] = useState<DomainExportPathCheck | null>(
@@ -186,6 +212,64 @@ function ConnectionFormBody(props: {
 		});
 	};
 
+	/*
+	 * Datasource paths (docs/spec/datasource-paths.md): the project
+	 * directories this datasource brings with it, each of which becomes a
+	 * sidebar section above the workspace files. Same nature as the export
+	 * directory — workspace-local configuration *about* a datasource — so
+	 * they save the same way, on the form's single save, and a predefined
+	 * datasource can carry them too.
+	 *
+	 * `key` is a render key, not an identity: a row added here has no id
+	 * until the server assigns one, and two blank rows must still be two
+	 * rows.
+	 */
+	const [paths, setPaths] = useState<PathRow[]>(() =>
+		(editing?.paths ?? []).map(toRow),
+	);
+	const [pathChecks, setPathChecks] = useState<Record<string, HostPathCheck>>(
+		{},
+	);
+	const pathsDirty =
+		pathsSignature(paths) !== pathsSignature((editing?.paths ?? []).map(toRow));
+
+	const patchPath = (key: string, partial: Partial<PathRow>) => {
+		setPaths((current) =>
+			current.map((row) => (row.key === key ? { ...row, ...partial } : row)),
+		);
+		setPathChecks((current) => {
+			const { [key]: _cleared, ...rest } = current;
+			return rest;
+		});
+	};
+
+	const checkDatasourcePath = async (row: PathRow) => {
+		const result = await wsClient
+			.request<HostPathCheck>("datasource.check-path", {
+				path: row.path.trim(),
+			})
+			.catch((cause: unknown) => ({
+				ok: false,
+				resolved: null,
+				message: cause instanceof Error ? cause.message : "Could not check it",
+			}));
+		setPathChecks((current) => ({ ...current, [row.key]: result }));
+	};
+
+	const commitPaths = async (connectionRef: string) => {
+		await wsClient.request("datasource.set-paths", {
+			connectionRef,
+			paths: paths
+				.filter((row) => row.name.trim() !== "" && row.path.trim() !== "")
+				.map((row) => ({
+					...(row.id === undefined ? {} : { id: row.id }),
+					name: row.name.trim(),
+					path: row.path.trim(),
+				})),
+			idempotencyKey: crypto.randomUUID(),
+		});
+	};
+
 	const capabilities = ADAPTER_CAPABILITIES[draft.adapter];
 	const has = (field: string) => capabilities.fields.includes(field as never);
 
@@ -205,7 +289,7 @@ function ConnectionFormBody(props: {
 	// A predefined datasource can still be saved when its export directory
 	// changed — that field is not part of the datasource definition.
 	const canSave = readOnly
-		? pathDirty
+		? pathDirty || pathsDirty
 		: draft.name.trim().length > 0 &&
 			draft.databaseName.trim().length > 0 &&
 			(!has("host") || draft.host.trim().length > 0) &&
@@ -236,7 +320,12 @@ function ConnectionFormBody(props: {
 			// one thing this project owns about it.
 			if (readOnly) {
 				if (editing !== null) {
-					await commitExportPath(editing.id);
+					if (pathDirty) {
+						await commitExportPath(editing.id);
+					}
+					if (pathsDirty) {
+						await commitPaths(editing.id);
+					}
 					await useConnectionsStore.getState().load();
 				}
 				props.panel.api.close();
@@ -248,6 +337,15 @@ function ConnectionFormBody(props: {
 			const ref = editingId ?? id;
 			if (ref !== null && pathDirty) {
 				await commitExportPath(ref);
+			}
+			if (ref !== null && pathsDirty) {
+				await commitPaths(ref);
+			}
+			// `saveDraft` already reloaded, but that was before these two
+			// committed — and the sidebar's path sections come off the
+			// connection list, so a stale one leaves the sections behind.
+			if (ref !== null && (pathDirty || pathsDirty)) {
+				await useConnectionsStore.getState().load();
 			}
 			// "Save and connect": a freshly created datasource becomes the
 			// active one — selecting a datasource is what connects it.
@@ -322,6 +420,11 @@ function ConnectionFormBody(props: {
 					value={exportPath.trim() === "" ? "not set" : "set"}
 					tone={exportPath.trim() === "" ? "dim" : undefined}
 				/>
+				<RailFact
+					label="paths"
+					value={paths.length === 0 ? "none" : String(paths.length)}
+					tone={paths.length === 0 ? "dim" : undefined}
+				/>
 				<div className="dg-rail-conn">{connectionString}</div>
 			</RailSection>
 			<RailSection title="test log">
@@ -373,8 +476,16 @@ function ConnectionFormBody(props: {
 				<dd>
 					Where this datasource's domain dump is written. Per datasource,
 					because an export never crosses a datasource boundary.{" "}
-					<b>check path</b> asks the server whether it is inside{" "}
-					<code>DOMAIN_EXPORT_ROOTS</code>.
+					<b>check path</b> asks the server whether it can write there.
+				</dd>
+				<dt>paths</dt>
+				<dd>
+					Directories that belong with this datasource — a migrations checkout,
+					the queries the team keeps. Each becomes a section in the left bar
+					above the workspace files while this datasource is active, titled with
+					the name you give it. Opening a file caches it as a workspace
+					document, so it gets the same live editing as a shared file, and every
+					save writes the file back.
 				</dd>
 			</dl>
 			{editing !== null && (
@@ -617,6 +728,98 @@ function ConnectionFormBody(props: {
 							)}
 						</div>
 					</div>
+				</div>
+			)}
+
+			{/* Only on an existing datasource, for the same reason as the
+				    export directory: the rows are keyed by the connection ref,
+				    which a draft does not have yet. */}
+			{editing !== null && (
+				<div className="dg-form-section">
+					<span className="dg-form-section-title">paths</span>
+					<p className="dg-form-hint">
+						Project directories this datasource brings with it. Each pair
+						becomes its own section in the left bar, above the workspace files,
+						whenever this datasource is the active one — the name is the
+						section's title. Files open in the editor and save back to disk.
+					</p>
+					{paths.length === 0 && (
+						<p className="dg-form-hint dg-rail-dim">
+							No paths yet. A checkout of the migrations that built this
+							database is the usual first one.
+						</p>
+					)}
+					{paths.map((row) => {
+						const check = pathChecks[row.key];
+						return (
+							<div key={row.key} className="dg-path-row">
+								<label className="dg-field">
+									<span>Name</span>
+									<input
+										value={row.name}
+										placeholder="migrations"
+										onChange={(event) =>
+											patchPath(row.key, { name: event.target.value })
+										}
+									/>
+								</label>
+								<label className="dg-field">
+									<span>Directory</span>
+									<input
+										value={row.path}
+										placeholder="/home/you/repo/db/migrations"
+										onChange={(event) =>
+											patchPath(row.key, { path: event.target.value })
+										}
+									/>
+								</label>
+								<div className="dg-field-inline">
+									<button
+										type="button"
+										className="dg-btn"
+										disabled={row.path.trim() === ""}
+										onClick={() => void checkDatasourcePath(row)}
+									>
+										check
+									</button>
+									<button
+										type="button"
+										className="dg-btn"
+										aria-label={`Remove ${row.name.trim() === "" ? "this path" : row.name}`}
+										onClick={() => {
+											setPaths((current) =>
+												current.filter((entry) => entry.key !== row.key),
+											);
+										}}
+									>
+										remove
+									</button>
+									{check !== undefined && (
+										<span
+											className={check.ok ? "dg-test-ok" : "dg-test-failed"}
+										>
+											{check.resolved ?? check.message}
+										</span>
+									)}
+								</div>
+							</div>
+						);
+					})}
+					<button
+						type="button"
+						className="dg-doc-new"
+						onClick={() =>
+							setPaths((current) => [
+								...current,
+								{ key: crypto.randomUUID(), name: "", path: "" },
+							])
+						}
+					>
+						+ add a path
+					</button>
+					{/* Removing a pair here closes its files rather than deleting
+						    them: the files on disk are never touched, and anything
+						    unsaved is archived, not dropped. */}
 				</div>
 			)}
 

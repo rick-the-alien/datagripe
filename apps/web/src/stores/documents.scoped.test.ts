@@ -82,6 +82,7 @@ describe("scratch vs shared", () => {
 					title: "team.sql",
 					revision: 2,
 					updatedAt: "2026-08-31T10:00:00.000Z",
+					origin: null,
 				},
 			],
 			"ws-a",

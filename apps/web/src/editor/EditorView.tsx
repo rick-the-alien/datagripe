@@ -275,6 +275,9 @@ export function EditorView(props: IDockviewPanelProps) {
 	const saveError = useDocumentsStore((state) =>
 		documentId === undefined ? undefined : state.saveErrors[documentId],
 	);
+	const diskChange = useDocumentsStore((state) =>
+		documentId === undefined ? undefined : state.diskChanges[documentId],
+	);
 
 	useEffect(() => {
 		const decorations = editorDecorations.get(props.api.id);
@@ -451,6 +454,38 @@ export function EditorView(props: IDockviewPanelProps) {
 			{saveError !== undefined && conflict === undefined && (
 				<div className="dg-conflict dg-save-error" role="alert">
 					Save failed: {saveError}
+				</div>
+			)}
+			{/* A file-backed document whose file moved on disk while this copy
+				    had edits (docs/spec/datasource-paths.md). Both versions are in
+				    hand; neither is adopted until someone picks, and the pick is
+				    a save either way so the row, the file and every other viewer
+				    end up agreeing. */}
+			{diskChange !== undefined && (
+				<div className="dg-conflict" role="alert">
+					<span>
+						This file changed on disk, and this copy has unsaved edits.
+					</span>
+					<button
+						type="button"
+						onClick={() =>
+							void useDocumentsStore
+								.getState()
+								.resolveDiskChange(documentId, "disk")
+						}
+					>
+						Use the file on disk
+					</button>
+					<button
+						type="button"
+						onClick={() =>
+							void useDocumentsStore
+								.getState()
+								.resolveDiskChange(documentId, "mine")
+						}
+					>
+						Keep this version
+					</button>
 				</div>
 			)}
 			{conflict !== undefined && (

@@ -10,7 +10,7 @@ import type { ConnectionsService, WorkspaceRef } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import type { AppDb } from "../db/app/pool";
 import { log } from "../log";
-import { resolveExportRoot } from "./paths";
+import { type HostFsPolicy, resolveHostDirectory } from "./paths";
 import { exportPath } from "./runs";
 import { listDomains } from "./service";
 
@@ -57,7 +57,7 @@ async function readManifest(root: string): Promise<DomainManifest> {
 export interface ImportDeps {
 	appDb: AppDb;
 	connections: ConnectionsService;
-	exportRoots: string[];
+	hostFs: HostFsPolicy;
 }
 
 export async function runImport(
@@ -71,7 +71,7 @@ export async function runImport(
 		workspace.id,
 		request.connectionRef,
 	);
-	const root = await resolveExportRoot(configured, deps.exportRoots);
+	const root = await resolveHostDirectory(configured, deps.hostFs);
 	const manifest = await readManifest(root);
 
 	const connection = (await deps.connections.listConnections(workspace)).find(

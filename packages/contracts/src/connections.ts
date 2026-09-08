@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { adapterInfoSchema, connectionAdapterSchema } from "./adapters";
 import { workspaceRoleSchema } from "./auth";
+import { datasourcePathSchema } from "./files";
 import { documentListEntrySchema } from "./multiplayer";
 
 /** Connection contracts. Secrets are write-only; never serialized back to clients. */
@@ -43,6 +44,15 @@ export const connectionMetadataSchema = z.object({
 	 * one while everything else about it stays read-only.
 	 */
 	domainExportPath: z.string().nullable(),
+	/**
+	 * Project directories this datasource brings with it
+	 * (docs/spec/datasource-paths.md) — each one becomes a sidebar
+	 * section above the workspace files while it is the active
+	 * datasource. Same nature as `domainExportPath`: workspace-local
+	 * configuration about a datasource, so a predefined connection can
+	 * carry them too.
+	 */
+	paths: z.array(datasourcePathSchema).default([]),
 	source: connectionSourceSchema,
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),

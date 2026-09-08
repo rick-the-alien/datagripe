@@ -1,3 +1,4 @@
+import type { DocumentOrigin } from "@datagripe/contracts";
 import Dexie, { type EntityTable } from "dexie";
 
 /**
@@ -17,6 +18,11 @@ export interface StoredDocument {
 	shared?: boolean;
 	/** Owning workspace for shared files; null/absent for scratchpads. */
 	workspaceId?: string | null;
+	/** The file this document is, for one opened from a datasource path
+	 * (docs/spec/datasource-paths.md). Cached alongside the content so a
+	 * reload knows which sidebar section the document belongs to before
+	 * the socket is up. */
+	origin?: DocumentOrigin | null;
 }
 
 export interface StoredDraft {

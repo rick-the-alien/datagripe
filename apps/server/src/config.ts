@@ -55,12 +55,30 @@ const envSchema = z.object({
 		.positive()
 		.default(3),
 	/**
-	 * Colon-separated absolute directories the domain export may write
-	 * into (docs/spec/domains.md "Where it may write"). Empty means export
-	 * is disabled, and the UI says so rather than offering a button that
-	 * always fails.
+	 * Optional colon-separated allowlist of absolute directories the
+	 * server may read and write on behalf of a workspace — the domain
+	 * export (docs/spec/domains.md "Where it may write") and the
+	 * datasource paths the sidebar browses
+	 * (docs/spec/datasource-paths.md).
+	 *
+	 * Empty (the default) means **no allowlist**: the directory is
+	 * already named explicitly per datasource, and making people
+	 * configure the same thing twice bought nothing. Set it when the host
+	 * is shared with people who do not own it — and see
+	 * `HOST_FS_DISABLED` to switch host access off entirely.
 	 */
+	HOST_FS_ROOTS: z.string().default(""),
+	/** Pre-rename name for HOST_FS_ROOTS; still honoured. */
 	DOMAIN_EXPORT_ROOTS: z.string().default(""),
+	/**
+	 * Turn off every host-filesystem feature: domain export/import and
+	 * datasource paths. This is what a hosted, multi-tenant deployment
+	 * sets — there, the person pressing the button does not own the disk.
+	 */
+	HOST_FS_DISABLED: z
+		.enum(["true", "false"])
+		.default("false")
+		.transform((value) => value === "true"),
 	/** Gate the commit path. Off means the buttons are absent, not
 	 * disabled-with-a-tooltip. */
 	DOMAIN_EXPORT_GIT: z

@@ -2,6 +2,8 @@ import type {
 	Document,
 	DocumentChangedPayload,
 	DocumentListEntry,
+	DocumentOrigin,
+	FileOpenResult,
 } from "@datagripe/contracts";
 import { create } from "zustand";
 import { WsError, type WsRequestFn, wsClient } from "../api/ws";
@@ -48,6 +50,12 @@ export type DocumentsState = {
 	conflicts: Record<string, DocumentConflict>;
 	/** Permission/validation save failures (per document). */
 	saveErrors: Record<string, string>;
+	/**
+	 * File-backed documents whose file moved on disk while the cached copy
+	 * had edits of its own (docs/spec/datasource-paths.md). Neither side
+	 * can be adopted silently, so both are held until someone picks.
+	 */
+	diskChanges: Record<string, { content: string }>;
 	hydrate: (workspaceId: string | null) => Promise<void>;
 	syncFromServer: (
 		serverDocs: DocumentListEntry[],
@@ -59,6 +67,14 @@ export type DocumentsState = {
 	createDocument: (title?: string, shared?: boolean) => EditorDocument;
 	/** Re-scope shared files to a different workspace (switch). */
 	switchWorkspace: (workspaceId: string) => Promise<void>;
+	/**
+	 * Open a file under a datasource path as a workspace document. The
+	 * server owns the cache: two people opening the same file land on one
+	 * document, with the live state every shared file has.
+	 */
+	openFile: (origin: DocumentOrigin) => Promise<EditorDocument | null>;
+	/** Answer the disk-changed banner: take the file, or keep this copy. */
+	resolveDiskChange: (id: string, choice: "disk" | "mine") => Promise<void>;
 	renameDocument: (id: string, title: string) => void;
 	updateContent: (id: string, content: string) => void;
 	saveDocument: (id: string) => Promise<void>;
@@ -159,6 +175,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									title: result.document.title,
 									revision,
 									updatedAt: result.document.updatedAt,
+									origin: result.document.origin,
 								},
 							},
 						});
@@ -178,6 +195,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									title: doc.title,
 									revision: 0,
 									updatedAt: now(),
+									origin: null,
 								},
 							},
 						});
@@ -233,6 +251,9 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 				revision: saved.revision,
 				createdAt: saved.createdAt,
 				updatedAt: saved.updatedAt,
+				shared: saved.shared,
+				workspaceId: saved.shared ? get().workspaceId : null,
+				origin: saved.origin,
 			});
 			await db.drafts.delete(doc.id);
 			set({ documents: { ...get().documents, [doc.id]: saved } });
@@ -247,6 +268,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 			serverDocs: {},
 			conflicts: {},
 			saveErrors: {},
+			diskChanges: {},
 
 			/** Scratchpads (local) plus this workspace's shared files. */
 			async hydrate(workspaceId) {
@@ -315,6 +337,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					serverDocs: {},
 					conflicts: {},
 					saveErrors: {},
+					diskChanges: {},
 				});
 			},
 
@@ -353,6 +376,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							revision: fetched.revision,
 							dirty: false,
 							shared: true,
+							origin: fetched.origin,
 							createdAt: timestamp,
 							updatedAt: fetched.updatedAt,
 						};
@@ -371,6 +395,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							updatedAt: doc.updatedAt,
 							shared: true,
 							workspaceId,
+							origin: doc.origin,
 						});
 						continue;
 					}
@@ -408,6 +433,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 								updatedAt: adopted.updatedAt,
 								shared: true,
 								workspaceId,
+								origin: adopted.origin,
 							});
 						} else {
 							// Dirty → keep the draft, flag the conflict.
@@ -458,6 +484,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							updatedAt: repaired.updatedAt,
 							shared: true,
 							workspaceId,
+							origin: repaired.origin,
 						});
 					}
 				}
@@ -491,6 +518,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 									title: local.title,
 									revision: 0,
 									updatedAt: local.updatedAt,
+									origin: null,
 								},
 							},
 						});
@@ -511,6 +539,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							title: change.title,
 							revision: change.revision,
 							updatedAt: change.updatedAt,
+							origin: change.origin,
 						},
 					},
 				});
@@ -543,6 +572,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						revision: fetched.revision,
 						dirty: false,
 						shared: true,
+						origin: fetched.origin,
 						createdAt: timestamp,
 						updatedAt: fetched.updatedAt,
 					};
@@ -561,6 +591,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						updatedAt: doc.updatedAt,
 						shared: true,
 						workspaceId,
+						origin: doc.origin,
 					});
 					return;
 				}
@@ -597,6 +628,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 							updatedAt: adopted.updatedAt,
 							shared: true,
 							workspaceId,
+							origin: adopted.origin,
 						});
 					} else {
 						set({
@@ -672,6 +704,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					revision: 0,
 					dirty: false,
 					shared,
+					origin: null,
 					createdAt: timestamp,
 					updatedAt: timestamp,
 				};
@@ -690,6 +723,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 					updatedAt: doc.updatedAt,
 					shared: doc.shared,
 					workspaceId: doc.shared ? get().workspaceId : null,
+					origin: null,
 				});
 				// Shared files register server-side immediately when connected.
 				if (shared && ws?.isOpen()) {
@@ -709,6 +743,7 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 										title: doc.title,
 										revision: 0,
 										updatedAt: doc.updatedAt,
+										origin: null,
 									},
 								},
 							});
@@ -716,6 +751,129 @@ export function createDocumentsStore(deps: DocumentsStoreDeps) {
 						.catch(() => {});
 				}
 				return doc;
+			},
+
+			async openFile(origin) {
+				if (ws === undefined || !ws.isOpen()) {
+					return null;
+				}
+				const result = await ws.request<FileOpenResult>("file.open", {
+					connectionRef: origin.connectionRef,
+					pathId: origin.pathId,
+					filePath: origin.filePath,
+				});
+				const fetched = result.document;
+				const local = get().documents[fetched.id];
+				const timestamp = now();
+				// A local draft is never overwritten by opening the file again:
+				// the same rule the server sync follows, for the same reason.
+				const doc: EditorDocument =
+					local === undefined
+						? {
+								id: fetched.id,
+								title: fetched.title,
+								language: "sql",
+								savedContent: fetched.content,
+								currentContent: fetched.content,
+								revision: fetched.revision,
+								dirty: false,
+								shared: true,
+								origin: fetched.origin,
+								createdAt: timestamp,
+								updatedAt: fetched.updatedAt,
+							}
+						: {
+								...local,
+								title: fetched.title,
+								savedContent: fetched.content,
+								currentContent: local.dirty
+									? local.currentContent
+									: fetched.content,
+								revision: fetched.revision,
+								shared: true,
+								origin: fetched.origin,
+								updatedAt: fetched.updatedAt,
+							};
+				// The server may have moved past this draft — a teammate saved,
+				// or the file was adopted from disk. Flagged here rather than
+				// left to the `document.changed` broadcast, so the answer does
+				// not depend on which of the two arrives first.
+				const behind =
+					local?.dirty === true && fetched.revision > local.revision;
+				set({
+					documents: { ...get().documents, [doc.id]: doc },
+					order: get().order.includes(doc.id)
+						? get().order
+						: [...get().order, doc.id],
+					...(behind
+						? {
+								conflicts: {
+									...get().conflicts,
+									[doc.id]: {
+										revision: fetched.revision,
+										content: fetched.content,
+										updatedAt: fetched.updatedAt,
+									},
+								},
+							}
+						: {}),
+					serverDocs: {
+						...get().serverDocs,
+						[doc.id]: {
+							id: doc.id,
+							title: doc.title,
+							revision: doc.revision,
+							updatedAt: doc.updatedAt,
+							origin: doc.origin,
+						},
+					},
+					...(result.diskChanged && result.diskContent !== null
+						? {
+								diskChanges: {
+									...get().diskChanges,
+									[doc.id]: { content: result.diskContent },
+								},
+							}
+						: {}),
+				});
+				await db.documents.put({
+					id: doc.id,
+					title: doc.title,
+					content: doc.savedContent,
+					revision: doc.revision,
+					createdAt: doc.createdAt,
+					updatedAt: doc.updatedAt,
+					shared: true,
+					workspaceId: get().workspaceId,
+					origin: doc.origin,
+				});
+				return doc;
+			},
+
+			async resolveDiskChange(id, choice) {
+				const change = get().diskChanges[id];
+				const local = get().documents[id];
+				if (change === undefined || local === undefined) {
+					return;
+				}
+				const { [id]: _cleared, ...diskChanges } = get().diskChanges;
+				set({ diskChanges });
+				if (choice === "disk") {
+					set({
+						documents: {
+							...get().documents,
+							[id]: {
+								...local,
+								currentContent: change.content,
+								dirty: true,
+								updatedAt: now(),
+							},
+						},
+					});
+				}
+				// Either way the answer is a save: it is the one action that
+				// makes the row, the file and every other viewer agree again.
+				await get().saveDocument(id);
 			},
 
 			renameDocument(id, title) {

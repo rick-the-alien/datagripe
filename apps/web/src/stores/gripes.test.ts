@@ -131,6 +131,7 @@ describe("a deleted document's findings do not linger", () => {
 					revision: 0,
 					dirty: true,
 					shared: false,
+					origin: null,
 					createdAt: "",
 					updatedAt: "",
 				},
@@ -158,6 +159,7 @@ describe("a deleted document's findings do not linger", () => {
 			revision: 0,
 			dirty: true,
 			shared: false,
+			origin: null,
 			createdAt: "",
 			updatedAt: "",
 		};

@@ -296,7 +296,7 @@ table.doc td:first-child{color:var(--ink);font-family:var(--mono);font-size:12.5
         '<div class="in ph">/home/you/repo/datasource/schema</div>'+
         '<div class="hint">Where this datasource\'s domain dump is written (<code>docs/spec/domains.md</code>). '+
         'Per datasource — an export never crosses a datasource boundary, and two sharing a directory would '+
-        'overwrite each other\'s tree.'+(lock?'':' <b style="color:var(--cyan);font-weight:400">Check path</b> validates against <code>DOMAIN_EXPORT_ROOTS</code>.')+'</div></div>'+
+        'overwrite each other\'s tree.'+(lock?'':' <b style="color:var(--cyan);font-weight:400">Check path</b> asks the server whether it can write there.')+'</div></div>'+
       '</div>'+
 
       '<div class="foot">'+(lock

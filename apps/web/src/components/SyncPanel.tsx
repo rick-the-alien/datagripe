@@ -290,10 +290,10 @@ export function SyncPanel(props: { params?: unknown }) {
 				<dt>target</dt>
 				<dd>
 					{runs?.exportEnabled === false ? (
-						// Empty means disabled, and the UI says so rather than
-						// offering a button that always fails.
+						// Off at the deployment level, and the UI says so rather
+						// than offering a button that always fails.
 						<span className="dg-sync-off">
-							export is off — DOMAIN_EXPORT_ROOTS is not configured
+							export is off — HOST_FS_DISABLED is set on this server
 						</span>
 					) : (
 						(runs?.root ?? (

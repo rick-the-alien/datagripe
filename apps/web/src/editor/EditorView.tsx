@@ -140,6 +140,12 @@ export function EditorView(props: IDockviewPanelProps) {
 			fontSize: 13,
 			scrollBeyondLastLine: false,
 			padding: { top: 8 },
+			// Middle-click drag makes the columnar, multi-line selection
+			// IntelliJ does. Monaco implements it already, but hands the
+			// middle button to the Linux primary clipboard instead unless
+			// `selectionClipboard` is off — and a browser tab has no primary
+			// clipboard to paste from, so nothing is given up.
+			selectionClipboard: false,
 		});
 
 		const viewId = props.api.id;

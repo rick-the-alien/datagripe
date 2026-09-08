@@ -160,7 +160,52 @@ A `CompletionItemProvider` for language `sql` (registered once in
 - Document → connection resolution mirrors the executions store
   (document pref, then workspace default); model URIs parse as
   `datagripe://document/<id>.sql` with the id in `uri.path`
-  (`authority === "document"`).
+  (`authority === "document"`), via `documentIdFromModelUri`.
+
+### Formatting
+
+**Ctrl+Alt+L reformats** — IntelliJ's binding, and DataGrip's. With a
+selection it formats the selection, without one the whole document.
+
+- The layout comes from `formatSql` in `@datagripe/sql-tools`: a
+  token-stream formatter, not a parser, so it lays out a statement that
+  is still half-typed. One clause per line, joins hanging under their
+  FROM, comma lists and AND/OR chains inline while they fit inside 100
+  columns and one item per line when they do not, parens breaking as
+  `(` … `)` around their contents, and CASE branches one per line. Only
+  whitespace and keyword case change; identifiers, literals and comments
+  are copied verbatim, and comments keep the line they were written on
+  (a trailing `--` comment takes the comma with it, ahead of itself).
+- Every result is re-tokenized and compared with the input before it is
+  returned. Any difference — a comma dropped from malformed input, an
+  unbalanced paren — returns the original text untouched: a formatter
+  that loses SQL is worse than no formatter.
+- Wired as Monaco formatting providers (`editor/formatting.ts`,
+  registered from `monacoSetup.ts`), not as a command of our own, so one
+  registration covers the SQL editor, the editor context menu, and
+  Monaco's own Shift+Alt+F, and the table view's JSON value editor gets
+  Ctrl+Alt+L for free from the JSON language service.
+- Indentation comes from Monaco's own tab settings per model, the
+  dialect from the document's connection — MySQL backticks and Postgres
+  dollar-quotes tokenize differently, and a formatter that guessed would
+  rewrite a literal.
+- The keybinding is registered globally with
+  `monaco.editor.addKeybindingRules`, two rules discriminated on
+  `editorHasSelection`. Per-editor `editor.addCommand` is not used, for
+  the same reason Ctrl/Cmd+S is not: command registrations are global,
+  so identical per-editor bindings collide across split views.
+
+### Selection
+
+- **Middle-click drag makes a columnar, multi-line selection**, as in
+  IntelliJ: one cursor per line, all of them editable at once. Monaco
+  implements this itself, but hands the middle button to the Linux
+  primary clipboard unless `selectionClipboard` is off — so the option
+  is off on every editor we create. A browser tab has no primary
+  clipboard to paste from, so nothing is given up.
+- Alt+Shift+drag (Monaco's own column-select gesture) and Alt+click
+  multi-cursor keep working; this only adds the mouse button IntelliJ
+  users reach for.
 
 ### Views and Dockview
 

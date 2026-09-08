@@ -2,6 +2,7 @@ import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
 import { registerSqlCompletion } from "./completion/provider";
+import { registerSqlFormatting } from "./formatting";
 
 /**
  * Monaco bundled locally (no CDN loader). SQL needs no worker of its own
@@ -72,5 +73,6 @@ monaco.editor.defineTheme("datagripe-dark", {
 });
 
 registerSqlCompletion();
+registerSqlFormatting();
 
 export { monaco };

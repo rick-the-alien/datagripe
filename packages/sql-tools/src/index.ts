@@ -488,3 +488,6 @@ export function isRowReturningStatement(
 	const [code] = splitStatements(statement, options);
 	return code !== undefined && READ_PATTERN.test(code.text);
 }
+
+/** The formatter lives in its own module; the entry re-exports it. */
+export { type FormatOptions, formatSql } from "./format";

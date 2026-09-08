@@ -54,6 +54,30 @@ const envSchema = z.object({
 		.int()
 		.positive()
 		.default(3),
+	/**
+	 * Colon-separated absolute directories the domain export may write
+	 * into (docs/spec/domains.md "Where it may write"). Empty means export
+	 * is disabled, and the UI says so rather than offering a button that
+	 * always fails.
+	 */
+	DOMAIN_EXPORT_ROOTS: z.string().default(""),
+	/** Gate the commit path. Off means the buttons are absent, not
+	 * disabled-with-a-tooltip. */
+	DOMAIN_EXPORT_GIT: z
+		.enum(["true", "false"])
+		.default("false")
+		.transform((value) => value === "true"),
+	DOMAIN_GIT_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+	/** Per-table cap for `includeData` domains. Exceeding it fails that
+	 * table and reports it, rather than writing a truncated file that looks
+	 * complete. */
+	DOMAIN_EXPORT_MAX_DATA_ROWS: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(10_000),
+	/** Access-report ceiling; above it the request asks for a filter. */
+	ACCESS_REPORT_MAX_CELLS: z.coerce.number().int().positive().default(250_000),
 });
 
 type EnvConfig = z.infer<typeof envSchema>;

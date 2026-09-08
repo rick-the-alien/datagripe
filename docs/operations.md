@@ -71,7 +71,9 @@ flat). Re-run after schema or pool changes.
 Security-relevant events are structured JSON on stdout with
 `"msg":"audit"`: `auth.signup`, `auth.login.success`,
 `auth.login.failure`, `auth.logout`, `connection.create/update/delete`,
-`execution.start/cancel`, `workspace.member.add/remove`, `ssrf.blocked`.
+`execution.start/cancel`, `workspace.member.add/remove`, `ssrf.blocked`,
+`domain.create/update/delete/tag`, `domain.export`, `domain.import`,
+`domain.git`, `domain.set-export-path`, `access.roles.set`.
 Pipe to your log stack and alert on `auth.login.failure` bursts and any
 `ssrf.blocked`. Secrets and result values are never logged.
 
@@ -90,3 +92,37 @@ Pipe to your log stack and alert on `auth.login.failure` bursts and any
   versions keep decrypting).
 - `WEB_ORIGIN` set to the exact origin the app is served from; both
   HTTP and the WebSocket upgrade enforce it.
+
+### Domain export and git (docs/spec/domains.md)
+
+Export is the one action in DataGripe that writes to the host
+filesystem, and `domain.git` is the only one that runs a subprocess.
+Both are **off by default** and both are `owner`-only.
+
+- `DOMAIN_EXPORT_ROOTS` — colon-separated absolute directories the
+  export may write into. **Empty (the default) disables export**, and
+  the sync tab says so rather than offering a button that always fails.
+  Keep it as narrow as the deployment allows; the datasource's chosen
+  path is re-resolved with `realpath` and checked segment-wise against
+  this list on *every* export, so a symlink swapped in later is caught.
+  The path itself is set per datasource on its edit page, not per
+  project — an export never crosses a datasource boundary.
+- `DOMAIN_EXPORT_GIT` (default `false`) — enables `domain.git`. When
+  off, the commit controls are absent, not disabled. Git runs with
+  argv (never a shell), a fixed verb list, `add` scoped to the domain
+  root pathspec, and `GIT_TERMINAL_PROMPT=0` so a missing credential
+  errors instead of hanging. DataGripe manages no credentials: `HOME`,
+  `PATH` and `SSH_AUTH_SOCK` pass through and git's own stderr is shown
+  verbatim.
+- `DOMAIN_GIT_TIMEOUT_MS` (default 60000) — every git invocation is
+  killed at this.
+- `DOMAIN_EXPORT_MAX_DATA_ROWS` (default 10000) — per-table cap for
+  `includeData` domains. Over it, the table is refused and reported
+  rather than written truncated.
+- `ACCESS_REPORT_MAX_CELLS` (default 250000) — the access report counts
+  its cells first and refuses above this, asking for a schema or domain
+  filter (docs/spec/access-report.md).
+
+In a hosted, multi-tenant deployment, leave both `DOMAIN_EXPORT_ROOTS`
+and `DOMAIN_EXPORT_GIT` unset. They exist for the local and desktop
+shape, where the person pressing the button owns the checkout.

@@ -1,4 +1,10 @@
 export { MysqlAdapter } from "./mysql/adapter";
+export {
+	type AccessReportData,
+	type AccessReportQuery,
+	AccessReportTooLargeError,
+	type DiscoveredRole,
+} from "./postgres/accessData";
 export { PostgresAdapter } from "./postgres/adapter";
 export { RedisAdapter } from "./redis/adapter";
 export { SqliteAdapter } from "./sqlite/adapter";

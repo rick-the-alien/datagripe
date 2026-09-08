@@ -13,10 +13,11 @@ import {
 	renderFooter,
 } from "@datagripe/gripes";
 import { revealInEditor } from "../app/editorPanels";
-import { openObjectView } from "../app/viewPanels";
+import { openAccessPanel, openObjectView } from "../app/viewPanels";
 import { useBrandingStore } from "../stores/branding";
 import { useDocumentsStore } from "../stores/documents";
 import { hiddenCount, useGripesStore } from "../stores/gripes";
+import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { GripeDismiss } from "./GripeDismiss";
 import { Mascot } from "./Mascot";
@@ -86,6 +87,20 @@ function GripeRow(props: {
 								kind: finding.at.objectKind,
 							},
 							finding.at.tab,
+						);
+						return;
+					}
+					// A datasource finding has no object to land on — default
+					// privileges are true before any object exists — so it opens
+					// the report that found it. A row you cannot click is a dead
+					// end.
+					if (finding.at.kind === "datasource") {
+						const ref = finding.at.connectionId;
+						openAccessPanel(
+							ref,
+							useConnectionsStore
+								.getState()
+								.connections.find((entry) => entry.id === ref)?.name ?? ref,
 						);
 					}
 				}}

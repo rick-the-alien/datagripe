@@ -380,6 +380,92 @@ The structural entries **deep-link** — choosing `indexes` opens the object vie
 
 ---
 
+### Tabs fill the pane
+
+A tab's container is not its content's measure. Capping the container
+leaves section rules and borders stopping mid-pane with a dead band to
+their right, which reads as a truncated layout rather than a form
+(`docs/brand/mocks/datasource-settings.html` "Width").
+
+- The body fills the pane. Only *content* is measured: prose to ~72ch,
+  field help to ~56ch, a path input to what a path needs.
+- The field grid is `auto-fit` — three columns on a medium pane, five on
+  a wide one — with a per-field maximum so a wide pane yields more
+  columns rather than a single input stretched to 2000px.
+- A tab whose content is a table takes the whole pane, uncapped. The
+  access report's matrix is roles × objects and every column earns its
+  width.
+
+### The rail
+
+Any tab may carry a rail, and the leftover space on a wide pane is what
+it is for. Three hundred pixels, beside the content, holding one of two
+kinds of pane:
+
+| Pane | Contents |
+| --- | --- |
+| `state` | Live facts about the thing on screen — connection status, the resolved connection string, the test log, the last export's counts |
+| `help` | What the fields mean, and which tab continues the story |
+
+A tab with both toggles between them rather than stacking two columns.
+The rail collapses below **900px of pane width** and stacks underneath;
+that is a *container* query, not a viewport one, because a tab docked at
+a third of the window is narrow however wide the monitor is.
+
+**The divider is the handle.** One line between content and rail — never
+two — with a chevron in it: `›` folds the rail away, `‹` brings it back,
+and the line stays where it was so the gesture is reversible in the same
+place. A rail nobody can dismiss eventually becomes a rail in the way,
+and a dismiss button parked elsewhere in the chrome is one more thing to
+hunt for. Folding is a two-column affordance only: stacked, there is no
+side to fold to, so the handle is not drawn and the rail stays put.
+
+Two rules that keep it from becoming decoration:
+
+- **The state pane earns the width.** The resolved connection string
+  beside the fields that build it is the fastest way to spot a wrong
+  port. A rail that only repeated the form back would be worse than none.
+- **Help is written in the plain product voice, never the gripe voice.**
+  "If the whole interface is sarcastic then nothing is." Help ends with
+  the link to the tab that continues the work — datasource → domains →
+  sync → access — so the rail teaches the shape of the feature, not just
+  the field in front of you.
+
+### One save per form
+
+Two save buttons in one form means one of two things is true and the
+reader cannot tell which: either the second thing saves separately for a
+reason, or it is a leftover. Both readings make someone press both to be
+safe.
+
+A field that needs server-side validation gets a **validation** action —
+`check path`, with the result inline — and the single save at the bottom
+commits everything. Where a form is otherwise read-only, the footer says
+where the values come from rather than offering controls that cannot
+commit.
+
+### Toggles, not checkboxes, for settings that need explaining
+
+A checkbox with its explanation in a paragraph below reads as page copy
+and loses the connection to the control. A setting that needs a sentence
+gets a toggle with the sentence attached and capped to ~56ch, grouped in
+a **behaviour** section. Read-only is a connection constraint and
+show-all-schemas is a display preference; identical checkboxes made them
+look like the same kind of thing.
+
+### One save per form
+
+Two save buttons in one form means one of two things is true and the
+reader cannot tell which: either the second thing saves separately for a
+reason, or it is a leftover. Both readings make someone press both to be
+safe.
+
+A field that needs server-side validation gets a **validation** action —
+`check path`, with the result inline — and the single save at the bottom
+commits everything. Where a form is otherwise read-only, the footer says
+where the values come from rather than offering controls that cannot
+commit.
+
 ## Table view and object view
 
 Two openable surfaces, deliberately different weights. They never compete for space and neither contains the other.
@@ -607,6 +693,13 @@ Suggested sequence, chosen so each stage is usable and nothing is blocked on an 
 ---
 
 ## Open items
+
+**Project class is deferred.** The mocks show a class picker on the
+datasource form and the four class accents throughout. Until the class
+is decided as a real, stored concept rather than a `localStorage` mock,
+ignore it wherever a mock shows it — do not build the picker, and do not
+treat the accent as available.
+
 
 Genuinely undecided. Listed so they are not mistaken for omissions.
 

@@ -4,7 +4,7 @@ import { ATTITUDE_LEVELS, tabsForKind } from "@datagripe/contracts";
 import { RULES } from "./catalogue";
 import { MESSAGES } from "./messages";
 import { renderFinding, renderFooter } from "./render";
-import { objectFor, schemaFor } from "./rules/fixtures";
+import { accessFor, objectFor, schemaFor } from "./rules/fixtures";
 import { runRules } from "./runner";
 import { statementInputFor } from "./statement";
 
@@ -36,6 +36,55 @@ const OFFENDING_ROUTINE = objectFor({
 		LANGUAGE sql SECURITY DEFINER
 		AS $$ SELECT sum(amount) FROM shop.orders $$`,
 });
+
+/**
+ * A datasource whose access is wrong in every way the `grant.*` rules
+ * know about, in one object each.
+ */
+const OFFENDING_ACCESS = [
+	// A routine PUBLIC can execute, security definer, reachable by anon.
+	accessFor({
+		kind: "function",
+		name: "settle(integer)",
+		securityDefiner: true,
+		searchPathPinned: false,
+		rls: "none",
+		policyCount: 0,
+		reach: [
+			{
+				role: "anon",
+				untrusted: true,
+				privileges: ["execute"],
+				blocked: false,
+			},
+		],
+		defaultAclUntrusted: [{ grantee: "anon", objectType: "tables" }],
+	}),
+	// A table anon can read and write, with no row-level security.
+	accessFor({
+		name: "payments",
+		rls: "off",
+		policyCount: 0,
+		reach: [
+			{
+				role: "anon",
+				untrusted: true,
+				privileges: ["select", "insert", "update"],
+				blocked: false,
+			},
+		],
+	}),
+	// RLS on, no policies: denies everything, silently.
+	accessFor({ name: "ledger", rls: "on", policyCount: 0 }),
+	// A view reading a base table its grantee cannot reach.
+	accessFor({
+		kind: "view",
+		name: "v_orders",
+		rls: "none",
+		securityInvoker: false,
+		viewBypass: [{ role: "anon", relation: "api.orders" }],
+	}),
+];
 
 /** SQL that trips every statement rule in the catalogue. */
 const OFFENDING = [
@@ -73,6 +122,9 @@ function allFindings() {
 	}
 	for (const object of [OFFENDING_TABLE, OFFENDING_ROUTINE]) {
 		findings.push(...runRules(RULES, { object }).findings);
+	}
+	for (const access of OFFENDING_ACCESS) {
+		findings.push(...runRules(RULES, { access }).findings);
 	}
 	return findings;
 }

@@ -277,6 +277,20 @@ pretending. Two reasons, both deliberate:
   Promoting project class to the workspace model is the prerequisite,
   and it belongs to the projects feature rather than to this one.
 
+### Grants are direct grants
+
+The grants tab reads `information_schema.role_table_grants`, which
+reports **direct grants only**: a `GRANT ... TO PUBLIC` appears once as
+grantee `PUBLIC`, and a grant inherited through a role appears against
+the parent role's name. Scan the table for a role and you can find
+nothing while that role holds the privilege.
+
+The tab therefore carries a one-line caveat and points at
+`docs/spec/access-report.md`, which resolves effective access with
+`has_*_privilege`. The tab is not "wrong" — per-object direct grants are
+a useful thing to see — but an empty grants tab must never be read as
+"nobody can reach this".
+
 ## Open questions
 
 - Object-scoped gripes are designed in `docs/spec/gripes.md`: structural

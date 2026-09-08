@@ -1,6 +1,6 @@
 # Spec — Access report
 
-**Status:** draft
+**Status:** current
 **Phase:** 13
 **Supersedes:** nothing (extends `docs/spec/object-view.md` "grants",
 `docs/spec/gripes.md`, `docs/spec/domains.md`)
@@ -187,7 +187,12 @@ Proposed rule ids — the wording, as always, is the brand pass's:
 | `grant.rls-no-policy` | RLS on, zero policies — denies everything, silently |
 | `grant.view-owner-bypass` | A view without `security_invoker` is readable by a role that cannot read its base relation |
 | `grant.default-privileges-untrusted` | A `pg_default_acl` entry grants to an untrusted role |
-| `grant.public-schema-usage` | An untrusted role has `USAGE` on a schema holding objects it has no business reaching |
+
+A proposed eighth, `grant.public-schema-usage`, was **dropped**: "a
+schema holding objects it has no business reaching" is a judgement
+DataGripe cannot make, and a rule that cannot tell must say nothing.
+Schema `USAGE` still gates every cell, so an unreachable object simply
+reports no access — which is the honest version of the same fact.
 
 `grant.public-execute` deserves the loudest severity the catalogue
 allows, because it is the *default state* of a new function rather than
@@ -202,17 +207,24 @@ grant.
 
 ### Where it lives
 
-A dock tab, `access: <datasource>`, opened from the sidebar breadcrumb
-header's overflow or from the sync tab. Not a modal: it is a document
-you read, scroll, filter and keep open beside a query while you fix
-things.
+A dock tab, `access: <datasource>`, opened from the breadcrumb overflow
+or from the sync tab. Not a modal: it is a document you read, scroll,
+filter and keep open beside a query while you fix things. Clicking an
+object name opens its object view on the grants tab.
+
+The role picker lives at the top of the same tab — flags, memberships,
+and the three marks — because choosing the columns is part of reading
+the report rather than a setting somewhere else.
 
 - **Filter by domain.** With domains tagged (`docs/spec/domains.md`) the
   report groups by domain, so "what can `anon` reach in `auth`" is one
   click. Untagged objects group last, as everywhere else.
-- Filter by role, by schema, and a "differences only" toggle that hides
-  every row where nothing is reachable without a direct grant. On a
-  mature database that toggle is the report.
+- A **differences only** toggle hides every row where nothing is
+  reachable without a direct grant. On a mature database that toggle is
+  the report.
+- Filtering by schema is available on the wire (`schemas`) but the tab
+  does not expose a control for it yet; the domain filter and the cell
+  cap cover the cases that made it necessary.
 - Sorting is stable and the default order is `(schema, name)`, matching
   the export.
 
@@ -322,3 +334,12 @@ PostgREST that is the only thing they needed to know.
   PostgREST `pre-request`/`db-anon-role` setting when one is discoverable
   in `pg_settings`. It would remove the one manual step, at the cost of
   a wrong guess being invisible.
+
+## What is not built
+
+- **Rendering the per-column grant expansion** in the tab. The data is
+  in the report payload and in the wire type; the row does not expand
+  yet, so `col` currently means "look at this one by hand".
+- **A schema filter control** in the tab (the wire field exists).
+- **MySQL.** `accessReport` is false for every other adapter, and the
+  tab reports itself unsupported rather than guessing.

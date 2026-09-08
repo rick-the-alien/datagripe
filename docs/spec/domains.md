@@ -1,6 +1,6 @@
 # Spec — Domains
 
-**Status:** draft
+**Status:** current
 **Phase:** 12
 **Supersedes:** nothing (extends `docs/spec/connections.md`,
 `docs/spec/workspaces.md`, `docs/spec/object-view.md`; the export's
@@ -61,12 +61,23 @@ their own domain lists even when the schemas rhyme, and the same
 connection reached from two workspaces is two different projects'
 opinions about the same database.
 
-`connection_ref` is the reference the rest of the app already uses: a
-managed connection's UUID, or `predefined:<slug>`
-(`docs/spec/connections.md`). Deleting a managed connection cascades its
-domains away; a predefined connection disappearing from
-`CONNECTIONS_FILE` leaves orphan rows, which `domain.list` never
-returns and the domain manager offers to purge.
+`connection_ref` is `ConnectionMetadata.id` — the same string the
+explorer, the object view and the table view already pass as
+`connectionId`. For a managed connection that is its UUID; for a
+predefined one it is the bare slug from `CONNECTIONS_FILE`
+(`local-demo`), **not** the `predefined:<slug>` form.
+
+Those two shapes both exist in the codebase and it is worth being
+explicit about which one this is: `workspaces.default_connection_ref`
+uses the prefixed form, while every per-object action uses the bare id.
+Domains follow the actions, because a domain is looked up in the same
+breath as the objects it tags.
+
+Deleting a managed connection leaves rows behind — `connection_ref` is
+text, not a foreign key, since a predefined slug has no row to reference
+— and a predefined connection disappearing from `CONNECTIONS_FILE` does
+the same. `domain.list` only ever returns rows for a ref the caller
+asked about, so orphans are inert rather than wrong.
 
 ### Flat, deliberately
 
@@ -181,6 +192,7 @@ can be revisited without losing who made it.
 | `domain.import` | owner | Reads a manifest back and replaces the tag set |
 | `domain.runs` | viewer | Export run history for one `connectionRef` |
 | `domain.git` | owner | `status` / `commit` / `push` against the domain root |
+| `domain.set-export-path` | editor | The datasource's export directory. Editor, like the settings it sits beside; *using* it still needs `owner` |
 
 `domain.upsert`, `domain.tag` and `domain.export` carry an
 `idempotencyKey` and replay through `idempotency_keys` like every other
@@ -195,16 +207,17 @@ Contracts live in `packages/contracts/src/domains.ts`.
 
 ### Sidebar
 
-A **group by domain** toggle sits on the sidebar breadcrumb header
-beside the schema dropdown. It is a view mode, not a filter: every
-object stays reachable in both modes, and expansion state is tracked per
-mode so toggling does not collapse the tree you were reading.
+A **group by domain** toggle (`⌗`) sits in the tree's filter row, beside
+the object filter, with `⋯` for the domain manager next to it. It is a
+view mode, not a filter: every object stays reachable in both modes, and
+each mode keeps its own expansion state so toggling does not collapse
+the tree you were reading.
 
 ```
 ┌─────────────────────────────┐
-│ wallet-prod / public     ▾  │  ⌗  ← group-by-domain toggle
+│ wallet-prod / public     ▾  │
 ├─────────────────────────────┤
-│ filter objects…             │
+│ filter objects…       ⌗  ⋯  │  group-by-domain · manage
 ├─────────────────────────────┤
 │▍▸ auth                   6  │  domain row, colour rail
 │▍  ▤ basic_auth.users        │  schema-qualified: domains cut across
@@ -274,31 +287,37 @@ danger zone…                        │▍reference        │
 
 - Each submenu item carries its colour rail and a `✓` on the current
   domain. `untag` appears only when the object is tagged.
-- With a multi-selection active the submenu applies to the whole
-  selection, and the header reads `domain (7 objects)`. Mixed current
-  domains show no check. This is the bulk path: filter the tree, select
-  the matches, tag once — the thing that makes tagging 200 objects
-  survivable.
+- Ctrl/Cmd click adds an object to a multi-selection, and with one
+  active the submenu applies to all of it — the header reads
+  `domain (7 objects)` and mixed current domains show no check, because
+  a tick describing one of seven would be a lie. The right-clicked row
+  joins the batch even if it was not selected, because it is what the
+  pointer is on. A plain click clears the selection: leaving it live
+  after you have obviously moved on is how a bulk action hits the wrong
+  two hundred objects.
 - `new domain…` opens the manager with the name field focused and the
   pending assignment queued, so creating and tagging is one gesture.
 
 ### Domain manager
 
-A modal from the breadcrumb header's overflow, or from `new domain…`.
+A **tab**, opened from the breadcrumb overflow, the tree header's `⋯`, or
+`new domain…`. Not a modal: the rest of the app already decided that
+forms are tabs, so this one survives navigation and can sit beside the
+tree it describes (`docs/brand/mocks/datasource-selector.html`).
+
 One row per domain: colour swatch, name, description, object count,
-`include data` checkbox, drag handle for order, delete. Deleting shows
-the object count that is about to become untagged and requires
-confirmation — a domain with 30 tags is 30 decisions.
+`include data` checkbox, delete. Deleting shows the object count that is
+about to become untagged and requires confirmation — a domain with 30
+tags is 30 decisions.
 
-The manager also surfaces drift for the datasource:
+The untagged count lives in the grouped tree and in the sync tab's scope
+line rather than here.
 
-- **Untagged objects** — count and a jump into the grouped tree.
-- **Stale tags** — tags whose object the datasource no longer reports,
-  listed with a "remove all" action. These are what a hand-maintained
-  map accumulates silently.
-
-Drift is computed against a live introspection pass, so the manager
-shows a `loading…` state and never reports zero before it has looked.
+**Not built yet:** manual reordering (`sort_order` exists and is honoured;
+nothing sets it but creation order), and the stale-tag report — tags
+whose object the datasource no longer reports, with a "remove all"
+action. Stale tags are what a hand-maintained map accumulates silently,
+so this is the more valuable of the two.
 
 ### Export
 
@@ -426,10 +445,24 @@ count and a written/deleted tally. It is excluded from the prune.
 - `DOMAIN_EXPORT_ROOTS` — a colon-separated list of absolute
   directories, empty by default. **Empty means export is disabled**, and
   the UI says so rather than offering a button that always fails.
-- `workspaces.domain_export_path` holds the chosen directory. On every
-  export the server resolves it with `realpath`, then requires the
-  result to be a path-segment prefix match against one allowlisted root
-  — segment-wise, so `/srv/repos-evil` does not pass for `/srv/repos`.
+- `datasource_export_paths` holds the chosen directory, keyed by
+  `(workspace_id, connection_ref)` — **per datasource, not per project**
+  (migration 0012). An export never crosses a datasource boundary, so a
+  single path per workspace would have two datasources overwriting each
+  other's tree, silently, because both trees are structurally valid.
+- It is set on the **datasource edit page**, beside the other
+  per-datasource settings, and saved by `domain.set-export-path` rather
+  than `connection.update`. That matters for predefined connections:
+  `connection.update` refuses them outright, and the export path has to
+  be settable on one. It can be, because the path is not part of the
+  datasource — it is what this project does with it.
+- A table rather than a column on `connections`, because a predefined
+  connection has no row there.
+- On every export the server resolves the path with `realpath`, then
+  requires the result to be a path-segment prefix match against one
+  allowlisted root — segment-wise, so `/srv/repos-evil` does not pass
+  for `/srv/repos`. Validation happens at export rather than at save, so
+  a directory created later still works.
 - The resolution happens per export, not once at configuration time, so
   a symlink swapped in afterwards is caught.
 - Every generated path is re-checked after joining, and any component
@@ -455,6 +488,7 @@ and because a modal cannot stay open beside the diff it just made.
 │ sync: wallet-prod                                            │
 ├──────────────────────────────────────────────────────────────┤
 │ target   ~/repos/falsedynasty/datasource/schema              │
+│          (set on the datasource's edit page)                 │
 │          git · main · 4 files changed                        │
 │ scope    9 domains · 87 objects · 4 untagged                 │
 ├──────────────────────────────────────────────────────────────┤
@@ -614,23 +648,16 @@ parking lot.
 - Run history: a failed export records `outcome = failed` with the
   error; a dry run records nothing.
 
-## Phasing
+## What is not built
 
-1. **Model and tagging** — migration, contracts, `domain.list` /
-   `upsert` / `delete` / `tag`, the context-menu submenu, the colour
-   rail in the normal tree, the manager.
-2. **Grouped view and export** — group-by-domain toggle, untagged
-   bucket, `domain.export` with dry run and prune, `domain.import`,
-   `DOMAIN_EXPORT_ROOTS`, the sync tab and `domain_exports` history.
-   Grants land in the per-object files here; the `access/` reports
-   arrive with `docs/spec/access-report.md`.
-3. **Committing** — `domain.git`, behind `DOMAIN_EXPORT_GIT`.
-4. **Suggestions** — a domain carries ordered glob patterns
-   (`agg*`, `sync_rival_*`) that propose a domain for untagged objects.
-   Proposals are *proposals*: they render in the untagged bucket in the
-   candidate domain's colour at reduced opacity, with accept and
-   dismiss. Nothing is ever tagged without a person saying so, because a
-   wrong tag that appears by itself is worse than no tag.
+- **Suggestions.** A domain carrying ordered glob patterns (`agg*`,
+  `sync_rival_*`) that propose a domain for untagged objects. When it
+  lands, proposals stay *proposals*: rendered in the untagged bucket in
+  the candidate domain's colour at reduced opacity, with accept and
+  dismiss. Nothing is ever tagged without a person saying so, because a
+  wrong tag that appears by itself is worse than no tag.
+- **The stale-tag report** in the manager (see above).
+- **Manual domain reordering.**
 
 ## Open questions
 

@@ -31,6 +31,18 @@ export const connectionMetadataSchema = z.object({
 	/** Tree shows every schema as an expandable level instead of scoping
 	 * to the single namespace picked in the breadcrumb. */
 	showAllSchemas: z.boolean(),
+	/**
+	 * Where this datasource's domain dump is written
+	 * (docs/spec/domains.md). Per datasource rather than per project,
+	 * because an export never crosses a datasource boundary — one path
+	 * per project would have two datasources overwriting each other's
+	 * tree.
+	 *
+	 * Workspace-local configuration *about* a datasource rather than part
+	 * of its definition, which is why a predefined connection can carry
+	 * one while everything else about it stays read-only.
+	 */
+	domainExportPath: z.string().nullable(),
 	source: connectionSourceSchema,
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),

@@ -12,6 +12,11 @@ import type {
 	TableEdit,
 	TableSort,
 } from "@datagripe/contracts";
+import type {
+	AccessReportData,
+	AccessReportQuery,
+	DiscoveredRole,
+} from "./postgres/accessData";
 
 /**
  * A connection with its secret resolved in server memory, immediately
@@ -88,6 +93,30 @@ export interface DatabaseAdapter {
 		request: ObjectAlterExecution,
 		limits: TableLimits,
 	): Promise<ObjectAlterResult>;
+	/**
+	 * Role x object access reporting (docs/spec/access-report.md).
+	 * Present when capabilities.accessReport is true.
+	 */
+	readRoles?(
+		connection: ResolvedConnection,
+		limits: TableLimits,
+		authenticator: string | null,
+	): Promise<{ roles: DiscoveredRole[]; authenticatorReach: string[] }>;
+	readAccessReport?(
+		connection: ResolvedConnection,
+		query: AccessReportQuery,
+		limits: TableLimits,
+	): Promise<AccessReportData>;
+	/**
+	 * Canonical GRANT statements per object, for the domain export. A
+	 * separate call from describeObject because it is batched across the
+	 * whole datasource in one query.
+	 */
+	readGrantStatements?(
+		connection: ResolvedConnection,
+		limits: TableLimits,
+		schemas: string[],
+	): Promise<Map<string, string[]>>;
 	/** Close every pooled target client this adapter created. */
 	close(): Promise<void>;
 }

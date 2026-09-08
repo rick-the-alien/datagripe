@@ -1347,6 +1347,747 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	color: var(--dg-magenta);
 }
 
+/* ---- domains ------------------------------------------------------ */
+/* docs/spec/domains.md "The colour rail".
+   The rail says DOMAIN, never severity and never project class. The
+   sidebar tree carries no severity marks (those live on the object
+   view's tab strip), and this keeps it that way: two colour languages on
+   one surface would make one of them unreadable. Colour is never the
+   only carrier either — the row's title names the domain, and the group
+   row spells it out. */
+
+.dg-tree-row[data-domain] {
+	border-left-color: var(--dg-domain-rail);
+	border-left-width: var(--dg-border-accent-row);
+}
+
+/* Selection still wins: which row you are on matters more, right now,
+   than which domain it belongs to. */
+.dg-tree-row-selected[data-domain] {
+	border-left-color: var(--dg-violet);
+}
+
+.dg-tree-group {
+	background: none;
+	border: none;
+	border-radius: var(--dg-radius-input);
+	padding: 2px 6px;
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-ui);
+	cursor: pointer;
+}
+
+.dg-tree-group:hover:not(:disabled) {
+	color: var(--dg-ink);
+	background: var(--dg-raised);
+}
+
+.dg-tree-group-on {
+	color: var(--dg-green);
+	background: var(--dg-raised);
+}
+
+.dg-domain-group {
+	width: 100%;
+	background: none;
+	border: none;
+	border-left: var(--dg-border-accent-row) solid
+		var(--dg-domain-rail, transparent);
+	border-radius: 0;
+	justify-content: space-between;
+	cursor: pointer;
+	padding-left: 8px;
+}
+
+.dg-domain-group-label {
+	color: var(--dg-ink);
+	font-weight: 500;
+}
+
+.dg-domain-object {
+	border-left: var(--dg-border-accent-row) solid
+		var(--dg-domain-rail, transparent);
+}
+
+/* Schema-qualified in grouped mode, dimmed so the object name still
+   reads first. */
+.dg-domain-qualified {
+	color: var(--dg-ink-mute);
+}
+
+.dg-context-sub {
+	position: relative;
+}
+
+.dg-context-submenu {
+	position: absolute;
+	left: 100%;
+	top: -4px;
+	margin-left: 2px;
+}
+
+.dg-context-chevron {
+	color: var(--dg-ink-faint);
+}
+
+.dg-context-domain {
+	border-left: var(--dg-border-accent-row) solid
+		var(--dg-domain-rail, transparent);
+	padding-left: 9px;
+}
+
+.dg-context-note {
+	padding: 4px 12px;
+	color: var(--dg-ink-faint);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	font-style: italic;
+}
+
+/* Leftovers from when this was a modal; as a tab it takes the pane. */
+
+.dg-domain-new {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 0 12px;
+}
+
+.dg-domain-slots {
+	display: flex;
+	gap: 4px;
+}
+
+.dg-domain-slot {
+	width: 14px;
+	height: 14px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	padding: 0;
+	cursor: pointer;
+	opacity: 0.55;
+}
+
+.dg-domain-slot-on {
+	opacity: 1;
+	border-color: var(--dg-ink);
+}
+
+.dg-domain-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-domain-table th {
+	text-align: left;
+	color: var(--dg-ink-mute);
+	font-weight: 400;
+	font-size: var(--dg-fs-meta);
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--dg-rule);
+}
+
+.dg-domain-table td {
+	padding: 3px 8px;
+	border-bottom: 1px solid var(--dg-rule-soft);
+	vertical-align: middle;
+}
+
+.dg-domain-table input[type="text"],
+.dg-domain-table input:not([type]) {
+	width: 100%;
+	background: none;
+	border: 1px solid transparent;
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	padding: 2px 4px;
+}
+
+.dg-domain-table input:focus {
+	border-color: var(--dg-violet);
+	background: var(--dg-void);
+}
+
+.dg-domain-count {
+	color: var(--dg-ink-mute);
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.dg-domain-confirm {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--dg-ink-dim);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-modal-note {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+	margin-top: 12px;
+}
+
+.dg-modal-error {
+	color: var(--dg-magenta);
+	font-size: var(--dg-fs-meta);
+	padding: 4px 0;
+}
+
+/* Ctrl/Cmd-click multi-selection, for bulk tagging. Distinct from the
+   single selection: this row is *also* going to be affected. */
+.dg-tree-row-multi {
+	background: var(--dg-raised);
+	outline: 1px dashed var(--dg-violet);
+	outline-offset: -1px;
+}
+
+/* ---- tab rail ------------------------------------------------------
+ * docs/brand/mocks/datasource-settings.html "Width".
+ * A form column plus a rail that earns the leftover space. The
+ * breakpoint is a *container* query, not a viewport one: a tab docked at
+ * a third of the window is narrow however wide the monitor is.
+ */
+
+.dg-tabshell {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	align-items: start;
+	min-height: 100%;
+}
+
+.dg-tabshell-bare {
+	display: block;
+}
+
+/* Stacked by default; the container query below lifts it into a column
+   when the pane can afford one. Nothing is lost either way.
+
+   Base rules come first and the container query overrides them: at equal
+   specificity the later rule wins, so a stacked-only property written
+   after the query would quietly apply to both layouts. */
+.dg-rail {
+	border-top: 1px solid var(--dg-rule);
+	background: var(--dg-panel);
+	padding: 14px 16px 24px;
+	font-size: 12.5px;
+	min-width: 0;
+}
+
+/* The rail's divider, and the handle that hides it. Stacked, the rail
+   sits under the form and there is no side to fold it away to, so the
+   handle only exists in the two-column layout. */
+.dg-rail-handle {
+	display: none;
+}
+
+@container (min-width: 900px) {
+	.dg-tabshell:not(.dg-tabshell-bare) {
+		grid-template-columns: minmax(0, 1fr) auto 300px;
+	}
+
+	/* Folded away, the handle keeps its column: the divider stays put and
+	   the chevron is where the user left it. */
+	.dg-tabshell-folded:not(.dg-tabshell-bare) {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.dg-tabshell-folded .dg-rail {
+		display: none;
+	}
+
+	.dg-rail {
+		border-top: none;
+		align-self: stretch;
+	}
+
+	.dg-rail-handle {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		align-self: stretch;
+		/* The strip runs the height of the *content*, which on a long form
+		   is taller than the pane. The chevron is centred in it but sticks
+		   inside the scrollport, so it is never scrolled out of reach. */
+		/* The handle *is* the divider — one line, drawn once, on its left
+		   edge. The rail no longer draws its own. */
+		border: none;
+		border-left: 1px solid var(--dg-rule);
+		border-radius: 0;
+		width: 15px;
+		padding: 0;
+		background: var(--dg-panel);
+		color: var(--dg-ink-mute);
+		font-size: 12px;
+		line-height: 1;
+		cursor: pointer;
+	}
+
+	.dg-rail-handle-chev {
+		position: sticky;
+		top: 10px;
+		bottom: 10px;
+	}
+
+	.dg-rail-handle:hover {
+		background: var(--dg-raised);
+		color: var(--dg-cyan);
+	}
+
+	.dg-rail-handle:focus-visible {
+		outline: 1px solid var(--dg-violet);
+		outline-offset: -1px;
+	}
+}
+
+.dg-rail-switch {
+	display: flex;
+	gap: 2px;
+	margin-bottom: 14px;
+}
+
+.dg-rail-tab {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	padding: 3px 8px;
+	cursor: pointer;
+}
+
+.dg-rail-tab:hover {
+	color: var(--dg-ink);
+}
+
+.dg-rail-tab-on {
+	color: var(--dg-ink);
+	border-bottom-color: var(--dg-violet);
+}
+
+.dg-rail-section {
+	margin-bottom: 18px;
+}
+
+.dg-rail-section h4 {
+	font-family: var(--dg-font-mono);
+	font-size: 10.5px;
+	color: var(--dg-ink-faint);
+	font-weight: 400;
+	margin: 0 0 9px;
+	padding-bottom: 5px;
+	border-bottom: 1px solid var(--dg-rule-soft);
+}
+
+.dg-rail-kv {
+	display: flex;
+	gap: 10px;
+	padding: 4px 0;
+	font-family: var(--dg-font-mono);
+	font-size: 11.5px;
+}
+
+.dg-rail-kv span {
+	color: var(--dg-ink-faint);
+}
+
+.dg-rail-kv b {
+	color: var(--dg-ink-dim);
+	font-weight: 400;
+	margin-left: auto;
+	text-align: right;
+	word-break: break-word;
+}
+
+.dg-rail-ok {
+	color: var(--dg-green);
+}
+
+.dg-rail-bad {
+	color: var(--dg-magenta);
+}
+
+.dg-rail-dim {
+	color: var(--dg-ink-faint);
+}
+
+/* The resolved connection string: the thing you want in front of you
+   while filling the form in, and the fastest way to spot a wrong port. */
+.dg-rail-conn {
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-ink-faint);
+	word-break: break-all;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: 8px;
+	padding: 9px 11px;
+	margin-top: 6px;
+	line-height: 1.6;
+}
+
+.dg-rail-conn b {
+	color: var(--dg-ink-dim);
+	font-weight: 400;
+}
+
+.dg-rail-log {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: 8px;
+	padding: 10px 11px;
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	line-height: 1.75;
+	margin-top: 6px;
+}
+
+.dg-rail-log div {
+	color: var(--dg-ink-mute);
+}
+
+.dg-rail-help p {
+	color: var(--dg-ink-dim);
+	font-size: 12px;
+	line-height: 1.55;
+	margin: 0 0 10px;
+}
+
+.dg-rail-help code {
+	font-family: var(--dg-font-mono);
+	font-size: 11px;
+	color: var(--dg-cyan);
+}
+
+.dg-rail-help dl {
+	margin: 0 0 12px;
+}
+
+.dg-rail-help dt {
+	font-family: var(--dg-font-mono);
+	font-size: 11.5px;
+	color: var(--dg-ink);
+	margin-top: 8px;
+}
+
+.dg-rail-help dd {
+	margin: 2px 0 0;
+	font-size: 11.5px;
+	color: var(--dg-ink-faint);
+	line-height: 1.5;
+}
+
+/* A cross-link to the tab that continues the story. */
+.dg-rail-link {
+	background: none;
+	border: none;
+	padding: 0;
+	color: var(--dg-green);
+	font-family: var(--dg-font-mono);
+	font-size: 11.5px;
+	cursor: pointer;
+	text-align: left;
+}
+
+.dg-rail-link:hover {
+	text-decoration: underline;
+}
+
+/* ---- toggles ------------------------------------------------------
+ * docs/brand/mocks/datasource-settings.html "behaviour": the
+ * explanation belongs to the control, not to a paragraph below it.
+ */
+
+.dg-tog {
+	display: flex;
+	gap: 11px;
+	align-items: flex-start;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--dg-rule-soft);
+}
+
+.dg-tog:last-child {
+	border-bottom: none;
+}
+
+.dg-sw {
+	width: 30px;
+	height: 17px;
+	border-radius: 9px;
+	background: #232c3e;
+	border: 1px solid var(--dg-rule);
+	position: relative;
+	flex: none;
+	margin-top: 1px;
+	padding: 0;
+	cursor: pointer;
+}
+
+.dg-sw i {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 11px;
+	height: 11px;
+	border-radius: 50%;
+	background: var(--dg-ink-mute);
+	transition:
+		left var(--dg-motion-fast) var(--dg-motion-ease),
+		background var(--dg-motion-fast) var(--dg-motion-ease);
+}
+
+.dg-sw[aria-pressed="true"] {
+	background: #0f2c24;
+	border-color: var(--dg-green);
+}
+
+.dg-sw[aria-pressed="true"] i {
+	left: 15px;
+	background: var(--dg-green);
+}
+
+.dg-sw:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dg-sw i {
+		transition: none;
+	}
+}
+
+.dg-tog-tx {
+	min-width: 0;
+}
+
+.dg-tog-tx b {
+	display: block;
+	font-size: 12.5px;
+	color: var(--dg-ink);
+	font-weight: 400;
+	font-family: var(--dg-font-mono);
+}
+
+.dg-tog-tx span {
+	display: block;
+	font-size: 11.5px;
+	color: var(--dg-ink-faint);
+	line-height: 1.45;
+	margin-top: 2px;
+	max-width: 56ch;
+}
+
+/* ---- sync and access tabs ----------------------------------------- */
+
+.dg-sync-target {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 16px;
+	font-size: var(--dg-fs-ui);
+	margin: 12px 0;
+}
+
+.dg-sync-target dt {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-sync-target dd {
+	margin: 0;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+}
+
+.dg-sync-off {
+	color: var(--dg-ink-faint);
+	font-style: italic;
+}
+
+.dg-sync-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 12px 0;
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-sync-progress {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-dim);
+}
+
+.dg-sync-dry {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+	font-weight: 400;
+}
+
+/* A plan that deletes files in a git working tree says so at the top. */
+.dg-sync-warn {
+	color: var(--dg-violet-text);
+	font-size: var(--dg-fs-ui);
+}
+
+.dg-sync-counts {
+	display: flex;
+	gap: 18px;
+	list-style: none;
+	padding: 0;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	color: var(--dg-ink-dim);
+}
+
+/* Refusals are first-class: a silently omitted object is the failure
+   mode of the scripts this replaces. */
+.dg-sync-refusals {
+	border-left: var(--dg-border-accent-row) solid var(--dg-sev-warning);
+	background: var(--dg-sev-warning-bg);
+	padding: 6px 12px;
+	margin: 8px 0;
+}
+
+.dg-sync-refusals h5 {
+	margin: 0 0 4px;
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+	font-weight: 400;
+}
+
+.dg-sync-refusals ul,
+.dg-sync-files {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+}
+
+.dg-sync-deleted {
+	color: var(--dg-magenta);
+}
+
+.dg-sync-gitout pre {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 8px 10px;
+	overflow-x: auto;
+	font-size: var(--dg-fs-meta);
+	white-space: pre-wrap;
+}
+
+/* Git's own words, unstyled beyond legibility: no interpretation. */
+.dg-sync-stderr {
+	color: var(--dg-ink-dim);
+}
+
+.dg-sync-import {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-dim);
+}
+
+.dg-sync-failed {
+	color: var(--dg-magenta);
+}
+
+/* A tab telling you what it cannot answer. Quieter than a warning: the
+   data above is correct, just narrower than it looks. */
+.dg-ov-caveat {
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+	border-left: var(--dg-border-accent-row) solid var(--dg-cyan);
+	padding: 4px 10px;
+	margin-bottom: 8px;
+}
+
+.dg-access-legend {
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+.dg-access-matrix td {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+}
+
+.dg-access-none {
+	color: var(--dg-ink-faint);
+}
+
+/* The marker that carries the report: access nobody granted to this
+   role by name. */
+.dg-access-indirect {
+	color: var(--dg-violet-text);
+}
+
+/* Granted, and inert: the role cannot enter the schema. Struck rather
+   than hidden — "granted but unreachable" and "not granted" are
+   different facts. */
+.dg-access-blocked {
+	color: var(--dg-ink-faint);
+	text-decoration: line-through;
+}
+
+.dg-access-warn {
+	color: var(--dg-magenta);
+}
+
+.dg-access-suggest {
+	font-size: var(--dg-fs-ui);
+	color: var(--dg-ink-dim);
+	border-left: var(--dg-border-accent-row) solid var(--dg-cyan);
+	padding: 4px 10px;
+}
+
+.dg-access-reach {
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-dim);
+}
+
+.dg-access-flags span,
+.dg-access-notes span {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 0 4px;
+	border: 1px solid var(--dg-rule);
+	border-radius: 3px;
+	font-size: var(--dg-fs-meta);
+	color: var(--dg-ink-mute);
+}
+
+.dg-access-memberof {
+	color: var(--dg-ink-mute);
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-access-object {
+	background: none;
+	border: none;
+	padding: 0;
+	color: var(--dg-green);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-tree);
+	cursor: pointer;
+	text-align: left;
+}
+
+.dg-access-object:hover {
+	text-decoration: underline;
+}
+
 /* ---- modals ------------------------------------------------------- */
 
 /* Backdrop/modal chrome is gone — forms are dock tabs (see below).
@@ -1397,6 +2138,27 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	max-width: 90px;
 }
 
+/* Field help sits under its control, capped to a text measure so it
+   reads as help rather than page copy. */
+.dg-form-hint {
+	font-size: 11.5px;
+	color: var(--dg-ink-faint);
+	line-height: 1.45;
+	margin: 4px 0 0;
+}
+
+/* The directory is a path: wide enough to read one, not the whole pane. */
+.dg-field-path {
+	max-width: 520px;
+}
+
+.dg-field-inline {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin-top: 8px;
+}
+
 .dg-field-checkbox {
 	flex-direction: row;
 	align-items: center;
@@ -1424,11 +2186,50 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 .dg-form {
 	height: 100%;
 	overflow-y: auto;
+	/* The query container is the *wrapper*, not the grid: a container
+	   query only styles descendants, so an element cannot size itself
+	   against its own container. */
+	container-type: inline-size;
 }
 
+/*
+ * The body fills the pane; only the *content* is measured
+ * (docs/brand/mocks/datasource-settings.html "Width").
+ *
+ * The old 640px cap on the container is what made these tabs feel
+ * incomplete: section rules and borders stopped mid-pane with a dead
+ * band to the right of them, which reads as a truncated layout rather
+ * than a form. Capping prose to a text measure and letting the field
+ * grid gain columns fixes it without stretching a single input to
+ * 2000px, which the mock is equally clear is worse.
+ */
 .dg-form-body {
 	padding: 16px 18px;
-	max-width: 640px;
+	/* Generous, not absent: past this even section rules stop earning
+	   their width. Well beyond any pane a person actually docks. */
+	max-width: 1400px;
+}
+
+/* Prose gets a reading measure wherever the pane is wide. */
+.dg-form-lead,
+.dg-form-note,
+.dg-modal-note {
+	max-width: 72ch;
+}
+
+/* Help attached to one control is narrower still — it belongs under the
+   field, not across the pane. */
+.dg-field .dg-form-note,
+.dg-form-hint {
+	max-width: 56ch;
+}
+
+/*
+ * A form tab whose content is a table wants the whole pane: the access
+ * matrix is roles × objects and every column earns its place.
+ */
+.dg-form-body.dg-form-wide {
+	max-width: none;
 }
 
 .dg-form-title {
@@ -1520,10 +2321,17 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	color: var(--dg-ink);
 }
 
+/*
+ * Auto-fit so a wide pane gets more columns rather than wider inputs —
+ * three fields on a medium pane, five on a wide one. `justify-content`
+ * keeps a two-field row left-aligned instead of stretching each to half
+ * the pane.
+ */
 .dg-fgrid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-	gap: 11px;
+	grid-template-columns: repeat(auto-fit, minmax(168px, 260px));
+	justify-content: start;
+	gap: 11px 14px;
 	margin-bottom: 12px;
 }
 

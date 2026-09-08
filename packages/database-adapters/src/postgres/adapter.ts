@@ -21,8 +21,16 @@ import {
 	type TableReadRequest,
 	type TableReadResult,
 } from "../types";
+import {
+	type AccessReportData,
+	type AccessReportQuery,
+	type DiscoveredRole,
+	readPostgresAccessReport,
+	readPostgresRoles,
+} from "./accessData";
 import { alterPostgresColumns } from "./alterData";
 import { beginPostgresExecution } from "./execution";
+import { readPostgresGrantStatements } from "./grantsData";
 import { describePostgresObject } from "./objectData";
 import { mutatePostgresTable, readPostgresTable } from "./tableData";
 
@@ -247,6 +255,34 @@ export class PostgresAdapter implements DatabaseAdapter {
 			connection,
 			request,
 			limits,
+		);
+	}
+
+	readRoles(
+		connection: ResolvedConnection,
+		limits: TableLimits,
+		authenticator: string | null,
+	): Promise<{ roles: DiscoveredRole[]; authenticatorReach: string[] }> {
+		return readPostgresRoles(this.clientFor(connection), limits, authenticator);
+	}
+
+	readAccessReport(
+		connection: ResolvedConnection,
+		query: AccessReportQuery,
+		limits: TableLimits,
+	): Promise<AccessReportData> {
+		return readPostgresAccessReport(this.clientFor(connection), limits, query);
+	}
+
+	readGrantStatements(
+		connection: ResolvedConnection,
+		limits: TableLimits,
+		schemas: string[],
+	): Promise<Map<string, string[]>> {
+		return readPostgresGrantStatements(
+			this.clientFor(connection),
+			limits,
+			schemas,
 		);
 	}
 

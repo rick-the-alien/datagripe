@@ -107,6 +107,73 @@ export const MESSAGES: MessageCatalogue = {
 			"{index}. {covering}. The same leading columns. You are paying twice to write once.",
 	},
 
+	"grant.public-execute": {
+		notice: "{routine} is executable by PUBLIC, so {role} can call it.",
+		warning:
+			"PUBLIC can execute {routine}, so {role} can call it. That is the default.",
+		fatal:
+			"PUBLIC has execute on {routine}. Nobody granted that — it is the default for every new function, and {role} is calling it.",
+		panic:
+			"PUBLIC CAN EXECUTE {routine}. You did not grant this. Postgres did, the moment you created it, and {role} can reach it. Revoke it from PUBLIC.",
+	},
+
+	"grant.definer-public-reach": {
+		notice: "{routine} is security definer and {role} can execute it.",
+		warning:
+			"Security definer, and {role} can call it. It runs as {owner}, not them.",
+		fatal:
+			"{routine} runs as {owner} and {role} can start it. That is not a grant, that is a bloody loan of the owner's privileges.",
+		panic:
+			"SECURITY DEFINER. AND {role} CAN CALL IT. Every line of that body runs as {owner}. Anonymous callers, owner privileges, one function.",
+	},
+
+	"grant.untrusted-write": {
+		notice: "{role} can {privileges} on {relation}.",
+		warning: "{role} can {privileges} {relation}. Anonymous callers, writing.",
+		fatal:
+			"{role} can {privileges} on {relation}. That is unauthenticated write access to a real table.",
+		panic:
+			"{role} CAN {privileges} ON {relation}. Anyone who can reach the API can change that data. Not read it. Change it.",
+	},
+
+	"grant.untrusted-read-no-rls": {
+		notice: "{role} can select {relation}, which has no row-level security.",
+		warning: "{role} reads every row of {relation}. Row-level security is off.",
+		fatal:
+			"{role} can select {relation} and there is no RLS on it, so that is every row, to anyone.",
+		panic:
+			"{role} READS EVERY ROW OF {relation}. No row-level security. No filter. The whole damn table, to whoever asks.",
+	},
+
+	"grant.rls-no-policy": {
+		notice: "{relation} has row-level security on and no policies.",
+		warning: "RLS on {relation}, zero policies. Every row is denied, silently.",
+		fatal:
+			"{relation} has RLS enabled and not one policy. It returns nothing to everybody, and it does it without an error.",
+		panic:
+			"RLS ON. ZERO POLICIES. {relation} returns nothing to anyone but its owner, and you will find out from an empty grid, not an error.",
+	},
+
+	"grant.view-owner-bypass": {
+		notice: "{view} runs as {owner}, so {role} reads {relation} through it.",
+		warning:
+			"{view} is not security_invoker. {role} reads {relation} as {owner}.",
+		fatal:
+			"{view} reads its base tables as {owner}, so granting it to {role} hands over {relation}, which {role} cannot read directly.",
+		panic:
+			"{view} RUNS AS {owner}. {role} cannot read {relation} — and does not need to, because this view reads it for them. Decide if you meant that.",
+	},
+
+	"grant.default-privileges-untrusted": {
+		notice: "Future {objects} will be granted to {role} automatically.",
+		warning:
+			"Default privileges grant every new {objects} to {role}. Nothing yet exists.",
+		fatal:
+			"Default privileges hand every {objects} you create from now on to {role}. This is an audit you do forever, not once.",
+		panic:
+			"EVERY {objects} YOU CREATE FROM NOW ON GOES TO {role}. Automatically. You will not see it happen. Check ALTER DEFAULT PRIVILEGES.",
+	},
+
 	"routine.definer-no-search-path": {
 		notice: "{routine} is security definer with no search_path set.",
 		warning:

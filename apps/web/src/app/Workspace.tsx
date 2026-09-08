@@ -17,9 +17,11 @@ import {
 	useState,
 } from "react";
 import { wsClient } from "../api/ws";
+import { AccessPanel } from "../components/AccessPanel";
 import { ActivityBar } from "../components/ActivityBar";
 import { ConnectionForm } from "../components/ConnectionForm";
 import { DocumentSidebar } from "../components/DocumentSidebar";
+import { DomainManager } from "../components/DomainManager";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
 import { GripesPanel } from "../components/GripesPanel";
@@ -31,6 +33,7 @@ import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { ResultsPanel } from "../components/ResultsPanel";
 import { SidebarSections } from "../components/SidebarSections";
 import { StatusBar } from "../components/StatusBar";
+import { SyncPanel } from "../components/SyncPanel";
 import { TableView } from "../components/TableView";
 import { WorkspaceWatermark } from "../components/WorkspaceWatermark";
 import { EditorView } from "../editor/EditorView";
@@ -113,6 +116,9 @@ const components = {
 	connectionForm: ConnectionForm,
 	newProject: NewProjectForm,
 	projectSettings: ProjectSettingsPanel,
+	domainManager: DomainManager,
+	syncPanel: SyncPanel,
+	accessPanel: AccessPanel,
 };
 
 function persistLayout(api: DockviewApi): void {

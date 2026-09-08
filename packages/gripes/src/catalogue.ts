@@ -1,4 +1,5 @@
 import { columnNullableInequality } from "./rules/columnNullableInequality";
+import { GRANT_RULES } from "./rules/grantRules";
 import { indexDuplicate } from "./rules/indexDuplicate";
 import { indexNotConcurrent } from "./rules/indexNotConcurrent";
 import { joinNoCondition } from "./rules/joinNoCondition";
@@ -37,6 +38,10 @@ export const RULES: Rule[] = [
 	tableNoPrimaryKey,
 	indexDuplicate,
 	routineVolatileButReadonly,
+	// access — docs/spec/access-report.md. Every one of these stays silent
+	// when no role is marked untrusted, because guessing which role is the
+	// PostgREST anonymous one is worse than saying nothing.
+	...GRANT_RULES,
 ];
 
 export function ruleById(id: string): Rule | undefined {

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datagripe — datasource settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#00E599;--cyan:#5EEAD4;--violet:#8B5CF6;--violet-text:#A78BFA;--magenta:#FF3EA5;
+  --void:#0B0E14;--panel:#0E1220;--raised:#161C29;--rule:#212A3A;--rule-soft:#161C29;
+  --ink:#E2E8F0;--ink-dim:#9AA5B6;--ink-mute:#6B7688;--ink-faint:#3D4759;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --display:"Space Grotesk",system-ui,sans-serif;
+  --sb-rest:#2A3448;--sb-hover:#3B4A66;--sb-active:#4C5D7E;
+  --ramp:linear-gradient(90deg,#00E599 0%,#00E599 3.75%,#5EEAD4 7.08%,#5EEAD4 10.83%,#8B5CF6 14.17%,#8B5CF6 17.92%,
+    #FF3EA5 21.25%,#FF3EA5 28.75%,#8B5CF6 32.08%,#8B5CF6 35.83%,#5EEAD4 39.17%,#5EEAD4 42.92%,
+    #00E599 46.25%,#00E599 53.75%,#5EEAD4 57.08%,#5EEAD4 60.83%,#8B5CF6 64.17%,#8B5CF6 67.92%,
+    #FF3EA5 71.25%,#FF3EA5 78.75%,#8B5CF6 82.08%,#8B5CF6 85.83%,#5EEAD4 89.17%,#5EEAD4 92.92%,
+    #00E599 96.25%,#00E599 100%);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--void);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 90px}
+h1{font-family:var(--display);font-weight:500;font-size:27px;letter-spacing:-.02em;margin:0 0 8px}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:40px 0 6px}
+p{color:var(--ink-dim);max-width:66ch;margin:0 0 13px;font-size:14.5px}
+code{font-family:var(--mono);font-size:.87em;color:var(--cyan)}
+.meta{font-family:var(--mono);font-size:11.5px;color:var(--ink-mute)}
+
+.dgs{scrollbar-width:thin;scrollbar-color:var(--sb-rest) transparent}
+.dgs::-webkit-scrollbar{width:12px;height:12px;background:transparent}
+.dgs::-webkit-scrollbar-thumb{background-color:var(--sb-rest);background-clip:padding-box;
+  border:4px solid transparent;border-radius:8px;min-height:34px}
+.dgs:hover::-webkit-scrollbar-thumb{background-color:var(--sb-hover);border-width:3px}
+
+.abar{position:relative;overflow:hidden;height:3px;filter:saturate(1.22)}
+.abar .l{position:absolute;top:0;bottom:0;left:0;width:200%}
+.colour{background:var(--ramp);animation:drift 17s linear infinite}
+.wave{mix-blend-mode:multiply;background:linear-gradient(90deg,rgba(11,14,20,.5),rgba(11,14,20,0) 25%,
+  rgba(11,14,20,.4) 50%,rgba(11,14,20,0) 75%,rgba(11,14,20,.5));animation:back 11s linear infinite}
+@keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes back{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.abar .l{animation:none;transform:none}.wave{display:none}
+  .colour{width:100%;background:linear-gradient(90deg,#00E599,#5EEAD4 26%,#8B5CF6 58%,#FF3EA5)}}
+
+.ctl{display:flex;gap:9px;flex-wrap:wrap;align-items:center;background:var(--panel);border:1px solid var(--rule);
+  border-radius:10px;padding:13px 15px;margin:16px 0}
+.ctl button{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);background:transparent;
+  border:1px solid var(--rule);border-radius:6px;padding:5px 11px;cursor:pointer}
+.ctl button:hover{background:var(--raised);color:var(--ink)}
+.ctl button[aria-pressed=true]{border-color:var(--violet);background:#141026;color:#fff}
+.ctl .lbl{font-size:12.5px;color:var(--ink-mute)}
+.ctl .bar{width:1px;height:22px;background:var(--rule)}
+
+.scroller{overflow-x:auto;border-radius:10px}
+.ide{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--void);min-width:880px}
+.top{display:flex;align-items:center;gap:12px;padding:9px 13px;background:var(--panel);border-bottom:1px solid var(--rule)}
+.prompt{font-family:var(--mono);font-size:13px;display:flex;align-items:center}
+.prompt .gt{color:var(--magenta)}.prompt .br em{color:var(--green);font-style:normal}
+.prompt .pj{color:#00E599}
+.cur{display:inline-block;width:8px;height:15px;background:#00E599;margin-left:2px;
+  animation:blink 1.1s steps(1) infinite;vertical-align:-2px}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+
+.body{display:flex;height:560px}
+.side{width:186px;flex:none;border-right:1px solid var(--rule);background:var(--panel);
+  font-family:var(--mono);font-size:11.5px;display:flex;flex-direction:column}
+.crumb{display:flex;align-items:center;gap:3px;padding:6px 8px;border-bottom:1px solid var(--rule);font-size:11.5px}
+.crumb .seg{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;color:var(--ink);
+  cursor:pointer;min-width:0}
+.crumb .seg:hover{background:#1A2133}
+.crumb .seg .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chipm{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;
+  background:#232C3E;color:var(--ink-dim);font-size:9px;flex:none}
+.filter{padding:7px 9px;border-bottom:1px solid var(--rule);color:var(--ink-faint);font-size:11px}
+.tr{flex:1;overflow-y:auto;padding:5px 0}
+.n{display:flex;align-items:center;gap:6px;padding:3.5px 9px;color:var(--ink-dim)}
+.n .cnt{color:var(--ink-faint);margin-left:auto;padding-left:8px}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.tabs{display:flex;background:var(--panel);border-bottom:1px solid var(--rule);overflow-x:auto}
+.tabs .tb{padding:6px 10px 4px;font-size:11.5px;color:#5A6478;font-family:var(--mono);
+  border-bottom:2px solid transparent;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tabs .tb.on{color:var(--ink);border-bottom-color:var(--cyan)}
+.tabs .tb .g{font-size:9px;color:var(--cyan)}
+.tabs .tb .x{color:var(--ink-faint)}
+
+.page{flex:1;overflow:auto;min-height:0}
+.cols{display:grid;gap:0;align-items:start}
+.cols.wide{grid-template-columns:minmax(0,1fr) 300px}
+.cols.narrow{grid-template-columns:minmax(0,1fr)}
+
+.form{padding:18px 22px 26px;max-width:880px}
+.ttl{display:flex;align-items:baseline;gap:10px;margin-bottom:3px}
+.ttl h3{font-family:var(--display);font-weight:500;font-size:16px;margin:0;color:var(--ink)}
+.ttl .tag{font-family:var(--mono);font-size:10.5px;color:var(--ink-mute);border:1px solid var(--rule);
+  border-radius:9px;padding:1px 8px}
+.lead{font-size:12.5px;color:var(--ink-mute);margin:0 0 20px}
+
+.sect{margin-bottom:26px}
+.sect > h4{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin:0 0 11px;
+  padding-bottom:6px;border-bottom:1px solid var(--rule-soft)}
+.fg{display:grid;gap:12px 14px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+.fg.cap3{grid-template-columns:repeat(auto-fit,minmax(168px,240px))}
+.f label{display:block;font-size:11px;color:var(--ink-mute);font-family:var(--mono);margin-bottom:4px}
+.f .in{background:var(--void);border:1px solid var(--rule);border-radius:6px;padding:6px 9px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink);width:100%}
+.f .in.ph{color:var(--ink-faint)}
+.f .hint{font-size:11px;color:var(--ink-faint);margin-top:4px;font-family:var(--sans);line-height:1.45}
+.f.lock .in{background:#0C1018;color:var(--ink-mute);border-style:dashed}
+
+.eng{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px}
+.eng .e{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-dim);background:transparent;border:1px solid var(--rule);border-radius:7px;
+  padding:6px 11px;cursor:pointer}
+.eng .e:hover{background:var(--raised);color:var(--ink)}
+.eng .e[aria-pressed=true]{border-color:var(--violet);background:#141026;color:#fff}
+.eng.lock .e{cursor:default;opacity:.45}
+.eng.lock .e[aria-pressed=true]{opacity:1;border-color:var(--rule);background:#0C1018;color:var(--ink-dim)}
+
+.cls{display:flex;gap:7px;flex-wrap:wrap}
+.cls .c{font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:6px;cursor:pointer;
+  background:transparent;border:1px solid var(--rule);color:var(--ink-mute);display:flex;align-items:center;gap:6px}
+.cls .c:hover{color:var(--ink)}
+.cls .c[aria-pressed=true]{color:var(--ink);border-color:var(--cc);background:#0F1420}
+.cls .c .sw{width:8px;height:8px;border-radius:50%;background:var(--cc)}
+
+.tog{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--rule-soft)}
+.tog:last-child{border-bottom:0}
+.sw2{width:30px;height:17px;border-radius:9px;background:#232C3E;border:1px solid var(--rule);
+  position:relative;cursor:pointer;flex:none;margin-top:1px}
+.sw2 i{position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--ink-mute);
+  transition:left 120ms cubic-bezier(.2,0,0,1),background 120ms}
+.sw2[aria-pressed=true]{background:#0F2C24;border-color:var(--green)}
+.sw2[aria-pressed=true] i{left:15px;background:var(--green)}
+.sw2[aria-disabled=true]{opacity:.45;cursor:default}
+@media (prefers-reduced-motion:reduce){.sw2 i{transition:none}}
+.tog .tx{min-width:0}
+.tog .tx b{display:block;font-size:12.5px;color:var(--ink);font-weight:400;font-family:var(--mono)}
+.tog .tx span{display:block;font-size:11.5px;color:var(--ink-faint);line-height:1.45;margin-top:2px;max-width:56ch}
+
+.foot{display:flex;align-items:center;gap:9px;padding-top:16px;border-top:1px solid var(--rule);margin-top:4px}
+.btn{font-family:var(--mono);font-size:11.5px;padding:6px 14px;border-radius:6px;cursor:pointer;
+  background:transparent;border:1px solid var(--rule);color:var(--ink-dim)}
+.btn:hover{background:var(--raised);color:var(--ink)}
+.btn.pri{border-color:var(--green);color:var(--green)}
+.btn.pri:hover{background:#0C1618}
+.btn[aria-disabled=true]{opacity:.4;cursor:default}
+.btn[aria-disabled=true]:hover{background:none;color:var(--ink-dim)}
+.dirty{font-family:var(--mono);font-size:11px;color:var(--violet-text);margin-left:auto}
+
+/* right rail */
+.rail{border-left:1px solid var(--rule);background:var(--panel);padding:18px 18px 26px;
+  align-self:stretch;font-size:12.5px}
+.rail h4{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin:0 0 11px;
+  padding-bottom:6px;border-bottom:1px solid var(--rule-soft)}
+.rail .kv{display:flex;gap:10px;padding:5px 0;font-family:var(--mono);font-size:11.5px}
+.rail .kv span{color:var(--ink-faint)}
+.rail .kv b{color:var(--ink-dim);font-weight:400;margin-left:auto;text-align:right}
+.rail .log{background:var(--void);border:1px solid var(--rule);border-radius:8px;padding:10px 11px;
+  font-family:var(--mono);font-size:11px;line-height:1.75;margin-top:6px}
+.rail .log div{color:var(--ink-mute)}
+.rail .log .ok{color:var(--green)}
+.rail .log .er{color:var(--magenta)}
+.rail .log .dim{color:var(--ink-faint)}
+.rail .conn{font-family:var(--mono);font-size:11px;color:var(--ink-faint);word-break:break-all;
+  background:var(--void);border:1px solid var(--rule);border-radius:8px;padding:9px 11px;margin-top:6px;line-height:1.6}
+.rail .conn b{color:var(--ink-dim);font-weight:400}
+
+.status{display:flex;align-items:center;gap:10px;padding:7px 13px;border-top:1px solid var(--rule);
+  background:var(--panel);font-family:var(--mono);font-size:11px}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+.status .mock{color:var(--magenta);border:1px dashed var(--magenta);border-radius:9px;padding:0 7px;font-size:10px}
+
+.callout{border-left:3px solid var(--violet);background:#100E1C;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+.warncall{border-left:3px solid var(--magenta);background:#12101A;padding:11px 15px;margin:14px 0;font-size:14px;color:var(--ink)}
+table.doc{width:100%;border-collapse:collapse;font-size:13.5px;margin:12px 0}
+table.doc th{text-align:left;font-weight:500;color:var(--ink-mute);font-size:12.5px;padding:8px 10px 8px 0;border-bottom:1px solid var(--rule)}
+table.doc td{padding:9px 10px 9px 0;border-bottom:1px solid var(--rule-soft);color:var(--ink-dim);vertical-align:top}
+table.doc td:first-child{color:var(--ink);font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="abar"><div class="l colour"></div><div class="l wave"></div></div>
+
+<div class="wrap">
+<h1>Datasource settings</h1>
+<p>Same form, restructured. Toggle between the editable and predefined cases and watch what changes.</p>
+
+<div class="ctl">
+  <span class="lbl">state</span>
+  <button data-s="edit" aria-pressed="true">editable</button>
+  <button data-s="lock" aria-pressed="false">predefined</button>
+  <span class="bar"></span>
+  <span class="lbl">width</span>
+  <button data-w="wide" aria-pressed="true">with rail</button>
+  <button data-w="narrow" aria-pressed="false">narrow pane</button>
+  <span class="bar"></span>
+  <button id="bTest">run test</button>
+</div>
+
+<div class="scroller"><div class="ide" id="ide"></div></div>
+
+<h2>Width</h2>
+<p>Three things fix it together, and none of them is stretching the inputs.</p>
+<p><b>The field grid gains columns.</b> <code>repeat(auto-fit, minmax(168px, 1fr))</code> means three fields on a medium pane and five on a wide one, with each field staying a sane width. The form fills naturally instead of being padded.</p>
+<p><b>A right rail earns the leftover space.</b> Connection state, the resolved connection string, and the test log. On a connection form that is exactly the information you want while filling it in, and it turns dead space into the reason the pane is wide.</p>
+<p><b>The column caps out.</b> Past roughly 880px the form stops growing and the rail takes the rest. A settings form that keeps widening at 2000px looks worse than one that stops.</p>
+<div class="callout">The rail collapses below about 900px of pane width and its content moves under the form. Try <b>narrow pane</b> — nothing is lost, it just stacks.</div>
+
+<h2>The two save buttons</h2>
+<p>This was the thing I would fix first, ahead of width. <code>save directory</code> and <code>save</code> in the same form means one of two things is true and the user cannot tell which: either the directory saves separately for a reason, or it is a leftover. Both readings make someone click both buttons to be safe.</p>
+<p>Here there is one save. If the export directory genuinely needs separate server-side validation, that is a <em>validation</em> step, not a save — so it becomes a <code>check path</code> action next to the field, with the result inline, and the single save at the bottom commits everything.</p>
+
+<h2>Read-only means read-only</h2>
+<p>The original says "Defined by server configuration — read-only" and then offers editable-looking fields and a save button. Switch to <b>predefined</b> above: fields go dashed and dimmed, the engine picker locks to the current engine, toggles disable, and the footer replaces save with an explanation of where the value comes from. Nothing lies about what you can do.</p>
+
+<h2>The rest, in severity order</h2>
+<table class="doc">
+<tr><th>Issue</th><th>Why it matters</th></tr>
+<tr><td>no class field</td><td>Production, staging, local, analytics is the safety mechanism the whole design leans on, and it is the one field with real consequences — it decides whether the danger zone confirms on the table name or the project name. It should be here and near the top, not implied by a badge in the status bar.</td></tr>
+<tr><td>password is ambiguous</td><td>An empty box on an edit form does not say whether a password exists. Saving might clear it. It needs an explicit state — set and unchanged, with a "replace" action — and a separate "no password" case.</td></tr>
+<tr><td>help text is orphaned</td><td>The schema paragraph sits far from its checkbox and runs the full page width, so it reads as page copy. Field help belongs directly under the control, capped to the text column.</td></tr>
+<tr><td>two boolean styles</td><td>Read-only and Show all schemas are both checkboxes, but one is a connection constraint and the other a display preference. Same control, different meaning, no grouping. They are now toggles in a Behaviour section with their explanations attached.</td></tr>
+<tr><td>test connection looks disabled</td><td>It is dimmer than save, but it is the action you want first — you should test before you commit credentials. Equal weight, and the result lands in the rail rather than as a word in the corner.</td></tr>
+<tr><td>heading repeats the tab</td><td>The tab already says "Edit Local Demo (predefined)". The page heading says it again. Shorten one — the tab carries the identity, the heading can be the object name with a state tag.</td></tr>
+<tr><td>breadcrumb is unreadable</td><td>"Local De…" and "p… · 0" at that width tell you nothing, and the datasource chip carries a permanent violet ring that reads as focus. Give the segments the room, drop the ring, and truncate the datasource before the namespace since the namespace is shorter and changes more.</td></tr>
+<tr><td>empty sections hold space</td><td>"Online — No one else online" occupies about a hundred vertical pixels to say nothing. Collapse to a single line when empty.</td></tr>
+</table>
+
+<h2>What is already right</h2>
+<p>The prompt reads well and the class colour on the project name works. The status bar is doing real work — connection, schema, project, class, update state, gripe count — and the dashed <code>mock</code> pill is a good pattern for a non-production mode. Scratchpad empty-state copy is genuinely useful rather than decorative. The engine picker with monogram chips is the right call and stayed neutral.</p>
+</div>
+
+<script>
+(function(){
+  var st={mode:'edit',width:'wide',tested:'none',cls:'local',schemas:false,ro:true};
+  var ENG=[['P','PostgreSQL'],['M','MySQL'],['S','SQLite'],['R','Redis']];
+  var CLS=[['production','#FF3EA5'],['staging','#8B5CF6'],['local','#00E599'],['analytics','#5EEAD4']];
+
+  function f(label,val,ph,hint){
+    var lock=st.mode==='lock';
+    return '<div class="f'+(lock?' lock':'')+'"><label>'+label+'</label>'+
+      '<div class="in'+(ph?' ph':'')+'">'+val+'</div>'+(hint?'<div class="hint">'+hint+'</div>':'')+'</div>';
+  }
+  function tog(id,on,title,desc,dis){
+    return '<div class="tog"><div class="sw2" data-t="'+id+'" role="button" tabindex="0" '+
+      'aria-pressed="'+on+'"'+(dis?' aria-disabled="true"':'')+'><i></i></div>'+
+      '<div class="tx"><b>'+title+'</b><span>'+desc+'</span></div></div>';
+  }
+  function form(){
+    var lock=st.mode==='lock';
+    return '<div class="form">'+
+      '<div class="ttl"><h3>Local Demo</h3>'+
+        '<span class="tag">'+(lock?'predefined by server':'project datasource')+'</span></div>'+
+      '<p class="lead">'+(lock
+        ? 'Values come from the server configuration file. Change them there and restart.'
+        : 'Credentials are stored in this project, not globally.')+'</p>'+
+
+      '<div class="eng'+(lock?' lock':'')+'">'+ENG.map(function(e,i){
+        return '<div class="e" data-e="'+i+'" role="button" tabindex="0" aria-pressed="'+(i===0)+'">'+
+          '<span class="chipm">'+e[0]+'</span>'+e[1]+'</div>'}).join('')+'</div>'+
+
+      '<div class="sect"><h4>connection</h4>'+
+        '<div class="fg">'+
+          f('name','Local Demo')+f('host','localhost')+f('port','5432')+
+          f('database','demo')+f('username','datagripe')+
+          '<div class="f'+(lock?' lock':'')+'"><label>password</label>'+
+            '<div class="in ph">•••••••• set, unchanged</div>'+
+            (lock?'':'<div class="hint">Leave to keep. <b style="color:var(--cyan);font-weight:400">Replace</b> or <b style="color:var(--cyan);font-weight:400">clear</b>.</div>')+
+          '</div>'+
+          f('TLS mode','disable')+
+        '</div></div>'+
+
+      '<div class="sect"><h4>class</h4>'+
+        '<div class="cls">'+CLS.map(function(c){
+          return '<div class="c" data-c="'+c[0]+'" style="--cc:'+c[1]+'" role="button" tabindex="0" '+
+            'aria-pressed="'+(st.cls===c[0])+'"><span class="sw"></span>'+c[0]+'</div>'}).join('')+'</div>'+
+        '<div class="hint" style="margin-top:8px;font-size:11px;color:var(--ink-faint);max-width:60ch">'+
+          'Sets the colour that follows this datasource everywhere, and decides whether destructive '+
+          'actions confirm on the table name or the project name. Analytics blocks writes outright.</div>'+
+      '</div>'+
+
+      '<div class="sect"><h4>behaviour</h4>'+
+        tog('ro',st.ro,'read only','Rejects any statement that would write. Independent of the role\'s own grants.',lock)+
+        tog('sch',st.schemas,'show all schemas in the tree',
+          'Adds a schema level you can expand several of at once, for cross-schema joins. Off scopes the tree to the schema in the breadcrumb.',lock)+
+      '</div>'+
+
+      '<div class="sect"><h4>domain export</h4>'+
+        '<div class="f'+(lock?' lock':'')+'" style="max-width:520px"><label>directory</label>'+
+        '<div class="in ph">/home/you/repo/datasource/schema</div>'+
+        '<div class="hint">Where this datasource\'s domain dump is written (<code>docs/spec/domains.md</code>). '+
+        'Per datasource — an export never crosses a datasource boundary, and two sharing a directory would '+
+        'overwrite each other\'s tree.'+(lock?'':' <b style="color:var(--cyan);font-weight:400">Check path</b> validates against <code>DOMAIN_EXPORT_ROOTS</code>.')+'</div></div>'+
+      '</div>'+
+
+      '<div class="foot">'+(lock
+        ? '<span class="meta">Read-only. Defined in <code>server.toml</code> under <code>[datasource.local_demo]</code>.</span>'
+        : '<div class="btn" id="testBtn">test connection</div><div class="btn pri">save</div>'+
+          '<span class="dirty">2 unsaved changes</span>')+
+      '</div></div>';
+  }
+  function rail(){
+    var log=st.tested==='none'
+      ? '<div class="dim">Not tested since the last change.</div>'
+      : st.tested==='run'
+        ? '<div class="dim">resolving localhost…</div><div class="dim">tcp 127.0.0.1:5432 …</div>'
+        : st.tested==='ok'
+          ? '<div class="dim">resolved localhost → 127.0.0.1</div><div class="dim">tcp connect 4 ms</div>'+
+            '<div class="dim">auth ok as datagripe</div><div class="ok">PostgreSQL 17.0 · 11 tables visible</div>'
+          : '<div class="dim">resolved localhost → 127.0.0.1</div>'+
+            '<div class="er">connection refused on 5432</div><div class="dim">is the server running?</div>';
+    return '<div class="rail"><h4>connection</h4>'+
+      '<div class="kv"><span>status</span><b style="color:'+(st.tested==='ok'?'var(--green)':st.tested==='err'?'var(--magenta)':'var(--ink-faint)')+'">'+
+        (st.tested==='ok'?'reachable':st.tested==='err'?'unreachable':st.tested==='run'?'testing…':'unknown')+'</b></div>'+
+      '<div class="kv"><span>engine</span><b>PostgreSQL</b></div>'+
+      '<div class="kv"><span>class</span><b style="color:'+(CLS.filter(function(c){return c[0]===st.cls})[0][1])+'">'+st.cls+'</b></div>'+
+      '<div class="kv"><span>used by</span><b>3 documents</b></div>'+
+      '<div class="conn"><b>postgresql://</b>datagripe@localhost:<b>5432</b>/demo?sslmode=disable</div>'+
+      '<h4 style="margin-top:20px">test log</h4><div class="log">'+log+'</div></div>';
+  }
+  function render(){
+    document.getElementById('ide').innerHTML=
+      '<div class="abar"><div class="l colour"></div><div class="l wave"></div></div>'+
+      '<div class="top"><div class="prompt"><span class="gt">&gt;</span><span class="br">Data<em>gripe</em></span>'+
+        '<span style="color:var(--ink-faint)">:</span><span class="pj">Gateway</span><span class="cur"></span></div>'+
+        '<span class="meta" style="margin-left:auto">owner@datagripe.dev</span></div>'+
+      '<div class="body"><div class="side">'+
+        '<div class="crumb"><div class="seg"><span class="chipm">P</span><span class="nm">Local Demo</span>'+
+        '<span style="color:var(--ink-faint);font-size:9px">▾</span></div>'+
+        '<span style="color:var(--ink-faint)">/</span>'+
+        '<div class="seg"><span class="nm">public</span><span style="color:var(--ink-faint);font-size:9px">▾</span></div></div>'+
+        '<div class="filter">filter objects…</div><div class="tr dgs">'+
+        '<div class="n" style="color:var(--violet-text)">▸ tables<span class="cnt">11</span></div>'+
+        '<div class="n" style="color:var(--magenta)">▸ views<span class="cnt">3</span></div>'+
+        '<div class="n" style="color:var(--cyan)">▸ functions<span class="cnt">7</span></div>'+
+        '<div class="n" style="color:var(--ink-mute)">▸ sequences<span class="cnt">4</span></div></div></div>'+
+      '<div class="main"><div class="tabs">'+
+        '<div class="tb">access: WalletGateway<span class="x">×</span></div>'+
+        '<div class="tb on"><span class="g">⚙</span>Local Demo · settings<span class="x">×</span></div></div>'+
+        '<div class="page dgs"><div class="cols '+st.width+'">'+form()+(st.width==='wide'?rail():'')+'</div>'+
+        (st.width==='narrow'?'<div style="padding:0 22px 26px">'+rail().replace('class="rail"','class="rail" style="border-left:0;border-top:1px solid var(--rule);border-radius:10px"')+'</div>':'')+
+        '</div></div></div>'+
+      '<div class="status"><span class="dot"></span><span style="color:var(--ink-dim)">Local Demo</span>'+
+        '<span style="color:var(--ink-mute)">schema public</span>'+
+        '<span style="color:var(--ink-mute)">Gateway · '+st.cls+'</span><span class="mock">mock</span>'+
+        '<span style="margin-left:auto;color:var(--ink-faint)">update available · refresh</span>'+
+        '<span style="color:var(--green)">no gripes</span></div>';
+    wire();
+  }
+  function wire(){
+    document.querySelectorAll('[data-c]').forEach(function(e){
+      e.addEventListener('click',function(){ if(st.mode==='lock')return; st.cls=e.getAttribute('data-c'); render(); }); });
+    document.querySelectorAll('[data-t]').forEach(function(e){
+      e.addEventListener('click',function(){
+        if(st.mode==='lock')return;
+        var k=e.getAttribute('data-t'); if(k==='ro') st.ro=!st.ro; else st.schemas=!st.schemas; render();
+      }); });
+    var t=document.getElementById('testBtn');
+    if(t) t.addEventListener('click',runTest);
+  }
+  function runTest(){
+    st.tested='run'; render();
+    setTimeout(function(){ st.tested='ok'; render(); },1100);
+  }
+  document.getElementById('bTest').addEventListener('click',runTest);
+  document.querySelectorAll('[data-s]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-s]').forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      st.mode=b.getAttribute('data-s'); render();
+    }); });
+  document.querySelectorAll('[data-w]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('[data-w]').forEach(function(o){o.setAttribute('aria-pressed',o===b?'true':'false')});
+      st.width=b.getAttribute('data-w'); render();
+    }); });
+  render();
+})();
+</script>
+</body>
+</html>

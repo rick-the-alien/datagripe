@@ -21,13 +21,17 @@ import type {
 import { adapterInfoOf } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type {
+	AccessReportData,
+	AccessReportQuery,
 	DatabaseAdapter,
+	DiscoveredRole,
 	ResolvedConnection,
 	TableLimits,
 } from "@datagripe/database-adapters";
 import { TableRequestError } from "@datagripe/database-adapters";
 import type { SecretKeyring } from "../crypto/keyring";
 import type { AppDb } from "../db/app/pool";
+import { exportPaths } from "../domains/runs";
 import { log } from "../log";
 import type { SsrfPolicy } from "../security/ssrf";
 import type { PredefinedEntry } from "./predefined";
@@ -143,9 +147,30 @@ export interface ConnectionsService {
 		workspace: WorkspaceRef,
 		request: ObjectAlterRequest,
 	) => Promise<ObjectAlterResult>;
+	/** Roles the target database knows about (docs/spec/access-report.md). */
+	readRoles: (
+		workspace: WorkspaceRef,
+		connectionId: string,
+		authenticator: string | null,
+	) => Promise<{ roles: DiscoveredRole[]; authenticatorReach: string[] }>;
+	/** The role x object matrix, resolved rather than granted. */
+	readAccessReport: (
+		workspace: WorkspaceRef,
+		connectionId: string,
+		query: AccessReportQuery,
+	) => Promise<AccessReportData>;
+	/** Canonical GRANT statements per object, for the domain export. */
+	readGrantStatements: (
+		workspace: WorkspaceRef,
+		connectionId: string,
+		schemas: string[],
+	) => Promise<Map<string, string[]>>;
 }
 
-function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
+function rowToMetadata(
+	row: ConnectionRow,
+	exportPath: string | null = null,
+): ConnectionMetadata {
 	return {
 		id: row.id,
 		workspaceId: row.workspace_id,
@@ -158,6 +183,7 @@ function rowToMetadata(row: ConnectionRow): ConnectionMetadata {
 		tlsMode: row.tls_mode,
 		readOnly: row.read_only,
 		showAllSchemas: row.show_all_schemas,
+		domainExportPath: exportPath,
 		source: "managed",
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
@@ -182,6 +208,7 @@ export function createConnectionsService(
 	function predefinedMetadata(
 		workspace: WorkspaceRef,
 		entry: PredefinedEntry,
+		exportPath: string | null,
 	): ConnectionMetadata {
 		const { definition } = entry;
 		return {
@@ -196,6 +223,7 @@ export function createConnectionsService(
 			tlsMode: definition.tlsMode,
 			readOnly: definition.readOnly,
 			showAllSchemas: definition.showAllSchemas,
+			domainExportPath: exportPath,
 			source: "predefined",
 			createdAt: entry.loadedAt,
 			updatedAt: entry.loadedAt,
@@ -298,11 +326,19 @@ export function createConnectionsService(
 				WHERE workspace_id = ${workspace.id}
 				ORDER BY name
 			`;
+			// One lookup for the whole list: the export path is workspace-local
+			// configuration keyed by connection ref, so it cannot come from the
+			// connection row (predefined ones have none).
+			const paths = await exportPaths(appDb, workspace.id);
 			return [
 				...visiblePredefined(workspace).map((entry) =>
-					predefinedMetadata(workspace, entry),
+					predefinedMetadata(
+						workspace,
+						entry,
+						paths.get(entry.definition.id) ?? null,
+					),
 				),
-				...rows.map(rowToMetadata),
+				...rows.map((row) => rowToMetadata(row, paths.get(row.id) ?? null)),
 			].sort((a, b) => a.name.localeCompare(b.name));
 		},
 
@@ -631,6 +667,64 @@ export function createConnectionsService(
 						dryRun: request.dryRun,
 					},
 					tableLimits,
+				);
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async readRoles(workspace, connectionId, authenticator) {
+			const resolved = await resolveConnection(workspace, connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (
+				adapter.readRoles === undefined ||
+				!adapter.capabilities.accessReport
+			) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`${resolved.adapter} has no access report`,
+				);
+			}
+			try {
+				return await adapter.readRoles(resolved, tableLimits, authenticator);
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async readAccessReport(workspace, connectionId, query) {
+			const resolved = await resolveConnection(workspace, connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (
+				adapter.readAccessReport === undefined ||
+				!adapter.capabilities.accessReport
+			) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`${resolved.adapter} has no access report`,
+				);
+			}
+			try {
+				return await adapter.readAccessReport(resolved, query, tableLimits);
+			} catch (error) {
+				throw asServiceError(error);
+			}
+		},
+
+		async readGrantStatements(workspace, connectionId, schemas) {
+			const resolved = await resolveConnection(workspace, connectionId);
+			const adapter = adapters[resolved.adapter];
+			if (adapter.readGrantStatements === undefined) {
+				// Not every engine has grants. An empty map is the honest
+				// answer, and the exporter renders "no grants" rather than
+				// pretending the question was unanswerable.
+				return new Map();
+			}
+			try {
+				return await adapter.readGrantStatements(
+					resolved,
+					tableLimits,
+					schemas,
 				);
 			} catch (error) {
 				throw asServiceError(error);

@@ -150,62 +150,71 @@ Designed in `docs/spec/gripes.md`.
 - [ ] Blocked with the danger zone on project class + attitude leaving
       localStorage
 
-## Phase 12 — Domains · planned
+## Phase 12 — Domains · shipped 2026-09-07
 
 Designed in `docs/spec/domains.md`. Replaces the hand-maintained
 `pull_schema.sh` pattern: the object-to-domain map becomes data in the
 app, and the directory tree it produces becomes a button.
 
-- [ ] `domains` + `domain_tags` (migration 0010), scoped to
-      workspace × datasource, one domain per object, team-wide
-- [ ] `domain.list` / `upsert` / `delete` / `tag` and
+- [x] `domains` + `domain_tags` + `domain_exports` (migration 0010),
+      scoped to workspace × datasource, one domain per object, team-wide
+- [x] `domain.list` / `upsert` / `delete` / `tag` and
       `packages/contracts/src/domains.ts`
-- [ ] Context-menu `domain ▸` submenu, applying to a multi-selection
-- [ ] Colour rail on tree rows — eight palette slots, hues reserved for
+- [x] Context-menu `domain ▸` submenu; Ctrl/Cmd click builds a
+      multi-selection and the submenu applies to all of it
+- [x] Colour rail on tree rows — eight palette slots, hues reserved for
       the brand pass, never the four project accents
-- [ ] Domain manager: order, description, `include data`, and the drift
-      report (untagged objects, stale tags)
-- [ ] Group-by-domain toggle with a permanent `untagged` bucket
-- [ ] `domain.export` — deterministic tree from object-view DDL, no
+- [x] Domain manager tab: colour, name, description, `include data`,
+      delete with the untag count
+- [x] Group-by-domain toggle with a permanent `untagged` bucket
+- [x] `domain.export` — deterministic tree from object-view DDL, no
       external binary, dry run before prune, `DOMAIN_EXPORT_ROOTS`
       allowlist and `owner` role
-- [ ] Per-object files carry their grants, `PUBLIC` written out
+- [x] Export directory set per datasource on its edit page
+      (`datasource_export_paths`, migration 0012) — one path per project
+      would have two datasources overwriting each other's tree
+- [x] Per-object files carry their grants, `PUBLIC` written out
       explicitly so PostgreSQL's implicit `EXECUTE` default is visible
-- [ ] `domain.import` — the manifest round-trips tagging through git
-- [ ] Sync tab: target, plan, progress, refusals, and `domain_exports`
+- [x] `domain.import` — the manifest round-trips tagging through git
+- [x] Sync tab: target, plan, progress, refusals, and `domain_exports`
       run history in place of a parsed `pull_log.txt`
-- [ ] `domain.git` behind `DOMAIN_EXPORT_GIT` — argv not shell, `add`
+- [x] `domain.git` behind `DOMAIN_EXPORT_GIT` — argv not shell, `add`
       scoped to the domain root, push always a separate press, git's
       own stderr shown verbatim and no credential management
 - [ ] Suggestions: glob patterns propose a domain, a person accepts it
+- [ ] Stale-tag report in the manager; manual domain reordering
 
 Exit: re-exporting an unchanged database produces an empty `git diff`,
 and an object added since the last export shows up as untagged rather
 than silently missing.
 
-## Phase 13 — Access report · planned
+## Phase 13 — Access report · shipped 2026-09-07
 
 Designed in `docs/spec/access-report.md`. The role × object matrix,
 resolved rather than granted — which matters most under PostgREST,
 where the grant graph is the API surface.
 
-- [ ] Effective privileges from `has_*_privilege`, with the ACL parse
+- [x] Effective privileges from `has_*_privilege`, with the ACL parse
       used only to explain *why* — `via PUBLIC`, `via member of …`,
       `owner`, `superuser`
-- [ ] Fixes the direct-grants blind spot in the object view's grants
-      tab: `information_schema.role_table_grants` cannot see a grant to
-      `PUBLIC` or one inherited through a role
-- [ ] Schema `USAGE` gates every cell, so the report never claims
+- [x] Fixes the direct-grants blind spot the object view's grants tab
+      still has: `information_schema.role_table_grants` cannot see a
+      grant to `PUBLIC` or one inherited through a role. Asserted both
+      ways in `accessData.test.ts`
+- [x] Schema `USAGE` gates every cell, so the report never claims
       access a role does not have
-- [ ] RLS state, zero-policy tables, `security_invoker` views,
-      `SECURITY DEFINER` routines, column grants, `pg_default_acl`
-- [ ] Per-datasource role set (`datasource_roles`, migration 0011) with
+- [x] RLS state, zero-policy tables, `security_invoker` views,
+      `SECURITY DEFINER` routines, `pg_default_acl`, view dependencies
+- [x] Per-datasource role set (`datasource_roles`, migration 0011) with
       untrusted and authenticator marks, suggested and never assumed
-- [ ] Eight `grant.*` rules in the gripes catalogue, loudest for
-      `grant.public-execute` — the one nobody chose
-- [ ] `access: <datasource>` tab, domain-filtered, "differences only"
-- [ ] `access/` in the domain dump, with no `Generated:` date in the
+- [x] Seven `grant.*` rules in the gripes catalogue, loudest for
+      `grant.public-execute` — the one nobody chose. The proposed
+      eighth was dropped: it needed a judgement a rule cannot make
+- [x] `access: <datasource>` tab, domain-filtered, "differences only"
+- [x] `access/` in the domain dump, with no `Generated:` date in the
       body so a real change is not buried under a timestamp
+- [ ] Render the per-column grant expansion (the data is already in the
+      payload); a schema filter control; MySQL
 
 Exit: a function created today shows `anon` reaching it via `PUBLIC`
 before anybody has run a query against it.

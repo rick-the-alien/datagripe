@@ -44,6 +44,13 @@ function createTestDispatcher() {
 		presence: {} as never,
 		viewThrottle: {} as never,
 		hub: {} as never,
+		config: {
+			DOMAIN_EXPORT_ROOTS: "",
+			DOMAIN_EXPORT_GIT: false,
+			DOMAIN_GIT_TIMEOUT_MS: 60_000,
+			DOMAIN_EXPORT_MAX_DATA_ROWS: 10_000,
+			ACCESS_REPORT_MAX_CELLS: 250_000,
+		} as never,
 		executions: {
 			start: async () => {
 				calls.push({ action: "execution.start" });

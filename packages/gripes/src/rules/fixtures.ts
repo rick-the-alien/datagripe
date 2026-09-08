@@ -1,6 +1,6 @@
 import type { SqlDialect } from "@datagripe/sql-tools";
 import { statementInputFor } from "../statement";
-import type { ObjectInput, Rule, SchemaInput } from "../types";
+import type { AccessInput, ObjectInput, Rule, SchemaInput } from "../types";
 
 /** Fixture builders for rule tests. Not exported from the package. */
 
@@ -66,4 +66,35 @@ export function schemaFindingsFor(
 	dialect: SqlDialect = "postgres",
 ) {
 	return rule.evaluate({ statement: statementFor(sql, dialect), schema });
+}
+
+/**
+ * A resolved-access fixture. The default is deliberately harmless: an
+ * owner-only table with one untrusted role that reaches nothing, so a
+ * rule that fires on this default is firing on no evidence.
+ */
+export function accessFor(overrides: Partial<AccessInput> = {}): AccessInput {
+	return {
+		connectionId: "conn-1",
+		schema: "api",
+		name: "orders",
+		kind: "table",
+		owner: "api_owner",
+		rls: "forced",
+		policyCount: 2,
+		securityInvoker: null,
+		securityDefiner: null,
+		searchPathPinned: null,
+		reach: [{ role: "anon", untrusted: true, privileges: [], blocked: false }],
+		viewBypass: null,
+		defaultAclUntrusted: [],
+		...overrides,
+	};
+}
+
+export function accessFindingsFor(
+	rule: Rule,
+	overrides: Partial<AccessInput> = {},
+) {
+	return rule.evaluate({ access: accessFor(overrides) });
 }

@@ -65,6 +65,13 @@ export interface AdapterCapabilities {
 	 * per operation instead of all-or-nothing.
 	 */
 	columnChanges: ColumnChangeKind[];
+	/**
+	 * Role × object access reporting (docs/spec/access-report.md). Only
+	 * PostgreSQL for now: MySQL's grant model is different enough
+	 * (host-qualified grantees, no roles before 8.0) to be a separate
+	 * design, and SQLite has no grants at all.
+	 */
+	accessReport: boolean;
 	defaultPort: number | null;
 	fields: AdapterField[];
 	/** Dialog label for the `database` field (database name, file path, db index). */
@@ -90,6 +97,7 @@ export const ADAPTER_CAPABILITIES: Record<
 			"setComment",
 			"drop",
 		],
+		accessReport: true,
 		defaultPort: 5432,
 		fields: [
 			"host",
@@ -117,6 +125,7 @@ export const ADAPTER_CAPABILITIES: Record<
 			"setComment",
 			"drop",
 		],
+		accessReport: false,
 		defaultPort: 3306,
 		fields: [
 			"host",
@@ -138,6 +147,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		// SQLite's ALTER TABLE does these three and nothing else; a type,
 		// nullability or default change needs the 12-step table rebuild.
 		columnChanges: ["add", "rename", "drop"],
+		accessReport: false,
 		defaultPort: null,
 		fields: ["database", "readOnly"],
 		databaseLabel: "File path",
@@ -149,6 +159,7 @@ export const ADAPTER_CAPABILITIES: Record<
 		cancellation: false,
 		tableData: null,
 		columnChanges: [],
+		accessReport: false,
 		defaultPort: 6379,
 		fields: ["host", "port", "database", "password", "tlsMode", "readOnly"],
 		databaseLabel: "DB index",
@@ -164,6 +175,7 @@ export const adapterInfoSchema = z.object({
 	cancellation: z.boolean(),
 	tableData: z.enum(["readwrite", "read"]).nullable(),
 	columnChanges: z.array(columnChangeKindSchema),
+	accessReport: z.boolean(),
 	defaultPort: z.number().nullable(),
 	fields: z.array(z.string()),
 	databaseLabel: z.string(),
@@ -182,6 +194,7 @@ export function adapterInfoOf(
 		cancellation: capabilities.cancellation,
 		tableData: capabilities.tableData,
 		columnChanges: capabilities.columnChanges,
+		accessReport: capabilities.accessReport,
 		defaultPort: capabilities.defaultPort,
 		fields: capabilities.fields,
 		databaseLabel: capabilities.databaseLabel,

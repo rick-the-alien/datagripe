@@ -82,6 +82,16 @@ export const gripeLocationSchema = z.discriminatedUnion("kind", [
 		kind: z.literal("execution"),
 		executionId: z.string().min(1).max(255),
 	}),
+	/**
+	 * The datasource as a whole. `ALTER DEFAULT PRIVILEGES` grants to a
+	 * role before any object exists to point at, so a finding about it
+	 * cannot be object-scoped without naming a place that is not where the
+	 * problem is (docs/spec/access-report.md "Default privileges").
+	 */
+	z.object({
+		kind: z.literal("datasource"),
+		connectionId: z.string().min(1).max(255),
+	}),
 ]);
 
 export type GripeLocation = z.infer<typeof gripeLocationSchema>;

@@ -160,6 +160,7 @@ const dispatch = createDispatcher({
 	viewThrottle,
 	hub,
 	rateLimiter,
+	config,
 });
 const auth = createAuthRoutes({
 	appDb,

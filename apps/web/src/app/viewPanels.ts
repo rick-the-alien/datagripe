@@ -37,6 +37,9 @@ let connectionFormOpener:
 	| null = null;
 let newProjectOpener: (() => void) | null = null;
 let projectSettingsOpener: (() => void) | null = null;
+let domainManagerOpener: ((connectionRef: string) => void) | null = null;
+let syncOpener: ((connectionRef: string, name: string) => void) | null = null;
+let accessOpener: ((connectionRef: string, name: string) => void) | null = null;
 
 function focusOrAdd(
 	api: DockviewApi,
@@ -130,6 +133,33 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 			params: { view: "projectSettings" },
 		});
 	};
+	// One tab per datasource for each of these: a domain list, a sync run
+	// and an access report all belong to one database, and two of them
+	// side by side is a legitimate thing to want.
+	domainManagerOpener = (connectionRef) => {
+		focusOrAdd(api, {
+			id: `domains:${connectionRef}`,
+			component: "domainManager",
+			title: "Domains",
+			params: { view: "domains", connectionRef },
+		});
+	};
+	syncOpener = (connectionRef, name) => {
+		focusOrAdd(api, {
+			id: `sync:${connectionRef}`,
+			component: "syncPanel",
+			title: `sync: ${name}`,
+			params: { view: "sync", connectionRef, connectionName: name },
+		});
+	};
+	accessOpener = (connectionRef, name) => {
+		focusOrAdd(api, {
+			id: `access:${connectionRef}`,
+			component: "accessPanel",
+			title: `access: ${name}`,
+			params: { view: "access", connectionRef, connectionName: name },
+		});
+	};
 }
 
 export function openTableView(target: ObjectTarget): void {
@@ -157,6 +187,44 @@ export function openNewProject(): void {
 
 export function openProjectSettings(): void {
 	projectSettingsOpener?.();
+}
+
+export function openDomainManager(connectionRef: string): void {
+	domainManagerOpener?.(connectionRef);
+}
+
+export function openSyncPanel(connectionRef: string, name: string): void {
+	syncOpener?.(connectionRef, name);
+}
+
+export function openAccessPanel(connectionRef: string, name: string): void {
+	accessOpener?.(connectionRef, name);
+}
+
+/** `connectionRef` from a domain-manager panel's params. */
+export function readDomainManagerParams(params: unknown): string {
+	if (params === null || typeof params !== "object") {
+		return "";
+	}
+	return "connectionRef" in params && typeof params.connectionRef === "string"
+		? params.connectionRef
+		: "";
+}
+
+/** `connectionRef` plus display name, for the sync and access tabs. */
+export function readDatasourcePanelParams(params: unknown): {
+	connectionRef: string;
+	connectionName: string;
+} {
+	const connectionRef = readDomainManagerParams(params);
+	const connectionName =
+		params !== null &&
+		typeof params === "object" &&
+		"connectionName" in params &&
+		typeof params.connectionName === "string"
+			? params.connectionName
+			: connectionRef;
+	return { connectionRef, connectionName };
 }
 
 /** Connection form panel params: absent connectionId means "create". */

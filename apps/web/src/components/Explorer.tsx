@@ -1,9 +1,14 @@
 import type {
+	DomainTarget,
 	ObjectKind,
 	SchemaNode,
 	SchemaPathSegment,
 } from "@datagripe/contracts";
-import { isRelationKind, tabsForKind } from "@datagripe/contracts";
+import {
+	domainTargetKey,
+	isRelationKind,
+	tabsForKind,
+} from "@datagripe/contracts";
 import {
 	type ReactNode,
 	useEffect,
@@ -14,10 +19,17 @@ import {
 import { create } from "zustand";
 import {
 	type ObjectTarget,
+	openDomainManager,
 	openObjectView,
 	openTableView,
 } from "../app/viewPanels";
 import { useDatasourceStore } from "../stores/datasource";
+import {
+	domainColourVar,
+	selectDomainId,
+	selectDomains,
+	useDomainsStore,
+} from "../stores/domains";
 import {
 	type ChildrenState,
 	nodeKey,
@@ -25,6 +37,7 @@ import {
 	useExplorerStore,
 } from "../stores/runtime";
 import { DatasourceBreadcrumb, treeRootPath } from "./DatasourceBreadcrumb";
+import { DomainGroups } from "./DomainTree";
 
 /**
  * Schema tree scoped to the breadcrumb's datasource + namespace
@@ -95,16 +108,36 @@ const EMPTY_LABELS: Partial<Record<SchemaNode["kind"], string>> = {
  * the recursive tree. Opening a popover replaces whichever was open. */
 interface TreeUiState {
 	selectedKey: string | null;
+	/**
+	 * Ctrl/Cmd-click adds to this. It is the bulk-tagging path: filter the
+	 * tree, select the matches, tag once — the thing that makes tagging
+	 * two hundred objects survivable (docs/spec/domains.md "Context menu").
+	 */
+	multiSelected: Record<string, DomainTarget>;
 	popoverKey: string | null;
 	select: (key: string | null) => void;
+	toggleMulti: (key: string, target: DomainTarget) => void;
+	clearMulti: () => void;
 	openPopover: (key: string) => void;
 	closePopover: () => void;
 }
 
-const useTreeUi = create<TreeUiState>()((set) => ({
+const useTreeUi = create<TreeUiState>()((set, get) => ({
 	selectedKey: null,
+	multiSelected: {},
 	popoverKey: null,
-	select: (key) => set({ selectedKey: key }),
+	// A plain click collapses the multi-selection: leaving it live after
+	// you have obviously moved on is how a bulk action hits the wrong
+	// two hundred objects.
+	select: (key) => set({ selectedKey: key, multiSelected: {} }),
+	toggleMulti: (key, target) => {
+		const { [key]: existing, ...rest } = get().multiSelected;
+		set({
+			selectedKey: key,
+			multiSelected: existing === undefined ? { ...rest, [key]: target } : rest,
+		});
+	},
+	clearMulti: () => set({ multiSelected: {} }),
 	openPopover: (key) => set({ popoverKey: key }),
 	closePopover: () => set({ popoverKey: null }),
 }));
@@ -461,6 +494,134 @@ function objectKindOf(kind: SchemaNode["kind"]): ObjectKind {
 	}
 }
 
+/**
+ * The `domain ▸` submenu (docs/spec/domains.md "Context menu").
+ *
+ * Each item carries its own colour rail and a check on the current
+ * domain. `untag` appears only when the object is tagged, because an
+ * item that does nothing is worse than no item.
+ */
+function DomainSubmenu(props: {
+	connectionRef: string;
+	target: ObjectTarget;
+	onClose: () => void;
+}) {
+	const domains = useDomainsStore(selectDomains(props.connectionRef));
+	const currentId = useDomainsStore(
+		(state) =>
+			state.tagsByConnection[props.connectionRef]?.[
+				domainTargetKey({
+					schema: props.target.schema,
+					name: props.target.name,
+					kind: props.target.kind,
+				})
+			] ?? null,
+	);
+	const tag = useDomainsStore((state) => state.tag);
+	const multiSelected = useTreeUi((state) => state.multiSelected);
+	const clearMulti = useTreeUi((state) => state.clearMulti);
+	const [open, setOpen] = useState(false);
+
+	const own: DomainTarget = {
+		schema: props.target.schema,
+		name: props.target.name,
+		kind: props.target.kind,
+	};
+	// With a multi-selection live the submenu applies to all of it. The
+	// right-clicked row joins in even if it was not part of the selection,
+	// because it is what the pointer is on.
+	const selection = Object.values(multiSelected);
+	const targets =
+		selection.length === 0
+			? [own]
+			: selection.some(
+						(entry) => domainTargetKey(entry) === domainTargetKey(own),
+					)
+				? selection
+				: [...selection, own];
+
+	const assign = (domainId: string | null) => {
+		props.onClose();
+		clearMulti();
+		void tag(props.connectionRef, targets, domainId);
+	};
+
+	return (
+		<div
+			className="dg-context-sub"
+			role="none"
+			onMouseEnter={() => setOpen(true)}
+			onMouseLeave={() => setOpen(false)}
+		>
+			<button
+				type="button"
+				className="dg-context-item"
+				role="menuitem"
+				aria-haspopup="menu"
+				aria-expanded={open}
+				onClick={() => setOpen(!open)}
+			>
+				{targets.length > 1 ? `domain (${targets.length} objects)` : "domain"}{" "}
+				<span className="dg-context-chevron">▸</span>
+			</button>
+			{open && (
+				<div className="dg-context-menu dg-context-submenu" role="menu">
+					{domains.length === 0 && (
+						<div className="dg-context-note">no domains yet</div>
+					)}
+					{domains.map((domain) => (
+						<button
+							key={domain.id}
+							type="button"
+							className="dg-context-item dg-context-domain"
+							role="menuitemradio"
+							aria-checked={targets.length === 1 && domain.id === currentId}
+							style={
+								{
+									"--dg-domain-rail": domainColourVar(domain.colour),
+								} as React.CSSProperties
+							}
+							onClick={() => assign(domain.id)}
+						>
+							{domain.name}
+							{/* Mixed current domains show no check: a tick that only
+							    described one of seven objects would be a lie. */}
+							{targets.length === 1 && domain.id === currentId && (
+								<span aria-hidden>✓</span>
+							)}
+						</button>
+					))}
+					{(currentId !== null || targets.length > 1) && (
+						<>
+							<div className="dg-context-separator" />
+							<button
+								type="button"
+								className="dg-context-item"
+								role="menuitem"
+								onClick={() => assign(null)}
+							>
+								untag
+							</button>
+						</>
+					)}
+					<div className="dg-context-separator" />
+					<button
+						type="button"
+						className="dg-context-item"
+						role="menuitem"
+						onClick={() => {
+							props.onClose();
+							openDomainManager(props.connectionRef);
+						}}
+					>
+						new domain…
+					</button>
+				</div>
+			)}
+		</div>
+	);
+}
+
 function ContextMenu(props: {
 	x: number;
 	y: number;
@@ -521,6 +682,11 @@ function ContextMenu(props: {
 				</button>
 			))}
 			<div className="dg-context-separator" />
+			<DomainSubmenu
+				connectionRef={props.target.connectionId}
+				target={props.target}
+				onClose={props.onClose}
+			/>
 			<button
 				type="button"
 				className="dg-context-item"
@@ -727,6 +893,9 @@ function TreeNode(props: {
 	const selected = useTreeUi((state) => state.selectedKey === key);
 	const popoverOpen = useTreeUi((state) => state.popoverKey === key);
 	const select = useTreeUi((state) => state.select);
+	const toggleMulti = useTreeUi((state) => state.toggleMulti);
+	const multiSelected = useTreeUi((state) => state.multiSelected);
+	const inMulti = multiSelected[key] !== undefined;
 	const openPopover = useTreeUi((state) => state.openPopover);
 	const closePopover = useTreeUi((state) => state.closePopover);
 
@@ -756,6 +925,29 @@ function TreeNode(props: {
 		undefined,
 	);
 	const rowRef = useRef<HTMLDivElement | null>(null);
+	// The rail stays on in the normal, schema-first mode too: it is what
+	// makes a mis-tagged table visible without switching views.
+	//
+	// Two stable selectors joined in render, rather than one selector
+	// building `{ colour, name }`: a selector that returns a fresh object
+	// every call is a new snapshot every render, and React loops on it.
+	const targetKey = domainTargetKey({
+		schema: objectTarget.schema,
+		name: objectTarget.name,
+		kind: objectTarget.kind,
+	});
+	const taggedDomainId = useDomainsStore(
+		selectDomainId(props.connectionId, targetKey),
+	);
+	const connectionDomains = useDomainsStore(selectDomains(props.connectionId));
+	const railDomain =
+		isObject && taggedDomainId !== null
+			? (connectionDomains.find((entry) => entry.id === taggedDomainId) ?? null)
+			: null;
+	const railColour =
+		railDomain === null
+			? null
+			: { colour: domainColourVar(railDomain.colour), name: railDomain.name };
 
 	const clearHoverTimer = () => {
 		clearTimeout(hoverTimer.current);
@@ -824,7 +1016,17 @@ function TreeNode(props: {
 			}
 		: {};
 
-	const activate = () => {
+	const activate = (event?: React.MouseEvent | React.KeyboardEvent) => {
+		// Ctrl/Cmd click adds to the multi-selection (objects only) and
+		// never expands: the gesture is "also this one", not "open it".
+		if (isObject && event !== undefined && (event.ctrlKey || event.metaKey)) {
+			toggleMulti(key, {
+				schema: objectTarget.schema,
+				name: objectTarget.name,
+				kind: objectTarget.kind,
+			});
+			return;
+		}
 		select(key);
 		if (props.node.hasChildren) {
 			void toggle(props.connectionId, path);
@@ -883,10 +1085,25 @@ function TreeNode(props: {
 		<>
 			<div
 				ref={rowRef}
-				className={
-					selected ? "dg-tree-row dg-tree-row-selected" : "dg-tree-row"
-				}
-				style={{ paddingLeft: 10 + props.depth * 14 }}
+				className={[
+					"dg-tree-row",
+					selected ? "dg-tree-row-selected" : "",
+					inMulti ? "dg-tree-row-multi" : "",
+				]
+					.filter((entry) => entry !== "")
+					.join(" ")}
+				style={{
+					paddingLeft: 10 + props.depth * 14,
+					...(railColour === null
+						? {}
+						: ({
+								"--dg-domain-rail": railColour.colour,
+							} as React.CSSProperties)),
+				}}
+				data-domain={railColour?.name}
+				// Colour is never the only carrier: the domain is in the
+				// accessible name as well as on the rail.
+				title={railColour === null ? undefined : `domain: ${railColour.name}`}
 				role="treeitem"
 				aria-selected={selected}
 				aria-expanded={props.node.hasChildren ? showChildren : undefined}
@@ -895,7 +1112,7 @@ function TreeNode(props: {
 				onKeyDown={(event) => {
 					if (event.key === "Enter" || event.key === " ") {
 						event.preventDefault();
-						activate();
+						activate(event);
 					}
 				}}
 				{...objectHandlers}
@@ -986,6 +1203,9 @@ export function Explorer() {
 	);
 	const ensure = useExplorerStore((state) => state.ensure);
 	const [filter, setFilter] = useState("");
+	const grouped = useDomainsStore((state) => state.grouped);
+	const setGrouped = useDomainsStore((state) => state.setGrouped);
+	const loadDomains = useDomainsStore((state) => state.load);
 
 	const active =
 		connections.find((connection) => connection.id === activeConnectionId) ??
@@ -1008,6 +1228,15 @@ export function Explorer() {
 		}
 	}, [active, rootPath, rootChildren, ensure]);
 
+	// Domains are per datasource, so they reload when the breadcrumb
+	// moves. Loading them here rather than lazily in the rail keeps the
+	// colour from appearing a beat after the row.
+	useEffect(() => {
+		if (active !== null) {
+			void loadDomains(active.id);
+		}
+	}, [active, loadDomains]);
+
 	return (
 		<div className="dg-explorer dg-scroll">
 			<DatasourceBreadcrumb />
@@ -1018,6 +1247,30 @@ export function Explorer() {
 					value={filter}
 					onChange={(event) => setFilter(event.target.value)}
 				/>
+				{/* A view mode, not a filter: every object stays reachable in
+				    both, and expansion state is tracked per mode. */}
+				<button
+					type="button"
+					className={
+						grouped ? "dg-tree-group-on dg-tree-group" : "dg-tree-group"
+					}
+					aria-pressed={grouped}
+					title="Group by domain"
+					aria-label="Group by domain"
+					onClick={() => setGrouped(!grouped)}
+				>
+					⌗
+				</button>
+				<button
+					type="button"
+					className="dg-tree-group"
+					title="Manage domains"
+					aria-label="Manage domains"
+					disabled={active === null}
+					onClick={() => active !== null && openDomainManager(active.id)}
+				>
+					⋯
+				</button>
 			</div>
 			{!loaded && (
 				<div className="dg-tree-note dg-tree-note-loading">connecting…</div>
@@ -1030,11 +1283,18 @@ export function Explorer() {
 			{loaded && active !== null && rootPath === null && (
 				<div className="dg-tree-note dg-tree-note-loading">loading…</div>
 			)}
-			{active !== null && rootPath !== null && (
+			{active !== null && rootPath !== null && !grouped && (
 				<NodeRows
 					connectionId={active.id}
 					parentPath={rootPath}
 					depth={0}
+					filter={filter.trim().toLowerCase()}
+				/>
+			)}
+			{active !== null && rootPath !== null && grouped && (
+				<DomainGroups
+					connectionId={active.id}
+					schema={rootPath[0]?.name ?? ""}
 					filter={filter.trim().toLowerCase()}
 				/>
 			)}

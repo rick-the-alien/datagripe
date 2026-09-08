@@ -52,7 +52,11 @@ const TAB_EMPTY: Record<ObjectTab, string> = {
 	indexes: "No indexes on this object.",
 	constraints: "No constraints on this object.",
 	triggers: "No triggers on this object.",
-	grants: "No grants recorded for this object.",
+	// Deliberately not "nobody can reach this": these are direct grants,
+	// and a PUBLIC grant or one inherited through a role is not among
+	// them (docs/spec/access-report.md "The gap this closes").
+	grants:
+		"No grants name a role directly. That is not the same as no access — see the access report.",
 	statistics: "No statistics available for this object.",
 	ddl: "This engine did not return a definition.",
 };
@@ -359,17 +363,32 @@ function TabBody(props: {
 			);
 
 		case "grants":
-			return data.grants.length === 0 ? (
-				<div className="dg-tree-note">{TAB_EMPTY.grants}</div>
-			) : (
-				<Grid
-					headers={["role", "privileges", "granted by"]}
-					rows={data.grants.map((grant) => [
-						cell(grant.grantee, "role"),
-						cell(grant.privileges, "type"),
-						cell(grant.grantor ?? "—", "mute"),
-					])}
-				/>
+			return (
+				<>
+					{/* Direct grants only. A `GRANT ... TO PUBLIC` appears once as
+					    grantee PUBLIC, and a grant inherited through a role appears
+					    against the parent's name, so scanning this table for a role
+					    can find nothing while that role has the privilege. The
+					    access report resolves it; this note is here so nobody reads
+					    an empty row as safety. */}
+					<div className="dg-ov-caveat">
+						Direct grants. <code>PUBLIC</code> and role inheritance are not
+						resolved here — the access report is what answers “what can this
+						role actually do”.
+					</div>
+					{data.grants.length === 0 ? (
+						<div className="dg-tree-note">{TAB_EMPTY.grants}</div>
+					) : (
+						<Grid
+							headers={["role", "privileges", "granted by"]}
+							rows={data.grants.map((grant) => [
+								cell(grant.grantee, "role"),
+								cell(grant.privileges, "type"),
+								cell(grant.grantor ?? "—", "mute"),
+							])}
+						/>
+					)}
+				</>
 			);
 
 		case "statistics":

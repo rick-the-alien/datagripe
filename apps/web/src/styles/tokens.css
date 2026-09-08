@@ -38,6 +38,26 @@
   --dg-proj-local:      var(--dg-green);
   --dg-proj-analytics:  var(--dg-cyan);
 
+  /* ---- domains --------------------------------------------- */
+  /* Eight palette slots for domain tags (docs/spec/domains.md "The
+     colour rail"). Deliberately NOT the four project accents: a rail
+     that could be mistaken for a production connection would break the
+     one colour rule the interface actually depends on. These sit at a
+     lower chroma than the accents for the same reason — a domain is
+     organisation, not a warning.
+
+     Reserved for the brand pass; the count, the token names and the
+     constraint are fixed here, the exact hues are not. */
+
+  --dg-domain-1: #7C9CBF;   /* slate blue     */
+  --dg-domain-2: #C9A227;   /* ochre          */
+  --dg-domain-3: #6FA88A;   /* sage           */
+  --dg-domain-4: #B07AA1;   /* mauve          */
+  --dg-domain-5: #C4744A;   /* terracotta     */
+  --dg-domain-6: #5F9EA0;   /* teal, muted    */
+  --dg-domain-7: #9B8AA6;   /* lilac grey     */
+  --dg-domain-8: #A3A857;   /* olive          */
+
   /* ---- syntax ---------------------------------------------- */
 
   --dg-syn-keyword:  var(--dg-magenta);

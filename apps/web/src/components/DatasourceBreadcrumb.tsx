@@ -1,6 +1,11 @@
 import type { ConnectionMetadata } from "@datagripe/contracts";
 import { useEffect, useRef, useState } from "react";
-import { openConnectionForm } from "../app/viewPanels";
+import {
+	openAccessPanel,
+	openConnectionForm,
+	openDomainManager,
+	openSyncPanel,
+} from "../app/viewPanels";
 import {
 	defaultNamespace,
 	ENGINE_CHIPS,
@@ -325,6 +330,44 @@ export function DatasourceBreadcrumb() {
 					>
 						<span className="dg-crumb-plus">⚙</span>manage datasource…
 					</button>
+					{active !== null && (
+						<>
+							<div className="dg-crumb-div" />
+							<button
+								type="button"
+								role="menuitem"
+								className="dg-crumb-act dg-crumb-act-mut"
+								onClick={() => {
+									setPopover(null);
+									openDomainManager(active.id);
+								}}
+							>
+								<span className="dg-crumb-plus">⌗</span>domains…
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								className="dg-crumb-act dg-crumb-act-mut"
+								onClick={() => {
+									setPopover(null);
+									openSyncPanel(active.id, active.name);
+								}}
+							>
+								<span className="dg-crumb-plus">↥</span>sync…
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								className="dg-crumb-act dg-crumb-act-mut"
+								onClick={() => {
+									setPopover(null);
+									openAccessPanel(active.id, active.name);
+								}}
+							>
+								<span className="dg-crumb-plus">⚿</span>access report…
+							</button>
+						</>
+					)}
 				</div>
 			)}
 

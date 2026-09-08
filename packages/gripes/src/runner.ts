@@ -25,6 +25,9 @@ function availableInputs(context: GripeContext): Set<RuleInput> {
 	if (context.object !== undefined) {
 		available.add("object");
 	}
+	if (context.access !== undefined) {
+		available.add("access");
+	}
 	if (context.execution !== undefined) {
 		available.add("execution");
 	}

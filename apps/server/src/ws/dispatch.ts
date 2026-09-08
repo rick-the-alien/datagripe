@@ -1,4 +1,7 @@
 import {
+	accessReportRequestSchema,
+	accessRoleSetRequestSchema,
+	accessRolesRequestSchema,
 	connectionCreateRequestSchema,
 	connectionDeleteRequestSchema,
 	connectionTestRequestSchema,
@@ -10,6 +13,15 @@ import {
 	documentFocusRequestSchema,
 	documentGetRequestSchema,
 	documentSaveRequestSchema,
+	domainDeleteRequestSchema,
+	domainExportPathRequestSchema,
+	domainExportRequestSchema,
+	domainGitRequestSchema,
+	domainImportRequestSchema,
+	domainListRequestSchema,
+	domainRunsRequestSchema,
+	domainTagRequestSchema,
+	domainUpsertRequestSchema,
 	executionCancelRequestSchema,
 	executionStartRequestSchema,
 	executionSubscribeRequestSchema,
@@ -30,11 +42,29 @@ import {
 } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
 import type { ClientAction } from "@datagripe/contracts/ws";
+import { buildReport, listRoles, setRoles } from "../access/service";
+import type { AppConfig } from "../config";
 import type { ConnectionsService } from "../connections/service";
 import { ServiceError } from "../connections/service";
 import { withIdempotency } from "../db/app/idempotency";
 import type { AppDb } from "../db/app/pool";
 import type { DocumentsService } from "../documents/service";
+import { runExport } from "../domains/export";
+import { runGit } from "../domains/git";
+import { runImport } from "../domains/import";
+import { parseExportRoots, resolveExportRoot } from "../domains/paths";
+import {
+	attachCommit,
+	exportPath,
+	listRuns,
+	setExportPath,
+} from "../domains/runs";
+import {
+	deleteDomain,
+	listDomains,
+	tag as tagObjects,
+	upsertDomain,
+} from "../domains/service";
 import { listHistory } from "../execution/history";
 import type { ExecutionRegistry } from "../execution/registry";
 import {
@@ -84,6 +114,7 @@ export interface DispatcherDeps {
 	viewThrottle: ViewBroadcastThrottle;
 	hub: SocketHub;
 	rateLimiter: RateLimiter;
+	config: AppConfig;
 }
 
 const ROLE_RANK = { viewer: 0, editor: 1, owner: 2 } as const;
@@ -105,6 +136,21 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"object.alter": "editor",
 	"gripe.dismiss": "editor",
 	"gripe.restore": "editor",
+	"domain.upsert": "editor",
+	"domain.delete": "editor",
+	"domain.tag": "editor",
+	// Editor, like the other datasource settings it sits beside on the
+	// edit page. Using it still needs `owner`, because that is the step
+	// that writes to disk.
+	"domain.set-export-path": "editor",
+	// Export writes to the host filesystem and git talks to a remote.
+	// Reading who can do what is not a mutation, so `access.report` and
+	// `domain.list` stay open to viewers: hiding the report from viewers
+	// would mean the people most likely to notice a mistake cannot look.
+	"access.roles.set": "editor",
+	"domain.export": "owner",
+	"domain.import": "owner",
+	"domain.git": "owner",
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
@@ -129,6 +175,8 @@ const RATE_SCOPES: Partial<Record<ClientAction, string>> = {
 	"table.mutate": "table.mutate",
 	"object.describe": "object.describe",
 	"object.alter": "object.alter",
+	"access.report": "object.describe",
+	"domain.export": "object.alter",
 };
 
 export function createDispatcher(deps: DispatcherDeps): Dispatch {
@@ -141,7 +189,9 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 		viewThrottle,
 		hub,
 		rateLimiter,
+		config,
 	} = deps;
+	const exportRoots = parseExportRoots(config.DOMAIN_EXPORT_ROOTS);
 
 	/** Notify the workspace about a created/saved/archived document (6a). */
 	function broadcastDocumentChanged(
@@ -478,6 +528,226 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				const request = dismissalSchema.parse(payload);
 				return {
 					dismissals: await restore(appDb, workspace.id, ctx.userId, request),
+				};
+			}
+
+			case "domain.list": {
+				const request = domainListRequestSchema.parse(payload);
+				return listDomains(appDb, workspace.id, request.connectionRef);
+			}
+
+			case "domain.upsert": {
+				const request = domainUpsertRequestSchema.parse(payload);
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => upsertDomain(appDb, workspace.id, request),
+				);
+			}
+
+			case "domain.delete": {
+				const request = domainDeleteRequestSchema.parse(payload);
+				return deleteDomain(appDb, workspace.id, request);
+			}
+
+			case "domain.tag": {
+				const request = domainTagRequestSchema.parse(payload);
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => tagObjects(appDb, workspace.id, ctx.userId, request),
+				);
+			}
+
+			case "domain.runs": {
+				const request = domainRunsRequestSchema.parse(payload);
+				const configured = await exportPath(
+					appDb,
+					workspace.id,
+					request.connectionRef,
+				);
+				// The root is reported only when it currently resolves inside
+				// the allowlist, so the tab never shows a target it cannot
+				// actually write to.
+				let root: string | null = null;
+				if (exportRoots.length > 0) {
+					root = await resolveExportRoot(configured, exportRoots).catch(
+						() => null,
+					);
+				}
+				return {
+					runs: await listRuns(
+						appDb,
+						workspace.id,
+						request.connectionRef,
+						request.limit,
+					),
+					root,
+					exportEnabled: exportRoots.length > 0,
+					gitEnabled: config.DOMAIN_EXPORT_GIT,
+				};
+			}
+
+			case "domain.export": {
+				const request = domainExportRequestSchema.parse(payload);
+				const run = () =>
+					runExport(
+						{
+							appDb,
+							connections,
+							exportRoots,
+							maxDataRows: config.DOMAIN_EXPORT_MAX_DATA_ROWS,
+							maxCells: config.ACCESS_REPORT_MAX_CELLS,
+							onProgress: (done, total, current) => {
+								hub.broadcastToWorkspace(workspace.id, {
+									version: 1,
+									kind: "event",
+									eventId: crypto.randomUUID(),
+									topic: "domain.export.progress",
+									occurredAt: new Date().toISOString(),
+									payload: {
+										connectionRef: request.connectionRef,
+										done,
+										total,
+										current,
+									},
+								});
+							},
+						},
+						workspace,
+						ctx.userId,
+						request,
+					);
+				// A dry run writes nothing, so it needs no idempotency key
+				// honoured; an apply must not run twice on a retried socket.
+				if (request.dryRun) {
+					return run();
+				}
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					run,
+				);
+			}
+
+			case "domain.import": {
+				const request = domainImportRequestSchema.parse(payload);
+				const run = () =>
+					runImport(
+						{ appDb, connections, exportRoots },
+						workspace,
+						ctx.userId,
+						request,
+					);
+				// A preview reads a file and writes nothing.
+				if (request.dryRun) {
+					return run();
+				}
+				return withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					run,
+				);
+			}
+
+			case "domain.set-export-path": {
+				const request = domainExportPathRequestSchema.parse(payload);
+				// Validation, not a save: the field's `check path` action.
+				if (request.checkOnly) {
+					if (request.path.trim() === "") {
+						return {
+							ok: true,
+							resolved: null,
+							message: "No directory — export stays off for this datasource",
+						};
+					}
+					try {
+						const resolved = await resolveExportRoot(request.path, exportRoots);
+						return { ok: true, resolved, message: "allowed" };
+					} catch (error) {
+						return {
+							ok: false,
+							resolved: null,
+							message:
+								error instanceof Error ? error.message : "Path is not allowed",
+						};
+					}
+				}
+				await setExportPath(
+					appDb,
+					workspace.id,
+					request.connectionRef,
+					request.path,
+				);
+				// The connection list carries the path, so the caller gets the
+				// updated datasource back rather than having to refetch.
+				return { connections: await connections.listConnections(workspace) };
+			}
+
+			case "domain.git": {
+				if (!config.DOMAIN_EXPORT_GIT) {
+					throw new ServiceError(
+						ErrorCodes.Forbidden,
+						"Committing is disabled — DOMAIN_EXPORT_GIT is off",
+					);
+				}
+				const request = domainGitRequestSchema.parse(payload);
+				const configured = await exportPath(
+					appDb,
+					workspace.id,
+					request.connectionRef,
+				);
+				const root = await resolveExportRoot(configured, exportRoots);
+				const result = await runGit(
+					root,
+					request.operation,
+					request.message,
+					{ timeoutMs: config.DOMAIN_GIT_TIMEOUT_MS },
+					{ workspaceId: workspace.id, userId: ctx.userId },
+				);
+				if (request.runId !== undefined && result.commitSha !== null) {
+					await attachCommit(
+						appDb,
+						workspace.id,
+						request.runId,
+						result.commitSha,
+					);
+				}
+				return result;
+			}
+
+			case "access.roles": {
+				const request = accessRolesRequestSchema.parse(payload);
+				return listRoles(appDb, connections, workspace, request.connectionId);
+			}
+
+			case "access.roles.set": {
+				const request = accessRoleSetRequestSchema.parse(payload);
+				await setRoles(appDb, workspace.id, request);
+				return listRoles(appDb, connections, workspace, request.connectionId);
+			}
+
+			case "access.report": {
+				const request = accessReportRequestSchema.parse(payload);
+				const bundle = await buildReport(
+					appDb,
+					connections,
+					workspace,
+					request,
+					config.ACCESS_REPORT_MAX_CELLS,
+				);
+				return {
+					...bundle.result,
+					findings: bundle.findings,
+					untrusted: bundle.untrusted,
 				};
 			}
 

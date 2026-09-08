@@ -19,6 +19,7 @@ export type RuleInput =
 	| "statement"
 	| "schema"
 	| "object"
+	| "access"
 	| "execution"
 	| "plan";
 
@@ -69,6 +70,47 @@ export interface ObjectInput {
 	ddl: string | null;
 }
 
+/**
+ * One object's resolved access, for the `grant.*` rules
+ * (docs/spec/access-report.md "Findings, not opinions in the margin").
+ *
+ * Everything here is already *effective* — `has_*_privilege` resolved
+ * PUBLIC, inheritance and superuser, and `blocked` records that the role
+ * cannot enter the schema. A rule must never re-derive reachability from
+ * an ACL, because that is the mistake the whole report exists to fix.
+ */
+export interface AccessInput {
+	connectionId: string;
+	schema: string;
+	name: string;
+	kind: "table" | "view" | "function" | "procedure" | "sequence";
+	owner: string;
+	rls: "none" | "off" | "on" | "forced";
+	policyCount: number;
+	/** Views: false when the view reads base relations as its owner. */
+	securityInvoker: boolean | null;
+	securityDefiner: boolean | null;
+	searchPathPinned: boolean | null;
+	/** Per-role effective reach, untrusted marks already applied. */
+	reach: Array<{
+		role: string;
+		untrusted: boolean;
+		privileges: string[];
+		/** True when the role has no USAGE on the schema, so the privileges
+		 * above are inert. */
+		blocked: boolean;
+	}>;
+	/**
+	 * Base relations this view exposes that an untrusted role cannot read
+	 * directly. Null when the question was not asked (not a view, or the
+	 * dependency read was unavailable) — and a rule that gets null stays
+	 * silent rather than guessing.
+	 */
+	viewBypass: Array<{ role: string; relation: string }> | null;
+	/** `ALTER DEFAULT PRIVILEGES` entries granting to an untrusted role. */
+	defaultAclUntrusted: Array<{ grantee: string; objectType: string }>;
+}
+
 /** How an execution turned out, for runtime rules. */
 export interface ExecutionInput {
 	executionId: string;
@@ -86,6 +128,7 @@ export interface GripeContext {
 	statement?: StatementInput;
 	schema?: SchemaInput;
 	object?: ObjectInput;
+	access?: AccessInput;
 	execution?: ExecutionInput;
 }
 
@@ -119,6 +162,18 @@ export function objectLocation(
 		name: object.name,
 		objectKind: object.kind,
 		...(tab === undefined ? {} : { tab }),
+	};
+}
+
+/** Convenience for a rule building an access-scoped finding. */
+export function accessLocation(access: AccessInput): GripeLocation {
+	return {
+		kind: "object",
+		connectionId: access.connectionId,
+		schema: access.schema,
+		name: access.name,
+		objectKind: access.kind,
+		tab: "grants",
 	};
 }
 

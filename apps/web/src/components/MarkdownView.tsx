@@ -8,6 +8,7 @@ import {
 } from "../stores/documentConnection";
 import { useDocumentsStore } from "../stores/documents";
 import { useExecutionsStore } from "../stores/runtime";
+import { IconRun } from "./icons";
 
 /**
  * A markdown document, rendered (docs/spec/markdown-documents.md).
@@ -199,7 +200,7 @@ function SqlBlock(props: {
 						})
 					}
 				>
-					▶ run
+					<IconRun /> run
 				</button>
 			</div>
 			<div ref={hostRef} className="dg-md-block-editor">

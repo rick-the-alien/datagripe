@@ -26,6 +26,7 @@ import { DomainManager } from "../components/DomainManager";
 import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
 import { GripesPanel } from "../components/GripesPanel";
+import { IconClose, IconSettings } from "../components/icons";
 import { NewProjectForm } from "../components/NewProjectForm";
 import { ObjectView } from "../components/ObjectView";
 import { PathTree } from "../components/PathTree";
@@ -504,7 +505,7 @@ export function Workspace() {
 							aria-label="Stop following"
 							onClick={() => usePresenceStore.getState().unfollow()}
 						>
-							×
+							<IconClose />
 						</button>
 					</span>
 				)}
@@ -524,7 +525,7 @@ export function Workspace() {
 						aria-label="Project settings"
 						onClick={() => openProjectSettings()}
 					>
-						⚙
+						<IconSettings />
 					</button>
 				)}
 				<span className="dg-header-meta">{sessionUser?.email}</span>

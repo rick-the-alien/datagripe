@@ -2,6 +2,7 @@ import type { IDockviewPanelHeaderProps } from "dockview-react";
 import { useEffect, useRef } from "react";
 import { panelDocumentId } from "../app/editorPanels";
 import { useDocumentsStore } from "../stores/documents";
+import { IconClose, IconObject, IconTable } from "./icons";
 
 /**
  * Editor tab: document title, dirty dot, close button. Dockview attaches
@@ -49,8 +50,9 @@ export function EditorTab(props: IDockviewPanelHeaderProps) {
 			tab.removeEventListener("mousedown", onMouseDown, { capture: true });
 	}, [props.api]);
 
-	// Tab identity (brand-system.md): table view gets ▤ in green, object
-	// view ⊞ in cyan, so two tabs named `payments` are not a coin flip.
+	// Tab identity (brand-system.md): a table view gets the table mark in
+	// green, an object view the object mark in cyan, so two tabs both
+	// reading `payments` are not a coin flip.
 	const isResults = viewKind === "results" || props.api.id === "results";
 	return (
 		<div
@@ -58,10 +60,14 @@ export function EditorTab(props: IDockviewPanelHeaderProps) {
 			className={isResults ? "dg-tab dg-tab-results" : "dg-tab"}
 		>
 			{viewKind === "table" && (
-				<span className="dg-tab-glyph dg-tab-glyph-table">▤</span>
+				<span className="dg-tab-glyph dg-tab-glyph-table">
+					<IconTable />
+				</span>
 			)}
 			{viewKind === "object" && (
-				<span className="dg-tab-glyph dg-tab-glyph-object">⊞</span>
+				<span className="dg-tab-glyph dg-tab-glyph-object">
+					<IconObject />
+				</span>
 			)}
 			<span className="dg-tab-title">{doc?.title ?? props.api.title}</span>
 			{doc?.dirty === true && (
@@ -76,7 +82,7 @@ export function EditorTab(props: IDockviewPanelHeaderProps) {
 					props.api.close();
 				}}
 			>
-				×
+				<IconClose />
 			</button>
 		</div>
 	);

@@ -22,6 +22,7 @@ import {
 	withoutDraft,
 	withPatch,
 } from "./columnEdits";
+import { IconAdd, IconClose, IconDrop, IconUndo } from "./icons";
 
 /**
  * The columns tab (docs/spec/object-view.md "Editing columns"). Edits
@@ -139,7 +140,7 @@ export function ColumnsTab(props: {
 						aria-label="Discard new column"
 						onClick={() => setPending(withoutDraft(pending, index))}
 					>
-						×
+						<IconClose />
 					</button>
 				</td>
 				<td>
@@ -227,7 +228,7 @@ export function ColumnsTab(props: {
 					}
 					onClick={() => setPending(withDraft(pending))}
 				>
-					＋ column
+					<IconAdd /> column
 				</button>
 				{dirty && (
 					<>
@@ -306,7 +307,7 @@ export function ColumnsTab(props: {
 											setPending(withDropToggled(pending, column.name))
 										}
 									>
-										{marked ? "↺" : "␡"}
+										{marked ? <IconUndo /> : <IconDrop />}
 									</button>
 								</td>
 								<td className={column.primaryKey ? "dg-ov-pk" : undefined}>

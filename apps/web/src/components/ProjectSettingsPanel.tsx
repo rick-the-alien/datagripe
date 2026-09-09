@@ -10,6 +10,7 @@ import {
 	useBrandingStore,
 } from "../stores/branding";
 import { useSessionStore } from "../stores/session";
+import { IconClose } from "./icons";
 import { MockBadge } from "./MockBadge";
 
 /**
@@ -183,7 +184,7 @@ function MembersSection(props: { isOwner: boolean }) {
 											);
 									}}
 								>
-									×
+									<IconClose />
 								</button>
 							)}
 						</li>

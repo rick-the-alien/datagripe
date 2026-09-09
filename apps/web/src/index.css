@@ -43,6 +43,38 @@ button:disabled {
 	cursor: default;
 }
 
+/* ---- icons -------------------------------------------------- *
+ * The family is Lucide (docs/brand/brand-system.md "Icons"); the React
+ * wrappers live in components/icons.tsx and every one of them lands
+ * here. `stroke: currentColor` is Lucide's own default, which is the
+ * point: an icon takes the colour of the control it sits in, so hover
+ * and disabled states need no icon-specific rule.
+ */
+
+.dg-icon {
+	flex: none;
+	/* Nudge onto the text baseline for the handful of icons that sit
+	   inline in a sentence rather than inside a flex row. */
+	vertical-align: -0.145em;
+}
+
+/* Used where a click is registered but not yet answered. */
+.dg-icon-spin {
+	animation: dg-icon-spin 0.9s linear infinite;
+}
+
+@keyframes dg-icon-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dg-icon-spin {
+		animation: none;
+	}
+}
+
 /* ---- shell -------------------------------------------------- */
 
 .dg-workspace {
@@ -273,8 +305,9 @@ button:disabled {
 }
 
 .dg-section-chevron {
+	display: inline-flex;
+	align-items: center;
 	color: var(--dg-ink-faint);
-	font-size: 10px;
 }
 
 /* ---- datasource breadcrumb -------------------------------------- */
@@ -333,8 +366,9 @@ button:disabled {
 }
 
 .dg-crumb-chev {
+	display: inline-flex;
+	align-items: center;
 	color: var(--dg-ink-faint);
-	font-size: 9px;
 }
 
 .dg-crumb-slash {
@@ -522,8 +556,11 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-crumb-plus {
+	display: inline-flex;
+	flex: none;
 	width: 15px;
-	text-align: center;
+	justify-content: center;
+	align-items: center;
 }
 
 /* ---- tree filter --------------------------------------------------- */
@@ -572,9 +609,7 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 .dg-tree-glyph-chev {
 	display: none;
-	font-size: 10px;
 	color: var(--dg-ink-dim);
-	line-height: 1;
 }
 
 .dg-tree-row:hover .dg-tree-glyph-parent .dg-tree-icon,
@@ -584,7 +619,8 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 .dg-tree-row:hover .dg-tree-glyph-parent .dg-tree-glyph-chev,
 .dg-tree-row:focus-within .dg-tree-glyph-parent .dg-tree-glyph-chev {
-	display: inline;
+	display: inline-flex;
+	align-items: center;
 }
 
 .dg-popover-glyph {
@@ -902,6 +938,9 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-exp-fmt-tick {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
 	width: 11px;
 	color: var(--dg-cyan);
 }
@@ -1014,7 +1053,8 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 
 .dg-tab-glyph {
 	flex: none;
-	font-style: normal;
+	display: flex;
+	align-items: center;
 }
 
 .dg-tab-glyph-table {
@@ -1100,40 +1140,46 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	justify-content: center;
 }
 
+/* The mark is a mask, so `background` is the colour and the token is the
+ * shape — same icon family as the chrome (tokens.css "icon masks"). */
 .dg-glyph-succeeded::before,
 .dg-glyph-failed::before,
 .dg-glyph-running::before,
 .dg-glyph-queued::before,
 .dg-glyph-cancelled::before {
-	font-size: 11px;
-	line-height: 1;
+	content: "";
+	width: 11px;
+	height: 11px;
+	mask-position: center;
+	mask-repeat: no-repeat;
+	mask-size: contain;
 }
 
 .dg-glyph-succeeded::before {
-	content: "✓";
-	color: var(--dg-green);
+	mask-image: var(--dg-icon-check);
+	background: var(--dg-green);
 }
 
 .dg-glyph-failed::before {
-	content: "✕";
-	color: var(--dg-magenta);
+	mask-image: var(--dg-icon-x);
+	background: var(--dg-magenta);
 }
 
 .dg-glyph-queued::before {
-	content: "●";
-	color: var(--dg-cyan-deep);
+	mask-image: var(--dg-icon-dot);
+	background: var(--dg-cyan-deep);
 	opacity: 0.5;
 }
 
 .dg-glyph-running::before {
-	content: "●";
-	color: var(--dg-cyan-deep);
+	mask-image: var(--dg-icon-dot);
+	background: var(--dg-cyan-deep);
 	animation: dg-glyph-pulse 1s ease-in-out infinite;
 }
 
 .dg-glyph-cancelled::before {
-	content: "⊘";
-	color: var(--dg-ink-mute);
+	mask-image: var(--dg-icon-ban);
+	background: var(--dg-ink-mute);
 }
 
 @keyframes dg-glyph-pulse {
@@ -2492,11 +2538,12 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-header-cog {
+	display: inline-flex;
+	align-items: center;
 	background: none;
 	border: none;
 	padding: 2px 6px;
 	color: var(--dg-ink-dim);
-	font-size: 14px;
 }
 
 .dg-header-cog:hover:not(:disabled) {
@@ -3000,9 +3047,9 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
    to carry a mark or the worst gripe in the object hides behind a tab
    nobody clicked. Same glyphs as the gripe rows, at the same weight. */
 .dg-ov-tab-mark {
+	display: inline-flex;
+	align-items: center;
 	margin-left: 5px;
-	font-size: 9px;
-	vertical-align: 1px;
 }
 
 .dg-ov-tab-mark.dg-sev-blocker {
@@ -3244,15 +3291,15 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-tv-ico {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	background: none;
 	border: none;
 	border-radius: var(--dg-radius-input);
 	color: var(--dg-ink-mute);
 	padding: 2px 5px;
 	font: inherit;
-	/* Glyph buttons need a step up on the 11.5px meta size, or ↻ and ⋯
-	   blur into each other at rest. */
-	font-size: 14px;
 	line-height: 1;
 }
 
@@ -3390,6 +3437,9 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 }
 
 .dg-tv-sort {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
 	color: var(--dg-cyan);
 	font-size: 9px;
 }
@@ -3827,10 +3877,13 @@ th.dg-tv-pk .dg-tv-th {
 	color: var(--dg-ink);
 }
 
+/* A box one gripe-text line tall (14 / 1.5), so the mark centres on the
+ * first line of the text beside it rather than riding its own baseline. */
 .dg-gripe-glyph {
 	flex: none;
-	font-size: 9px;
-	line-height: 1.9;
+	display: flex;
+	align-items: center;
+	height: 21px;
 }
 
 .dg-gripe-body {
@@ -3897,25 +3950,29 @@ th.dg-tv-pk .dg-tv-th {
 .dg-gripe-glyph-blocker::before,
 .dg-gripe-glyph-warning::before,
 .dg-gripe-glyph-style::before {
+	content: "";
 	display: block;
-	text-align: center;
-	font-size: 9px;
-	line-height: inherit;
+	width: 12px;
+	height: 12px;
+	margin: 0 auto;
+	mask-position: center;
+	mask-repeat: no-repeat;
+	mask-size: contain;
 }
 
 .dg-gripe-glyph-blocker::before {
-	content: "▲";
-	color: var(--dg-sev-blocker);
+	mask-image: var(--dg-icon-triangle-alert);
+	background: var(--dg-sev-blocker);
 }
 
 .dg-gripe-glyph-warning::before {
-	content: "◆";
-	color: var(--dg-sev-warning);
+	mask-image: var(--dg-icon-diamond);
+	background: var(--dg-sev-warning);
 }
 
 .dg-gripe-glyph-style::before {
-	content: "●";
-	color: var(--dg-sev-style);
+	mask-image: var(--dg-icon-circle);
+	background: var(--dg-sev-style);
 }
 
 /* Underline rather than a filled background: a filled range would fight
@@ -4004,6 +4061,9 @@ th.dg-tv-pk .dg-tv-th {
 }
 
 .dg-repo-track {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
 	color: var(--dg-ink-mute);
 	font-size: var(--dg-fs-meta);
 }

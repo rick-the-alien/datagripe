@@ -18,6 +18,18 @@ import {
 	useConnectionsStore,
 	useExplorerStore,
 } from "../stores/runtime";
+import {
+	IconAccess,
+	IconAdd,
+	IconChevronDown,
+	IconClose,
+	IconDomains,
+	IconEdit,
+	IconImport,
+	IconRefresh,
+	IconSettings,
+	IconSync,
+} from "./icons";
 
 /**
  * Datasource and namespace selector (docs/brand/mocks/
@@ -156,7 +168,7 @@ export function DatasourceBreadcrumb() {
 					title="New datasource"
 					onClick={() => openConnectionForm(null)}
 				>
-					＋
+					<IconAdd />
 				</button>
 				{/* With nothing configured at all, importing a repository is
 					    the likelier thing somebody wants. */}
@@ -166,7 +178,7 @@ export function DatasourceBreadcrumb() {
 					title="Import a datasource from a repository"
 					onClick={() => openImportDatasource()}
 				>
-					↓
+					<IconImport />
 				</button>
 			</div>
 		);
@@ -201,7 +213,9 @@ export function DatasourceBreadcrumb() {
 			>
 				<span className="dg-crumb-chip">{ENGINE_CHIPS[active.adapter]}</span>
 				<span className="dg-crumb-name">{active.name}</span>
-				<span className="dg-crumb-chev">▾</span>
+				<span className="dg-crumb-chev">
+					<IconChevronDown />
+				</span>
 			</button>
 			<span className="dg-crumb-slash">/</span>
 			<button
@@ -219,7 +233,9 @@ export function DatasourceBreadcrumb() {
 							? "…"
 							: "—")}
 				</span>
-				<span className="dg-crumb-chev">▾</span>
+				<span className="dg-crumb-chev">
+					<IconChevronDown />
+				</span>
 			</button>
 			<button
 				type="button"
@@ -230,7 +246,7 @@ export function DatasourceBreadcrumb() {
 					void refresh(active.id, treeRootPath(active, chosenNamespace))
 				}
 			>
-				⟳
+				<IconRefresh />
 			</button>
 
 			{popover === "datasource" && (
@@ -293,7 +309,7 @@ export function DatasourceBreadcrumb() {
 											openConnectionForm(connection);
 										}}
 									>
-										✎
+										<IconEdit />
 									</button>
 									{connection.source === "managed" && (
 										<button
@@ -311,7 +327,7 @@ export function DatasourceBreadcrumb() {
 												}
 											}}
 										>
-											×
+											<IconClose />
 										</button>
 									)}
 								</span>
@@ -328,7 +344,10 @@ export function DatasourceBreadcrumb() {
 							openConnectionForm(null);
 						}}
 					>
-						<span className="dg-crumb-plus">＋</span>new datasource…
+						<span className="dg-crumb-plus">
+							<IconAdd />
+						</span>
+						new datasource…
 					</button>
 					{/* A different act from creating one, so a different entry:
 						    importing reads the connection out of a repository rather
@@ -342,7 +361,10 @@ export function DatasourceBreadcrumb() {
 							openImportDatasource();
 						}}
 					>
-						<span className="dg-crumb-plus">↓</span>import datasource…
+						<span className="dg-crumb-plus">
+							<IconImport />
+						</span>
+						import datasource…
 					</button>
 					<button
 						type="button"
@@ -353,7 +375,10 @@ export function DatasourceBreadcrumb() {
 							openConnectionForm(active);
 						}}
 					>
-						<span className="dg-crumb-plus">⚙</span>manage datasource…
+						<span className="dg-crumb-plus">
+							<IconSettings />
+						</span>
+						manage datasource…
 					</button>
 					{active !== null && (
 						<>
@@ -367,7 +392,10 @@ export function DatasourceBreadcrumb() {
 									openDomainManager(active.id);
 								}}
 							>
-								<span className="dg-crumb-plus">⌗</span>domains…
+								<span className="dg-crumb-plus">
+									<IconDomains />
+								</span>
+								domains…
 							</button>
 							<button
 								type="button"
@@ -378,7 +406,10 @@ export function DatasourceBreadcrumb() {
 									openSyncPanel(active.id, active.name);
 								}}
 							>
-								<span className="dg-crumb-plus">↥</span>sync…
+								<span className="dg-crumb-plus">
+									<IconSync />
+								</span>
+								sync…
 							</button>
 							<button
 								type="button"
@@ -389,7 +420,10 @@ export function DatasourceBreadcrumb() {
 									openAccessPanel(active.id, active.name);
 								}}
 							>
-								<span className="dg-crumb-plus">⚿</span>access report…
+								<span className="dg-crumb-plus">
+									<IconAccess />
+								</span>
+								access report…
 							</button>
 						</>
 					)}

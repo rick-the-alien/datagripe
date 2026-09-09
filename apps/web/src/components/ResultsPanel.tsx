@@ -14,6 +14,14 @@ import { useConnectionsStore, useExecutionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { useViewsStore } from "../stores/views";
 import { ExportControls } from "./ExportControls";
+import {
+	IconChevronDown,
+	IconClose,
+	IconCopy,
+	IconRun,
+	IconRunAll,
+	IconRunning,
+} from "./icons";
 
 function documentsTitle(
 	state: DocumentsState,
@@ -102,7 +110,9 @@ function TargetSelect(props: {
 				<span className="dg-crumb-name">
 					{current?.name ?? "choose connection…"}
 				</span>
-				<span className="dg-crumb-chev">▾</span>
+				<span className="dg-crumb-chev">
+					<IconChevronDown />
+				</span>
 			</button>
 			{open &&
 				anchor !== null &&
@@ -230,8 +240,13 @@ function HistoryView(props: {
 								</td>
 								<td>
 									{entry.status}
-									{(entry.status === "running" || entry.status === "queued") &&
-										" ●"}
+									{(entry.status === "running" ||
+										entry.status === "queued") && (
+										<>
+											{" "}
+											<IconRunning />
+										</>
+									)}
 								</td>
 								<td>{entry.connectionName}</td>
 								{scope === "workspace" && <td>{entry.actorEmail}</td>}
@@ -359,7 +374,7 @@ export function ResultsPanel() {
 									});
 							}}
 						>
-							⧉ workspace
+							<IconCopy /> workspace
 						</button>
 					)}
 				<span className="dg-vsep" />
@@ -378,7 +393,7 @@ export function ResultsPanel() {
 						}
 					}}
 				>
-					▶
+					<IconRun />
 				</button>
 				<button
 					type="button"
@@ -395,7 +410,7 @@ export function ResultsPanel() {
 						}
 					}}
 				>
-					⏭
+					<IconRunAll />
 				</button>
 				<span className="dg-vsep" />
 				{canCancel &&
@@ -437,7 +452,7 @@ export function ResultsPanel() {
 								aria-label="Back to active document results"
 								onClick={() => executions.clearViewing()}
 							>
-								×
+								<IconClose />
 							</button>
 						</span>
 					)}

@@ -20,6 +20,14 @@ import {
 } from "./cellActions";
 import { ExportControls } from "./ExportControls";
 import {
+	IconCheck,
+	IconClose,
+	IconMore,
+	IconRefresh,
+	IconSortAsc,
+	IconSortDesc,
+} from "./icons";
+import {
 	buildEdits,
 	cellDetail,
 	cellDisplay,
@@ -162,7 +170,7 @@ function OverflowMenu(props: {
 			}}
 		>
 			<span className="dg-exp-fmt-tick">
-				{options?.ticked === true ? "✓" : ""}
+				{options?.ticked === true && <IconCheck />}
 			</span>
 			{label}
 		</button>
@@ -178,7 +186,7 @@ function OverflowMenu(props: {
 				title="More"
 				onClick={() => setOpen((value) => !value)}
 			>
-				⋯
+				<IconMore />
 			</button>
 			{open && (
 				<div className="dg-exp-fmt dg-tv-more dg-scroll" role="menu">
@@ -755,7 +763,8 @@ export function TableView(props: IDockviewPanelProps) {
 				>
 					{column.name}
 					<span className="dg-tv-sort">
-						{direction === "asc" ? "▲" : direction === "desc" ? "▼" : ""}
+						{direction === "asc" && <IconSortAsc />}
+						{direction === "desc" && <IconSortDesc />}
 						{sort.length > 1 && position >= 0 ? position + 1 : ""}
 					</span>
 				</button>
@@ -789,7 +798,7 @@ export function TableView(props: IDockviewPanelProps) {
 					disabled={loading || saving}
 					onClick={() => void load()}
 				>
-					↻
+					<IconRefresh />
 				</button>
 				<input
 					className="dg-tv-filter"
@@ -949,7 +958,7 @@ export function TableView(props: IDockviewPanelProps) {
 													)
 												}
 											>
-												×
+												<IconClose />
 											</button>
 										</td>
 										{columns.map((column) =>
@@ -1019,7 +1028,7 @@ export function TableView(props: IDockviewPanelProps) {
 								title="Close"
 								onClick={() => setPanelOpen(false)}
 							>
-								×
+								<IconClose />
 							</button>
 						</div>
 						{focus === null ? (

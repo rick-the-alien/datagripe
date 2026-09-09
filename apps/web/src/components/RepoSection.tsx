@@ -4,6 +4,7 @@ import type { EditorDocument } from "../stores/documents";
 import { useRepoStore } from "../stores/git";
 import { openRepoFile } from "../stores/openRepoFile";
 import { useConnectionsStore } from "../stores/runtime";
+import { IconAhead, IconBehind } from "./icons";
 import { RepoCommands } from "./RepoCommands";
 
 /**
@@ -98,8 +99,18 @@ export function RepoSection(props: RepoSectionProps) {
 			<div className="dg-repo-head">
 				<span className="dg-repo-branch">{status?.branch ?? "…"}</span>
 				{status !== undefined && status.upstream !== null && (
-					<span className="dg-repo-track">
-						↑{status.ahead} ↓{status.behind}
+					// The arrows are the git convention, but they are decoration:
+					// the count only means something with "ahead"/"behind" said
+					// out loud, so the accessible name carries the words.
+					<span
+						className="dg-repo-track"
+						role="img"
+						title={`${status.ahead} ahead, ${status.behind} behind`}
+						aria-label={`${status.ahead} ahead, ${status.behind} behind`}
+					>
+						<IconAhead />
+						{status.ahead} <IconBehind />
+						{status.behind}
 					</span>
 				)}
 				{status !== undefined && status.upstream === null && (

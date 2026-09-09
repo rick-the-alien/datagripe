@@ -1,9 +1,4 @@
-import type {
-	AttitudeLevel,
-	Dismissal,
-	Finding,
-	GripeSeverity,
-} from "@datagripe/contracts";
+import type { AttitudeLevel, Dismissal, Finding } from "@datagripe/contracts";
 import { ATTITUDE_LEVELS, isDismissed } from "@datagripe/contracts";
 import {
 	DISCLAIMER,
@@ -20,6 +15,7 @@ import { hiddenCount, useGripesStore } from "../stores/gripes";
 import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { GripeDismiss } from "./GripeDismiss";
+import { SeverityIcon } from "./icons";
 import { Mascot } from "./Mascot";
 
 /**
@@ -34,13 +30,6 @@ import { Mascot } from "./Mascot";
  * only — never per-gripe": one on every finding stops being funny
  * within a day.
  */
-
-/** The non-colour cue. Colour alone never carries meaning. */
-const SEVERITY_GLYPH: Record<GripeSeverity, string> = {
-	blocker: "▲",
-	warning: "◆",
-	style: "●",
-};
 
 const ATTITUDE_BLURB: Record<AttitudeLevel, string> = {
 	notice: "No profanity. Dry, still critical.",
@@ -105,8 +94,8 @@ function GripeRow(props: {
 					}
 				}}
 			>
-				<span className="dg-gripe-glyph" aria-hidden="true">
-					{SEVERITY_GLYPH[finding.severity]}
+				<span className="dg-gripe-glyph">
+					<SeverityIcon severity={finding.severity} />
 				</span>
 				<span className="dg-gripe-body">
 					<span className="dg-gripe-text">{text}</span>

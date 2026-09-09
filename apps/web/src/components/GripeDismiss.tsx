@@ -1,6 +1,7 @@
 import type { Dismissal, DismissalScope, Finding } from "@datagripe/contracts";
 import { objectTargetKey } from "@datagripe/contracts";
 import { useEffect, useRef, useState } from "react";
+import { IconClose } from "./icons";
 
 /**
  * The dismiss control on a gripe row (docs/spec/gripes.md "Dismissal").
@@ -100,7 +101,7 @@ export function GripeDismiss(props: {
 					setOpen((value) => !value);
 				}}
 			>
-				×
+				<IconClose />
 			</button>
 			{open && (
 				<div className="dg-exp-fmt dg-gripe-dismiss-menu dg-scroll" role="menu">

@@ -13,18 +13,19 @@ Datagripe is an independent parody. See [Parody boundary](#parody-boundary).
 3. [Mascot](#mascot)
 4. [Colour](#colour)
 5. [Typography](#typography)
-6. [Motion](#motion)
-7. [Projects and the prompt](#projects-and-the-prompt)
-8. [Sidebar](#sidebar)
-9. [Table view and object view](#table-view-and-object-view)
-10. [Danger zone](#danger-zone)
-11. [Interface rules](#interface-rules)
-12. [Voice](#voice)
-13. [Attitude levels](#attitude-levels)
-14. [Writing gripes](#writing-gripes)
-15. [Parody boundary](#parody-boundary)
-16. [Build order](#build-order)
-17. [Open items](#open-items)
+6. [Icons](#icons)
+7. [Motion](#motion)
+8. [Projects and the prompt](#projects-and-the-prompt)
+9. [Sidebar](#sidebar)
+10. [Table view and object view](#table-view-and-object-view)
+11. [Danger zone](#danger-zone)
+12. [Interface rules](#interface-rules)
+13. [Voice](#voice)
+14. [Attitude levels](#attitude-levels)
+15. [Writing gripes](#writing-gripes)
+16. [Parody boundary](#parody-boundary)
+17. [Build order](#build-order)
+18. [Open items](#open-items)
 
 ---
 
@@ -193,6 +194,69 @@ All four accents sit at similar lightness, so **colour alone never distinguishes
 Space Grotesk is website only and never appears inside the application. Weights 400 and 500 only in the UI. **Sentence case everywhere** including buttons, menus and tabs. No all-caps labels anywhere.
 
 Database object names, types, values, and anything the user could paste into a query are always monospace. Prose about those things is sans.
+
+---
+
+## Icons
+
+**The set is [Lucide](https://lucide.dev).** ISC licensed, a line family
+on a 24px grid, installed as `lucide-react` in `apps/web`. It was chosen
+over Phosphor, Tabler and the VS Code codicons on three counts: `strokeWidth`
+is a prop, so the family can be held open at 12–14px on Void; the React
+package ships per-icon modules, so an unused icon is not in the bundle; and
+the licence asks for nothing user-facing.
+
+### Two families, and they are not interchangeable
+
+| Family | Where it lives | What it marks |
+| --- | --- | --- |
+| **Chrome** — Lucide | `apps/web/src/components/icons.tsx` | Acts and states: refresh, close, run, sort, settings, sync |
+| **Type marks** — hand-drawn | `apps/web/src/components/treeIcons.tsx` | What a database object *is*: schema, table, view, routine, sequence, column, key |
+
+A database object's mark is brand and stays hand-drawn at 16px, coloured
+by kind. Both trees — schema and domain — pull from the same module, so
+the same object never wears two different marks.
+
+### Rules
+
+**Never import `lucide-react` at a call site.** Everything goes through
+`icons.tsx`, which names each mark by what it means here — `IconAccess`,
+not `KeyRound`. The set is a brand decision, and that file is the one
+place it can be changed.
+
+**Stroke 1.5, not Lucide's 2.** The default is drawn for 24px. Held at 14
+on the void background the counters close up and every icon reads as the
+same grey blob.
+
+| Use | Size |
+| --- | --- |
+| Chrome default — buttons, menu rows, breadcrumb | 14px |
+| Chevrons, severity marks, ticks | 12px |
+| Sort direction, ahead/behind counts | 11px |
+| Inline status dot | 8px |
+
+**Colour comes from the control, never from the icon.** Lucide renders
+`stroke="currentColor"`, so hover, disabled and severity states need no
+icon-specific rule. Nothing in `icons.tsx` sets a colour.
+
+**Icons are decoration and are `aria-hidden` by default.** An icon-only
+button carries its own `title` and `aria-label`. An icon that appears in
+running prose is the exception and gets `role="img"` with a label — see
+the empty tree in `Explorer.tsx`.
+
+**No icon fonts, no second family, no emoji.** The set was Unicode glyphs
+until it wasn't: `⚿`, `⌗`, `↥` and `␡` render differently on every
+platform, cannot be sized or stroked, and half of them are unrecognisable
+at 12px.
+
+### The gutter is the exception
+
+Monaco applies a class to an element it created, so the execution ticks
+and the gripe severity marks in the glyph margin cannot be React. They are
+the same icons carried as `mask-image` data URIs in `tokens.css` — the
+mask is the shape and `background` is the token, so those marks still take
+their colour from the same place everything else does. Chrome icons are
+components; do not reach for the masks there.
 
 ---
 
@@ -496,12 +560,13 @@ The object view is the natural home for incremental feature work — partitions,
 
 A table can have both views open at once, so the tab strip must distinguish them:
 
-| View | Glyph | Label |
+| View | Mark | Label |
 | --- | --- | --- |
-| Table view | `▤` Gripe Green | `payments` |
-| Object view | `⊞` Function Cyan | `payments · structure` |
+| Table view | table, Gripe Green | `payments` |
+| Object view | object, Function Cyan | `payments · structure` |
 
-Without the glyph and suffix, two tabs both reading `payments` is a coin flip.
+Both marks come from the chrome family ([Icons](#icons)). Without the mark
+and the suffix, two tabs both reading `payments` is a coin flip.
 
 ---
 
@@ -550,7 +615,7 @@ Initially `truncate` and `drop`. Each states its real consequences in the panel 
 
 **Selection.** A 2px violet left border and a step up to Raised. Never a filled accent background — a filled row competes with the syntax colours beside it.
 
-**Gripe rows.** Severity is a 3px left border with the background tinted to roughly 4% of that accent over Void. Square corners, since the border is single-sided. Each row carries a severity icon so meaning survives without colour.
+**Gripe rows.** Severity is a 3px left border with the background tinted to roughly 4% of that accent over Void. Square corners, since the border is single-sided. Each row carries a severity icon so meaning survives without colour — one shape per severity, defined once in `icons.tsx` ([Icons](#icons)).
 
 **Results grid.** Right-align numerics and colour only the value column. Everything else stays neutral.
 

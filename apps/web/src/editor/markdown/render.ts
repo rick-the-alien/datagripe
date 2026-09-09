@@ -14,6 +14,22 @@ import { Marked } from "marked";
  * runnable block is a real Monaco instance rather than a `<pre>`.
  */
 
+/**
+ * The image mark, inlined.
+ *
+ * This module hands Monaco a string, so it cannot render the React icon
+ * from `components/icons.tsx`. Same family (Lucide `image`, ISC), same
+ * 1.5 stroke — if the family changes, this changes with it.
+ */
+const IMAGE_ICON =
+	'<svg class="dg-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" ' +
+	'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" ' +
+	'stroke-linejoin="round" aria-hidden="true">' +
+	'<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>' +
+	'<circle cx="9" cy="9" r="2"/>' +
+	'<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>' +
+	"</svg>";
+
 function escapeHtml(value: string): string {
 	return value
 		.replaceAll("&", "&amp;")
@@ -67,7 +83,7 @@ renderer.use({
 			// with the source beside it.
 			const href = escapeHtml(token.href ?? "");
 			const text = escapeHtml(token.text ?? "image");
-			return `<span class="dg-md-image">🖼 ${text} <code>${href}</code></span>`;
+			return `<span class="dg-md-image">${IMAGE_ICON} ${text} <code>${href}</code></span>`;
 		},
 		code(token) {
 			// Non-SQL fences: monospaced and unstyled. Highlighting eleven

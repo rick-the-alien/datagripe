@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { EditorDocument } from "../stores/documents";
 import { useDocumentsStore } from "../stores/documents";
 import { useViewsStore } from "../stores/views";
+import { IconClose } from "./icons";
 
 export type DocumentSidebarProps = {
 	/** Which list this section renders; the section frame owns the heading. */
@@ -114,7 +115,7 @@ export function DocumentSidebar(props: DocumentSidebarProps) {
 						}
 						onClick={() => remove(doc)}
 					>
-						×
+						<IconClose />
 					</button>
 				</div>
 			</li>

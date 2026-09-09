@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { IconChevronDown, IconChevronRight } from "./icons";
 
 /**
  * VSCode-style sidebar sections: expanded sections size to their
@@ -57,7 +58,9 @@ export function SidebarSections(props: { sections: SidebarSection[] }) {
 			aria-expanded={isExpanded}
 			onClick={() => toggle(section.id)}
 		>
-			<span className="dg-section-chevron">{isExpanded ? "▾" : "▸"}</span>
+			<span className="dg-section-chevron">
+				{isExpanded ? <IconChevronDown /> : <IconChevronRight />}
+			</span>
 			{section.title}
 		</button>
 	);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { openRunPanel } from "../app/viewPanels";
 import { useRepoRunsStore } from "../stores/repoRuns";
+import { IconRun } from "./icons";
 
 /**
  * The commands a repository declares, and the approval that gates them
@@ -104,7 +105,9 @@ export function RepoCommands(props: {
 											.run(connectionRef, command.name);
 									}}
 								>
-									<span className="dg-repo-command-run">▶</span>
+									<span className="dg-repo-command-run">
+										<IconRun />
+									</span>
 									<span className="dg-repo-command-name">{command.name}</span>
 								</button>
 								{command.description !== "" && (

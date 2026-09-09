@@ -9,6 +9,7 @@ import {
 	toMarkdown,
 	toTsv,
 } from "../utils/export";
+import { IconCheck, IconChevronDown, IconCopy, IconDownload } from "./icons";
 
 /**
  * The joined export group from docs/brand/mocks/results-tab.html
@@ -113,7 +114,7 @@ export function ExportControls(props: {
 					);
 				}}
 			>
-				⬇
+				<IconDownload />
 			</button>
 			<button
 				type="button"
@@ -125,7 +126,7 @@ export function ExportControls(props: {
 					);
 				}}
 			>
-				⧉
+				<IconCopy />
 			</button>
 			<div className="dg-exp-ec-wrap" ref={menuRef}>
 				<button
@@ -136,7 +137,7 @@ export function ExportControls(props: {
 					title={`Format: ${format}`}
 					onClick={() => setMenuOpen((current) => !current)}
 				>
-					▾
+					<IconChevronDown />
 				</button>
 				{menuOpen && (
 					<div className="dg-exp-fmt dg-scroll" role="menu">
@@ -158,7 +159,7 @@ export function ExportControls(props: {
 								}}
 							>
 								<span className="dg-exp-fmt-tick">
-									{value === format ? "✓" : ""}
+									{value === format && <IconCheck />}
 								</span>
 								{value}
 							</button>

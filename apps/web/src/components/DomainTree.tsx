@@ -14,6 +14,8 @@ import {
 	useDomainsStore,
 } from "../stores/domains";
 import { nodeKey, useExplorerStore } from "../stores/runtime";
+import { IconChevronDown, IconChevronRight } from "./icons";
+import { TreeIcon } from "./treeIcons";
 
 /**
  * The tree, grouped by domain (docs/spec/domains.md "Sidebar").
@@ -36,14 +38,6 @@ const CATEGORIES: Array<{ category: string; kind: ObjectKind }> = [
 	{ category: "procedures", kind: "procedure" },
 	{ category: "sequences", kind: "sequence" },
 ];
-
-const GLYPHS: Record<ObjectKind, string> = {
-	table: "▤",
-	view: "◫",
-	function: "ƒ",
-	procedure: "ƒ",
-	sequence: "№",
-};
 
 export interface GroupedObject extends DomainTarget {
 	domainId: string | null;
@@ -139,7 +133,9 @@ function ObjectRow(props: {
 			}}
 		>
 			<span className="dg-tree-label">
-				<span className="dg-tree-glyph">{GLYPHS[props.object.kind]}</span>
+				<span className="dg-tree-glyph">
+					<TreeIcon kind={props.object.kind} />
+				</span>
 				{/* Schema-qualified: the point of a domain is that it crosses
 				    namespaces, so an unqualified name here would be ambiguous. */}
 				<span className="dg-domain-qualified">{props.object.schema}.</span>
@@ -201,7 +197,9 @@ export function DomainGroups(props: {
 					}
 				>
 					<span className="dg-tree-label dg-domain-group-label">
-						<span className="dg-tree-glyph">{open ? "▾" : "▸"}</span>
+						<span className="dg-tree-glyph">
+							{open ? <IconChevronDown /> : <IconChevronRight />}
+						</span>
 						{label}
 					</span>
 					<span className="dg-tree-count">{members.length}</span>

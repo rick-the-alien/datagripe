@@ -11,7 +11,7 @@ Datagripe is a database client that does its job perfectly and resents you the e
 | **`brand-system.md`** | The spec. Start here. Colour, type, motion, projects, sidebar, both object views, danger zone, voice, attitude levels, build order, open items. |
 | `brand-system.html` | The visual companion. Live swatches, logo and favicon at real sizes, running activity bar, the prompt switcher. Open in a browser. |
 | `tokens.css` | Drop-in design tokens plus the activity bar and prompt implementations. Commented with the invariants that must not be broken. |
-| `mocks/tree-interactions.html` | **The important one.** Working prototype of the sidebar: hover popover, `⊞` object view, double-click table view, context menu, multi-select, danger zone gating. |
+| `mocks/tree-interactions.html` | **The important one.** Working prototype of the sidebar: hover popover, object view, double-click table view, context menu, multi-select, danger zone gating. |
 | `mocks/datasource-selector.html` | Datasource and schema breadcrumb, engine-aware namespace segment, new-datasource tab. |
 | `mocks/document-target.html` | Per-document target binding, the chip group, split panes on two datasources, unset and broken states. |
 | `mocks/results-tab.html` | Results as an ordinary tab in any split position, gutter run buttons, table/history modes, joined export group. Supersedes the tab-strip chip group. |
@@ -24,10 +24,11 @@ Datagripe is a database client that does its job perfectly and resents you the e
 Read `brand-system.md` end to end first. Then:
 
 1. `tokens.css` is authoritative for values. Do not re-derive hexes from the mocks.
-2. `mocks/tree-interactions.html` is authoritative for interaction behaviour. It is a prototype, not production code — read it for *what happens when*, not for structure.
-3. The mocks are hand-written vanilla JS with inline styles. Do not port them directly.
-4. **Build order** is at the end of the spec and is chosen so nothing is blocked on an open item.
-5. **Open items** are genuinely undecided. Do not resolve them silently — raise them.
+2. The icon set is Lucide, wired up in `apps/web/src/components/icons.tsx`. Import from that module, never from `lucide-react` — see [Icons](brand-system.md#icons).
+3. `mocks/tree-interactions.html` is authoritative for interaction behaviour. It is a prototype, not production code — read it for *what happens when*, not for structure.
+4. The mocks are hand-written vanilla JS with inline styles. Do not port them directly.
+5. **Build order** is at the end of the spec and is chosen so nothing is blocked on an open item.
+6. **Open items** are genuinely undecided. Do not resolve them silently — raise them.
 
 ## Three things that are easy to break
 
@@ -41,7 +42,6 @@ These were each found the hard way and are the most likely regressions.
 
 ## Not included
 
-- Icon set — spec assumes a line icon family, not chosen
 - Light theme — dark only, listed as an open item
 - The gripe rule catalogue — how to write one is specified, which ones ship is not
 - Mascot assets — the character and its usage rules are specified, the flat SVG rig has not been drawn

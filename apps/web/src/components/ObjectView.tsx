@@ -28,6 +28,7 @@ import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { ColumnsTab } from "./ColumnsTab";
 import { GripeAnnotations } from "./GripeAnnotations";
+import { IconRefresh, IconTable, SeverityIcon } from "./icons";
 
 /**
  * Object view (docs/spec/object-view.md, brand-system.md "Object view —
@@ -62,12 +63,6 @@ const TAB_EMPTY: Record<ObjectTab, string> = {
 };
 
 /** Matches the glyphs the gripe rows use, so the strip reads the same. */
-const SEVERITY_GLYPHS: Record<GripeSeverity, string> = {
-	blocker: "▲",
-	warning: "◆",
-	style: "•",
-};
-
 const SEVERITY_ORDER: GripeSeverity[] = ["blocker", "warning", "style"];
 
 /**
@@ -594,7 +589,7 @@ export function ObjectView(props: IDockviewPanelProps) {
 						disabled={loading}
 						onClick={() => void load()}
 					>
-						↻
+						<IconRefresh />
 					</button>
 					{relation && (
 						<button
@@ -610,7 +605,7 @@ export function ObjectView(props: IDockviewPanelProps) {
 								})
 							}
 						>
-							▤ rows
+							<IconTable /> rows
 						</button>
 					)}
 				</div>
@@ -639,11 +634,8 @@ export function ObjectView(props: IDockviewPanelProps) {
 							>
 								{value}
 								{severity !== null && (
-									<span
-										aria-hidden="true"
-										className={`dg-ov-tab-mark dg-sev-${severity}`}
-									>
-										{SEVERITY_GLYPHS[severity]}
+									<span className={`dg-ov-tab-mark dg-sev-${severity}`}>
+										<SeverityIcon severity={severity} />
 									</span>
 								)}
 							</button>

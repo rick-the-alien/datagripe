@@ -4,6 +4,7 @@ import type { EditorDocument } from "../stores/documents";
 import { useDocumentsStore } from "../stores/documents";
 import { dirKey, useFilesStore } from "../stores/files";
 import { useViewsStore } from "../stores/views";
+import { IconChevronDown, IconChevronRight, IconSpinner } from "./icons";
 
 /**
  * One datasource path, as a file tree in the sidebar
@@ -167,7 +168,7 @@ function Row(props: {
 						}
 					>
 						<span className="dg-tree-glyph" aria-hidden="true">
-							{expanded ? "▾" : "▸"}
+							{expanded ? <IconChevronDown /> : <IconChevronRight />}
 						</span>
 						<span className="dg-tree-label">{entry.name}</span>
 					</button>
@@ -235,7 +236,7 @@ function Row(props: {
 					onClick={() => props.onOpenFile(full)}
 				>
 					<span className="dg-tree-glyph" aria-hidden="true">
-						{props.opening === full ? "◌" : "·"}
+						{props.opening === full ? <IconSpinner /> : "·"}
 					</span>
 					<span className="dg-tree-label">
 						{doc?.dirty === true && <span className="dg-tab-dirty" />}

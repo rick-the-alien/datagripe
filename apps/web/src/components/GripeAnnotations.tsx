@@ -1,7 +1,8 @@
-import type { Finding, GripeSeverity, ObjectTab } from "@datagripe/contracts";
+import type { Finding, ObjectTab } from "@datagripe/contracts";
 import { MESSAGES, renderFinding, renderFooter } from "@datagripe/gripes";
 import { useBrandingStore } from "../stores/branding";
 import { useSessionStore } from "../stores/session";
+import { SeverityIcon } from "./icons";
 
 /**
  * Object-scoped gripes, annotating the tab their subject lives in
@@ -12,12 +13,6 @@ import { useSessionStore } from "../stores/session";
  * Above the content rather than replacing it — the tab still has a job,
  * and a finding about an index is best read next to the indexes.
  */
-
-const SEVERITY_GLYPH: Record<GripeSeverity, string> = {
-	blocker: "▲",
-	warning: "◆",
-	style: "●",
-};
 
 export function GripeAnnotations(props: {
 	findings: Finding[];
@@ -48,8 +43,8 @@ export function GripeAnnotations(props: {
 					key={finding.ruleId}
 					className={`dg-gripe dg-gripe-${finding.severity} dg-ov-gripe`}
 				>
-					<span className="dg-gripe-glyph" aria-hidden="true">
-						{SEVERITY_GLYPH[finding.severity]}
+					<span className="dg-gripe-glyph">
+						<SeverityIcon severity={finding.severity} />
 					</span>
 					<span className="dg-gripe-body">
 						<span className="dg-gripe-text">

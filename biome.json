@@ -11,7 +11,8 @@
 			"**",
 			"!**/apps/web/src/styles/tokens.css",
 			"!**/site/tokens.css",
-			"!**/docs/brand"
+			"!**/docs/brand",
+			"!**/mascot"
 		]
 	},
 	"formatter": {

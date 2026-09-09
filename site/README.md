@@ -3,9 +3,10 @@
 The datagripe.com landing page. Plain HTML, CSS and one script — there
 is nothing to build, so there is nothing to break in a build.
 
-`tokens.css` and `icon.svg` are **copies** of `docs/brand/tokens.css` and
-`apps/web/public/icon.svg`. Re-copy them when either changes; the site
-deliberately does not import across the repo, because the deployed
+`tokens.css`, `icon.svg` and `mascot/` are **copies** of
+`docs/brand/tokens.css`, `apps/web/public/icon.svg` and
+`apps/web/public/mascot/`. Re-copy them when any of those change; the
+site deliberately does not import across the repo, because the deployed
 artifact is just this folder.
 
 ## How it deploys

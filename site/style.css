@@ -88,7 +88,15 @@ header nav {
 /* `main` already supplies the horizontal padding; repeating it here
    inset the hero 24px further than every section heading below it. */
 .hero {
+	display: flex;
+	align-items: center;
+	gap: 44px;
 	padding: 76px 0 24px;
+}
+
+.hero-copy {
+	flex: 1;
+	min-width: 0;
 }
 
 h1 {
@@ -111,6 +119,31 @@ h1 {
 	margin: 0;
 	max-width: 62ch;
 	color: var(--dg-ink-mute);
+}
+
+/* ---- mascot ------------------------------------------------ */
+
+/* The painted set (docs/brand/brand-system.md "Two asset sets, not
+   one"), copied from apps/web/public/mascot. Marketing may show more of
+   it than the app does, but one per section and never the same pose
+   twice: "you should be pleased to see it" only holds while it is rare.
+
+   Every one is decorative — the heading beside it already says what the
+   section is — so they carry an empty alt and stay out of the reading
+   order. */
+.hero-mascot {
+	flex: none;
+	width: 200px;
+	height: auto;
+}
+
+/* Floated rather than laid out, so a section keeps its existing markup
+   and the copy simply flows past the mascot. */
+.section-mascot {
+	float: right;
+	width: 104px;
+	height: auto;
+	margin: 0 0 14px 26px;
 }
 
 /* ---- download ---------------------------------------------- */
@@ -318,7 +351,21 @@ footer .spacer {
 		font-size: 40px;
 	}
 
+	/* Reversed, so the mascot lands above the headline rather than
+	   below the paragraph it is meant to be reacting to. */
 	.hero {
+		flex-direction: column-reverse;
+		align-items: flex-start;
+		gap: 20px;
 		padding-top: 48px;
+	}
+
+	.hero-mascot {
+		width: 132px;
+	}
+
+	.section-mascot {
+		width: 76px;
+		margin-left: 18px;
 	}
 }

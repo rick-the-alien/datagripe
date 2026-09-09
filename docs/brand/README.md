@@ -44,4 +44,4 @@ These were each found the hard way and are the most likely regressions.
 
 - Light theme — dark only, listed as an open item
 - The gripe rule catalogue — how to write one is specified, which ones ship is not
-- Mascot assets — the character and its usage rules are specified, the flat SVG rig has not been drawn
+- Mascot assets — the painted set is drawn and in the app (`apps/web/public/mascot/`, used by `MascotArt`); the flat SVG rig for animation has not been

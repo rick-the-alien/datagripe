@@ -3307,6 +3307,13 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	display: block;
 }
 
+/* The painted set (MascotArt.tsx). Its own paint, so nothing here tints
+ * it — the width/height attributes hold the ratio and reserve the box. */
+.dg-mascot-art {
+	display: block;
+	user-select: none;
+}
+
 /* ---- table view ---------------------------------------------------------
  * brand-system.md "Table view — the data": one line of chrome, then rows.
  * Row numbers Ink faint, primary key Snark Magenta, numerics right-aligned

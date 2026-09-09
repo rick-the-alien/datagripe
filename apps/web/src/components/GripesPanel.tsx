@@ -16,7 +16,7 @@ import { useConnectionsStore } from "../stores/runtime";
 import { useSessionStore } from "../stores/session";
 import { GripeDismiss } from "./GripeDismiss";
 import { SeverityIcon } from "./icons";
-import { Mascot } from "./Mascot";
+import { MascotArt } from "./MascotArt";
 
 /**
  * Gripes panel (docs/spec/gripes.md, brand-system.md "Attitude levels").
@@ -152,7 +152,7 @@ export function GripesPanel() {
 		<div className="dg-gripes">
 			{total === 0 ? (
 				<div className="dg-gripes-empty">
-					<Mascot size={72} expression="approval" />
+					<MascotArt pose="no-gripes" size={120} />
 					<p>{hidden === 0 ? "No gripes." : "No gripes left to show."}</p>
 					<p className="dg-header-meta">
 						{hidden === 0

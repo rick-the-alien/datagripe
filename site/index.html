@@ -26,13 +26,20 @@
 <main>
 
 	<div class="hero">
-		<h1>Your queries are fine.<br>Probably.</h1>
-		<p class="lede">A database IDE that reads your SQL back to you, and
-		says what is wrong with it.</p>
-		<p class="sub">PostgreSQL, MySQL, SQLite and Redis. Browse and edit
-		your schema, run queries, share files with your team — and get told,
-		before you press run, that the delete you just wrote has no where
-		clause.</p>
+		<div class="hero-copy">
+			<h1>Your queries are fine.<br>Probably.</h1>
+			<p class="lede">A database IDE that reads your SQL back to you, and
+			says what is wrong with it.</p>
+			<p class="sub">PostgreSQL, MySQL, SQLite and Redis. Browse and edit
+			your schema, run queries, share files with your team — and get told,
+			before you press run, that the delete you just wrote has no where
+			clause.</p>
+		</div>
+		<!-- Decorative in every case, so alt is empty: the mascot's mood
+		     restates the headline it sits next to (docs/brand/brand-system.md
+		     "Mascot"). -->
+		<img class="hero-mascot" src="mascot/nothing-open.svg" alt=""
+		     width="482" height="542">
 	</div>
 
 	<div class="download">
@@ -44,7 +51,8 @@
 		<li><a href="https://github.com/rick-the-alien/datagripe/releases/latest">All downloads</a></li>
 	</ul>
 
-	<section>
+	<section class="mascot-section">
+		<img class="section-mascot" src="mascot/shouting.svg" alt="" width="566" height="522">
 		<h2>It complains at a volume you choose</h2>
 		<p class="note">Every finding is analysis, not a sentence. The wording
 		is picked when it is shown, so turning the dial re-words the same
@@ -80,7 +88,8 @@
 		project — and it always tells you it is hiding something.</p>
 	</section>
 
-	<section>
+	<section class="mascot-section">
+		<img class="section-mascot" src="mascot/shocked.svg" alt="" width="566" height="550">
 		<h2>Eleven rules, and none of them are about formatting</h2>
 		<p class="note">A rule earns its place by knowing something the query
 		text does not say, or by being about damage rather than tidiness.
@@ -166,7 +175,8 @@ bun run dev        <span class="c"># web on :5173</span></pre>
 		web app also installs as a PWA.</p>
 	</section>
 
-	<section>
+	<section class="mascot-section">
+		<img class="section-mascot" src="mascot/oh-my.svg" alt="" width="514" height="534">
 		<h2>What 0.0.1 means</h2>
 		<p class="note">It works and it is tested. Nothing in it is promised
 		to stay put, and these are the holes rather than a roadmap:</p>
@@ -179,8 +189,9 @@ bun run dev        <span class="c"># web on :5173</span></pre>
 			was written.</li>
 			<li><strong>Project class and attitude live in your browser.</strong>
 			Both need to move server-side before they can be relied on.</li>
-			<li><strong>The icon and mascot are placeholders.</strong> A
-			scowling cylinder, drawn by hand, standing in for the real thing.</li>
+			<li><strong>The icon is a placeholder.</strong> A scowling
+			cylinder, drawn by hand. The mascot on this page is the real one;
+			the flat version that can animate in-app is not drawn yet.</li>
 		</ul>
 		<p class="note" style="padding-top:18px">The
 		<a href="https://github.com/rick-the-alien/datagripe/blob/main/CHANGELOG.md">changelog</a>

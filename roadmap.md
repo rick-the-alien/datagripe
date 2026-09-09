@@ -290,6 +290,15 @@ can read and run in place.
 - [x] `datagripe-example`: a repository that starts its own embedded
       PostgreSQL in the checkout and seeds it, and exercises every
       feature above
+- [x] **Import is its own tab**, beside `new datasource` in the menu,
+      and hands over to the datasource's own edit page on success —
+      creating asks for a host and a password, importing asks for a URL,
+      and one form holding both made people read the half that did not
+      apply to them
+- [x] An imported datasource's page is not dead: a locally stored
+      password (winning over `passwordEnv`, never written to the repo)
+      and `read only` / `show all schemas` overrides that reach the
+      connection, not just the form (migration 0017)
 - [ ] Branch switching, conflict resolution, hunk-level staging — all
       the points where a terminal is the better tool
 - [ ] Followed cursors in view mode (`docs/spec/markdown-documents.md`

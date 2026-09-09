@@ -27,6 +27,7 @@ or a config file) so a deployment can ship with ready-made data sources.
 | --- | --- |
 | Managed connection | Created in the UI, stored in `connections` + `connection_secrets` |
 | Predefined connection | Declared in server configuration; materialized read-only |
+| Git datasource | Read from a repository's `.datagripe/` (`docs/spec/git-datasources.md`) |
 
 Both kinds implement the same `ConnectionMetadata` contract
 (`packages/contracts/src/connections.ts`) so the explorer, editor, and

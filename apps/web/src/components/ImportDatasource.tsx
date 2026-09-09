@@ -4,21 +4,27 @@ import { wsClient } from "../api/ws";
 import { useConnectionsStore } from "../stores/runtime";
 
 /**
- * Adding a datasource from a repository (docs/spec/git-datasources.md
- * "Adding one").
+ * Importing a datasource from a repository
+ * (docs/spec/git-datasources.md "Adding one").
  *
- * Two ways, one form: clone a URL into DataGripe's repos directory, or
- * adopt a checkout that already exists on the server's disk. Both end in
- * the same place — `.datagripe/config.yaml` read out of a work tree
- * root — and a repository without one is refused with the path it looked
- * in, rather than adopted as an empty datasource nobody can use.
+ * Its own tab rather than a block inside the create form, because it is
+ * a different act: creating asks you for a host and a password, and
+ * importing asks you for a URL and then reads everything else out of the
+ * repository. Putting both in one form made people read the half that
+ * did not apply to them.
+ *
+ * Two ways in, one destination: clone a URL into DataGripe's repos
+ * directory, or adopt a checkout that already exists on the server's
+ * disk. Both end at `.datagripe/config.yaml` in a work tree root, and a
+ * repository without one is refused with the path it looked in rather
+ * than imported as an empty datasource nobody can use.
  */
 
-export interface GitDatasourceAddProps {
-	onAdded?: (connection: ConnectionMetadata) => void;
+export interface ImportDatasourceProps {
+	onImported?: (connection: ConnectionMetadata) => void;
 }
 
-export function GitDatasourceAdd(props: GitDatasourceAddProps) {
+export function ImportDatasource(props: ImportDatasourceProps) {
 	const [mode, setMode] = useState<"clone" | "adopt">("clone");
 	const [url, setUrl] = useState("");
 	const [branch, setBranch] = useState("");
@@ -46,7 +52,7 @@ export function GitDatasourceAdd(props: GitDatasourceAddProps) {
 						},
 			);
 			await useConnectionsStore.getState().load();
-			props.onAdded?.(created);
+			props.onImported?.(created);
 		} catch (cause) {
 			setError(
 				cause instanceof Error
@@ -60,11 +66,12 @@ export function GitDatasourceAdd(props: GitDatasourceAddProps) {
 
 	return (
 		<div className="dg-form-section">
-			<span className="dg-form-section-title">from a repository</span>
 			<p className="dg-form-hint">
 				The repository defines the datasource: its{" "}
 				<code>.datagripe/config.yaml</code> says which database this is, which
 				directories are worth showing in the left bar, and how it should look.
+				Once it is imported you get its normal datasource page, where you can
+				test it and supply a password if it needs one.
 			</p>
 
 			<fieldset className="dg-eng" aria-label="How to add it">
@@ -140,7 +147,7 @@ export function GitDatasourceAdd(props: GitDatasourceAddProps) {
 				}
 				onClick={() => void add()}
 			>
-				{busy ? (mode === "clone" ? "cloning…" : "reading…") : "add datasource"}
+				{busy ? (mode === "clone" ? "cloning…" : "reading…") : "import"}
 			</button>
 		</div>
 	);

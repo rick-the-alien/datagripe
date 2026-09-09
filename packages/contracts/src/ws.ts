@@ -53,6 +53,7 @@ export const clientActionSchema = z.enum([
 	"git.datasource.add",
 	"git.datasource.remove",
 	"git.datasource.reload",
+	"git.datasource.set-options",
 	"git.status",
 	"git.stage",
 	"git.commit",

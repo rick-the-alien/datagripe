@@ -4,6 +4,7 @@ import {
 	openAccessPanel,
 	openConnectionForm,
 	openDomainManager,
+	openImportDatasource,
 	openSyncPanel,
 } from "../app/viewPanels";
 import {
@@ -156,6 +157,16 @@ export function DatasourceBreadcrumb() {
 					onClick={() => openConnectionForm(null)}
 				>
 					＋
+				</button>
+				{/* With nothing configured at all, importing a repository is
+					    the likelier thing somebody wants. */}
+				<button
+					type="button"
+					className="dg-crumb-action"
+					title="Import a datasource from a repository"
+					onClick={() => openImportDatasource()}
+				>
+					↓
 				</button>
 			</div>
 		);
@@ -318,6 +329,20 @@ export function DatasourceBreadcrumb() {
 						}}
 					>
 						<span className="dg-crumb-plus">＋</span>new datasource…
+					</button>
+					{/* A different act from creating one, so a different entry:
+						    importing reads the connection out of a repository rather
+						    than asking for it (docs/spec/git-datasources.md). */}
+					<button
+						type="button"
+						role="menuitem"
+						className="dg-crumb-act"
+						onClick={() => {
+							setPopover(null);
+							openImportDatasource();
+						}}
+					>
+						<span className="dg-crumb-plus">↓</span>import datasource…
 					</button>
 					<button
 						type="button"

@@ -36,6 +36,7 @@ import {
 	fileOpenRequestSchema,
 	gitCommitRequestSchema,
 	gitDatasourceAddRequestSchema,
+	gitDatasourceOptionsRequestSchema,
 	gitDatasourceReloadRequestSchema,
 	gitDatasourceRemoveRequestSchema,
 	gitPullRequestSchema,
@@ -224,6 +225,10 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"git.commit": "editor",
 	"git.pull": "editor",
 	"git.datasource.reload": "editor",
+	// The password and the two overrides are this project's settings
+	// about a datasource, like the export path it sits beside on the same
+	// page — not a change to the datasource itself.
+	"git.datasource.set-options": "editor",
 	"datasource.export-config": "editor",
 	// Approving a command list is the moment somebody vouches for code
 	// from a repository, and running one executes it on the host. Both
@@ -1237,6 +1242,29 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 				return (
 					(await service.describe(workspace.id, request.connectionRef)) ?? {}
 				);
+			}
+
+			case "git.datasource.set-options": {
+				const request = gitDatasourceOptionsRequestSchema.parse(payload);
+				const service = requireGit();
+				const updated = await withIdempotency(
+					appDb,
+					workspace.id,
+					action,
+					request.idempotencyKey,
+					() => service.setOptions(workspace.id, request),
+				);
+				// The connection list carries `readOnly` and `showAllSchemas`,
+				// and the tree reads both, so everybody gets the new one.
+				hub.broadcastToWorkspace(workspace.id, {
+					version: 1,
+					kind: "event",
+					eventId: crypto.randomUUID(),
+					topic: "connections.changed",
+					occurredAt: new Date().toISOString(),
+					payload: { connectionRef: request.connectionRef },
+				});
+				return updated;
 			}
 
 			case "git.status": {

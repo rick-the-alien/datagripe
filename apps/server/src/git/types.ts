@@ -2,6 +2,7 @@ import type {
 	ConnectionMetadata,
 	GitDatasource,
 	GitDatasourceAddRequest,
+	GitDatasourceOptionsRequest,
 	RepoConfig,
 	RepoSyncFile,
 } from "@datagripe/contracts";
@@ -27,6 +28,11 @@ export interface GitDatasourceEntry {
 	sync: RepoSyncFile | null;
 	/** Absolute sync directory, when `sync.yaml` names one. */
 	syncPath: string | null;
+	/** A password kept here rather than named by the repository. */
+	hasStoredPassword: boolean;
+	/** Null where this project has not overridden the repository. */
+	readOnlyOverride: boolean | null;
+	showAllSchemasOverride: boolean | null;
 	/**
 	 * Why the datasource cannot currently be connected to — an unset
 	 * `passwordEnv`, most often — or null when it can. Listed and not
@@ -56,6 +62,11 @@ export interface GitDatasourcesServiceWithAdmin extends GitDatasourcesService {
 		workspaceId: string,
 		ref: string,
 	) => Promise<GitDatasourceEntry>;
+	/** The settings this project owns about an imported datasource. */
+	setOptions: (
+		workspaceId: string,
+		request: GitDatasourceOptionsRequest,
+	) => Promise<ConnectionMetadata>;
 }
 
 export interface GitDatasourcesService {

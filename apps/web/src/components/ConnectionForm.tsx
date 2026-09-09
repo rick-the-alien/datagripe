@@ -4,13 +4,16 @@ import type {
 	ConnectionTestResult,
 	DatasourcePath,
 	DomainExportPathCheck,
+	GitDatasource,
 	HostPathCheck,
 } from "@datagripe/contracts";
 import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
 import {
+	closeImportDatasource,
+	openConnectionForm,
 	openDomainManager,
 	openSyncPanel,
 	readConnectionFormParams,
@@ -22,8 +25,8 @@ import {
 } from "../stores/datasource";
 import { type ConnectionDraft, useConnectionsStore } from "../stores/runtime";
 import { ExportConfigPanel } from "./ExportConfigPanel";
-import { GitDatasourceAdd } from "./GitDatasourceAdd";
 import { GitDatasourceRepo } from "./GitDatasourceRepo";
+import { ImportDatasource } from "./ImportDatasource";
 import { RailFact, RailHelp, RailSection, TabShell } from "./TabRail";
 import { Toggle } from "./Toggle";
 
@@ -91,7 +94,7 @@ function pathsSignature(rows: PathRow[]): string {
 }
 
 export function ConnectionForm(props: IDockviewPanelProps) {
-	const { connectionId } = readConnectionFormParams(props.params);
+	const { connectionId, mode } = readConnectionFormParams(props.params);
 	const connections = useConnectionsStore((state) => state.connections);
 	const loaded = useConnectionsStore((state) => state.loaded);
 	const workspaceName = useConnectionsStore((state) => state.workspaceName);
@@ -99,6 +102,30 @@ export function ConnectionForm(props: IDockviewPanelProps) {
 		connectionId === undefined
 			? null
 			: (connections.find((entry) => entry.id === connectionId) ?? null);
+
+	if (mode === "import" && connectionId === undefined) {
+		return (
+			<div className="dg-form dg-scroll">
+				<div className="dg-form-body">
+					<h3 className="dg-form-title">Import datasource</h3>
+					<p className="dg-form-lead">
+						From a git repository that carries a <code>.datagripe/</code>{" "}
+						directory. Added to <b>{workspaceName ?? "this project"}</b>.
+					</p>
+					<ImportDatasource
+						onImported={(created) => {
+							// Straight onto its own page: the repository defined the
+							// connection, but the password, `read only` and `show all
+							// schemas` are this project's to set, and testing it is
+							// the obvious next thing to do.
+							openConnectionForm(created);
+							closeImportDatasource();
+						}}
+					/>
+				</div>
+			</div>
+		);
+	}
 
 	if (connectionId !== undefined && connection === null) {
 		return (
@@ -138,6 +165,14 @@ function ConnectionFormBody(props: {
 	 * of it being there (docs/spec/git-datasources.md).
 	 */
 	const fromRepo = editing?.source === "git";
+	/**
+	 * The connection fields are read-only for both, for different
+	 * reasons: a predefined one comes from server configuration, an
+	 * imported one from a committed file. What differs is that an
+	 * imported datasource still has settings this project owns — the
+	 * password, `read only` and `show all schemas` — so its form is not
+	 * a dead page (docs/spec/git-datasources.md).
+	 */
 	const readOnly = editing?.source === "predefined" || fromRepo;
 	const editingId = editing?.source === "managed" ? editing.id : null;
 
@@ -159,6 +194,52 @@ function ConnectionFormBody(props: {
 			showAllSchemas: editing.showAllSchemas,
 		};
 	});
+	/**
+	 * The three settings this project owns about an imported datasource.
+	 * `undefined` means untouched, so a save that only sets a password
+	 * does not also assert an opinion about `read only`.
+	 */
+	const [repoPassword, setRepoPassword] = useState<string | undefined>(
+		undefined,
+	);
+	const [repoReadOnly, setRepoReadOnly] = useState<boolean | undefined>(
+		undefined,
+	);
+	const [repoShowAll, setRepoShowAll] = useState<boolean | undefined>(
+		undefined,
+	);
+	/**
+	 * What the repository asks for, and whether a password is already
+	 * stored here — so the form can show what an override is overriding
+	 * rather than presenting a toggle with no reference point.
+	 */
+	const [repoDefaults, setRepoDefaults] = useState<GitDatasource | null>(null);
+	useEffect(() => {
+		if (!fromRepo || editing === null) {
+			return;
+		}
+		let cancelled = false;
+		void wsClient
+			.request<GitDatasource>("git.datasource.reload", {
+				connectionRef: editing.id,
+			})
+			.then((repo) => {
+				if (!cancelled) {
+					setRepoDefaults(repo);
+				}
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [fromRepo, editing]);
+
+	const repoOptionsDirty =
+		fromRepo &&
+		(repoPassword !== undefined ||
+			repoReadOnly !== undefined ||
+			repoShowAll !== undefined);
+
 	const [testing, setTesting] = useState(false);
 	const [testResult, setTestResult] = useState<ConnectionTestResult | null>(
 		null,
@@ -303,7 +384,7 @@ function ConnectionFormBody(props: {
 	// A predefined datasource can still be saved when its export directory
 	// changed — that field is not part of the datasource definition.
 	const canSave = readOnly
-		? pathDirty || pathsDirty
+		? pathDirty || pathsDirty || repoOptionsDirty
 		: draft.name.trim().length > 0 &&
 			draft.databaseName.trim().length > 0 &&
 			(!has("host") || draft.host.trim().length > 0) &&
@@ -318,7 +399,15 @@ function ConnectionFormBody(props: {
 		setTestResult(null);
 		try {
 			setTestResult(
-				await useConnectionsStore.getState().testDraft(draft, editingId),
+				await useConnectionsStore
+					.getState()
+					// A predefined or imported datasource is tested by id: its
+					// secret lives on the server and there is no draft password
+					// to send in its place.
+					.testDraft(
+						draft,
+						readOnly && editing !== null ? editing.id : editingId,
+					),
 			);
 		} finally {
 			setTesting(false);
@@ -332,6 +421,18 @@ function ConnectionFormBody(props: {
 			// A predefined datasource has nothing else to commit: its fields
 			// come from server configuration, and the export directory is the
 			// one thing this project owns about it.
+			if (fromRepo && editing !== null && repoOptionsDirty) {
+				await wsClient.request("git.datasource.set-options", {
+					connectionRef: editing.id,
+					...(repoPassword !== undefined ? { password: repoPassword } : {}),
+					...(repoReadOnly !== undefined ? { readOnly: repoReadOnly } : {}),
+					...(repoShowAll !== undefined ? { showAllSchemas: repoShowAll } : {}),
+					idempotencyKey: crypto.randomUUID(),
+				});
+				setRepoPassword(undefined);
+				setRepoReadOnly(undefined);
+				setRepoShowAll(undefined);
+			}
 			if (readOnly) {
 				if (editing !== null) {
 					if (pathDirty) {
@@ -557,18 +658,6 @@ function ConnectionFormBody(props: {
 				)}
 			</p>
 
-			{/* A new datasource can also come from a repository, in which case
-				    none of the fields below apply: the file defines them
-				    (docs/spec/git-datasources.md). */}
-			{editing === null && (
-				<GitDatasourceAdd
-					onAdded={(created) => {
-						props.panel.api.setTitle(created.name);
-						props.panel.api.updateParameters({ connectionId: created.id });
-					}}
-				/>
-			)}
-
 			<fieldset className="dg-eng" aria-label="Engine">
 				{ADAPTERS.map((adapter) => (
 					<button
@@ -698,25 +787,94 @@ function ConnectionFormBody(props: {
 				<span className="dg-form-section-title">behaviour</span>
 				{has("readOnly") && (
 					<Toggle
-						on={draft.readOnly}
-						disabled={readOnly}
+						// An imported datasource's toggles are this project's, not
+						// the repository's: somebody who imported a repo to look at
+						// production should be able to keep read-only on without
+						// opening a pull request against a repo they may not own.
+						on={fromRepo ? (repoReadOnly ?? editing.readOnly) : draft.readOnly}
+						disabled={readOnly && !fromRepo}
 						title="read only"
 						description="Rejects any statement that would write, before it reaches the database. Independent of what the role itself is allowed to do."
-						onChange={(on) => patch({ readOnly: on })}
+						onChange={(on) => {
+							if (fromRepo) {
+								setRepoReadOnly(on);
+							} else {
+								patch({ readOnly: on });
+							}
+						}}
 					/>
 				)}
 				{/* SQLite has exactly one namespace, so the setting would be a
 					    no-op there. */}
 				{draft.adapter !== "sqlite" && (
 					<Toggle
-						on={draft.showAllSchemas}
-						disabled={readOnly}
+						on={
+							fromRepo
+								? (repoShowAll ?? editing.showAllSchemas)
+								: draft.showAllSchemas
+						}
+						disabled={readOnly && !fromRepo}
 						title={`show all ${NAMESPACE_PLURALS[draft.adapter]} in the tree`}
 						description={`The tree gains a ${NAMESPACE_LABELS[draft.adapter]} level you can expand several of at once, for cross-${NAMESPACE_LABELS[draft.adapter]} joins. Off scopes the tree to the ${NAMESPACE_LABELS[draft.adapter]} picked in the breadcrumb.`}
-						onChange={(on) => patch({ showAllSchemas: on })}
+						onChange={(on) => {
+							if (fromRepo) {
+								setRepoShowAll(on);
+							} else {
+								patch({ showAllSchemas: on });
+							}
+						}}
 					/>
 				)}
+				{fromRepo && (
+					<p className="dg-form-hint">
+						These two are this project's, not the repository's. It asks for read
+						only <b>{repoDefaults?.repoReadOnly === true ? "on" : "off"}</b> and
+						show all{" "}
+						<b>{repoDefaults?.repoShowAllSchemas === true ? "on" : "off"}</b>.
+						Changing them here does not touch <code>config.yaml</code>.
+					</p>
+				)}
 			</div>
+
+			{/* The password an imported datasource may need. Never written to
+				    the repository: `config.yaml` is committed, and it names an
+				    environment variable instead (docs/spec/git-datasources.md). */}
+			{fromRepo && editing !== null && (
+				<div className="dg-form-section">
+					<span className="dg-form-section-title">password</span>
+					<p className="dg-form-hint">
+						{editing.unavailable !== null ? (
+							<span className="dg-test-failed">{editing.unavailable}</span>
+						) : repoDefaults?.hasStoredPassword === true ? (
+							"A password is stored for this project, encrypted. Type a new one to replace it, or clear it to fall back to the repository's passwordEnv."
+						) : (
+							"Set on the server that runs DataGripe, usually through the passwordEnv the repository names. You can store one here instead — it stays in this project, encrypted, and never goes near the repository."
+						)}
+					</p>
+					<label className="dg-field">
+						<span>Password</span>
+						<input
+							type="password"
+							value={repoPassword ?? ""}
+							placeholder={
+								repoDefaults?.hasStoredPassword === true
+									? "Stored — type to replace"
+									: "Leave blank to use the repository's passwordEnv"
+							}
+							onChange={(event) => setRepoPassword(event.target.value)}
+						/>
+					</label>
+					{repoDefaults?.hasStoredPassword === true && (
+						<button
+							type="button"
+							className="dg-btn"
+							onClick={() => setRepoPassword("")}
+						>
+							clear the stored password
+						</button>
+					)}
+				</div>
+			)}
 
 			{/* Only on an existing datasource: the path is keyed by the
 				    connection ref, which a draft does not have yet. */}
@@ -906,7 +1064,7 @@ function ConnectionFormBody(props: {
 				<button
 					type="button"
 					className="dg-btn"
-					disabled={testing || readOnly}
+					disabled={testing}
 					onClick={() => void test()}
 				>
 					{testing ? "testing…" : "test connection"}
@@ -921,7 +1079,13 @@ function ConnectionFormBody(props: {
 				</button>
 				{/* Read-only means read-only: say where the values come from
 					    rather than offering controls that cannot commit. */}
-				{readOnly ? (
+				{fromRepo ? (
+					<span className="dg-form-note">
+						Connection details come from <code>.datagripe/config.yaml</code>.
+						The password, the two toggles and the paths below are this project's
+						and save here.
+					</span>
+				) : readOnly ? (
 					<span className="dg-form-note">
 						Connection details come from server configuration. The export
 						directory is this project's setting and saves here.

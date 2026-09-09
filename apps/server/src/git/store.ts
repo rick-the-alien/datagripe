@@ -13,6 +13,9 @@ export interface GitDatasourceRow {
 	repo_path: string;
 	remote_url: string | null;
 	managed_clone: boolean;
+	/** NULL means "whatever the repository says" — see migration 0017. */
+	read_only_override: boolean | null;
+	show_all_schemas_override: boolean | null;
 	created_at: Date;
 }
 
@@ -41,7 +44,8 @@ export async function listRows(
 	workspaceId: string,
 ): Promise<GitDatasourceRow[]> {
 	return appDb<GitDatasourceRow[]>`
-		SELECT id, repo_path, remote_url, managed_clone, created_at
+		SELECT id, repo_path, remote_url, managed_clone,
+			read_only_override, show_all_schemas_override, created_at
 		FROM git_datasources
 		WHERE workspace_id = ${workspaceId}
 		ORDER BY created_at
@@ -54,7 +58,8 @@ export async function findRow(
 	id: string,
 ): Promise<GitDatasourceRow | null> {
 	const rows = await appDb<GitDatasourceRow[]>`
-		SELECT id, repo_path, remote_url, managed_clone, created_at
+		SELECT id, repo_path, remote_url, managed_clone,
+			read_only_override, show_all_schemas_override, created_at
 		FROM git_datasources
 		WHERE workspace_id = ${workspaceId} AND id = ${id}
 	`;
@@ -73,7 +78,8 @@ export async function insertRow(
 		INSERT INTO git_datasources
 			(workspace_id, repo_path, remote_url, managed_clone, created_by)
 		VALUES (${workspaceId}, ${repoPath}, ${remoteUrl}, ${managedClone}, ${createdBy})
-		RETURNING id, repo_path, remote_url, managed_clone, created_at
+		RETURNING id, repo_path, remote_url, managed_clone,
+			read_only_override, show_all_schemas_override, created_at
 	`;
 	const row = rows[0];
 	if (row === undefined) {
@@ -107,6 +113,43 @@ export async function findSecret(
 		WHERE datasource_id = ${datasourceId}
 	`;
 	return rows[0] ?? null;
+}
+
+/**
+ * Set or clear one of the project's overrides. `undefined` leaves a
+ * column alone, `null` resets it to what the repository says.
+ */
+export async function setOverrides(
+	appDb: AppDb,
+	workspaceId: string,
+	id: string,
+	overrides: {
+		readOnly?: boolean | null;
+		showAllSchemas?: boolean | null;
+	},
+): Promise<void> {
+	if (overrides.readOnly !== undefined) {
+		await appDb`
+			UPDATE git_datasources SET read_only_override = ${overrides.readOnly}
+			WHERE workspace_id = ${workspaceId} AND id = ${id}
+		`;
+	}
+	if (overrides.showAllSchemas !== undefined) {
+		await appDb`
+			UPDATE git_datasources
+			SET show_all_schemas_override = ${overrides.showAllSchemas}
+			WHERE workspace_id = ${workspaceId} AND id = ${id}
+		`;
+	}
+}
+
+export async function deleteSecret(
+	appDb: AppDb,
+	datasourceId: string,
+): Promise<void> {
+	await appDb`
+		DELETE FROM git_datasource_secrets WHERE datasource_id = ${datasourceId}
+	`;
 }
 
 export async function upsertSecret(

@@ -250,6 +250,19 @@ export const gitDatasourceSchema = z.object({
 	/** The sync dir from sync.yaml, resolved absolute; null when unset. */
 	syncPath: z.string().nullable(),
 	/**
+	 * A password stored here rather than named by the repository. The
+	 * value never leaves the server; this only says whether there is one,
+	 * so the form can offer to replace or clear it.
+	 */
+	hasStoredPassword: z.boolean(),
+	/** What the repository asks for, so the form can show what an
+	 * override is overriding. */
+	repoReadOnly: z.boolean(),
+	repoShowAllSchemas: z.boolean(),
+	/** Null where this project has not overridden the repository. */
+	readOnlyOverride: z.boolean().nullable(),
+	showAllSchemasOverride: z.boolean().nullable(),
+	/**
 	 * Why this datasource cannot currently be connected to — an unset
 	 * `passwordEnv`, most often. Listed and not connectable beats hidden:
 	 * the person who cloned the repo should be told which variable to set.
@@ -262,6 +275,36 @@ export type GitDatasource = z.infer<typeof gitDatasourceSchema>;
 export const gitDatasourceReloadRequestSchema = z.object({
 	connectionRef: z.string().min(1).max(255),
 });
+
+/**
+ * The settings a project owns about an imported datasource.
+ *
+ * Everything describing *what the datasource is* comes from the
+ * repository and is not here. These three are about how this project
+ * uses it: a password the repository must never carry, a safety net over
+ * your own session, and a tree preference.
+ *
+ * Every field is optional and only the ones present are written, so the
+ * form can save a password without also asserting an opinion about
+ * `read only`.
+ */
+export const gitDatasourceOptionsRequestSchema = z.object({
+	connectionRef: z.string().min(1).max(255),
+	/**
+	 * Stored encrypted with the same keyring as every other connection
+	 * secret, and never written to the repository. The empty string
+	 * clears it, falling back to `passwordEnv` or to `noPassword`.
+	 */
+	password: z.string().max(1024).optional(),
+	/** null resets to whatever `config.yaml` says. */
+	readOnly: z.boolean().nullable().optional(),
+	showAllSchemas: z.boolean().nullable().optional(),
+	idempotencyKey: z.string().min(8).max(128),
+});
+
+export type GitDatasourceOptionsRequest = z.infer<
+	typeof gitDatasourceOptionsRequestSchema
+>;
 
 export type GitDatasourceReloadRequest = z.infer<
 	typeof gitDatasourceReloadRequestSchema

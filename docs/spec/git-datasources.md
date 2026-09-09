@@ -223,9 +223,19 @@ does for files it no longer generates. Both names are in
 `OWNED_ROOT_FILES`, so a stale copy at the export root goes the same
 way when the datasource keeps its own in `.datagripe/`.
 
-### Adding one
+### Importing one
 
-Two ways, one form, both ending in the same place:
+**Import is its own tab**, reached from the datasource menu beside *new
+datasource*, and not a block inside the create form. They are different
+acts: creating asks you for a host and a password, importing asks you
+for a URL and reads everything else out of the repository. One form
+holding both made people read the half that did not apply to them.
+
+The import tab does one thing and then gets out of the way: on success
+it is replaced by the datasource's own edit page, because the next thing
+anybody wants is to test it and — if it needs one — give it a password.
+
+Two ways in, one destination:
 
 - **Clone.** Paste an `https://` or `ssh://`/`scp`-style git URL.
   DataGripe runs `git clone` into the repos home (below) and reads
@@ -299,14 +309,40 @@ the opposite of gitignored.
 | path pairs | `config.yaml` |
 | sync dir and export options | `sync.yaml` |
 | domains and tags | the app database; `domains.yaml` on export/import |
-| password | `passwordEnv`, or the local keyring |
+| password | a password stored here, else `passwordEnv`, else `noPassword` |
+| `read only`, `show all schemas` | the repository's value is the default; **this project may override either** |
 | default connection for a document, layout, drafts | the workspace, as before |
 
-On the datasource edit page a git datasource renders like a predefined
-one — read-only, with "Defined by `.datagripe/config.yaml`" and a button
-that opens that file in the editor. Editing the file and saving it is
-how you change the datasource, which is the whole point; the connection
-list reloads when a `.datagripe/` file is saved or a pull changes one.
+On the datasource edit page the *connection fields* render like a
+predefined one — read-only, with "Defined by `.datagripe/config.yaml`"
+and a button that opens that file in the editor. Editing the file and
+saving it is how you change what the datasource **is**, which is the
+whole point; the connection list reloads when a `.datagripe/` file is
+saved or a pull changes one.
+
+The page is not otherwise dead, and this is the difference from
+predefined. Three settings are **this project's**, saved by
+`git.datasource.set-options` (migration 0017) and never written to the
+repository:
+
+- **A password.** Encrypted with the same keyring as every other
+  connection secret. It wins over `passwordEnv`, because storing one is
+  a deliberate act somebody took on this page — usually precisely
+  because the variable was missing or wrong, and falling back to it
+  afterwards would make the field look broken. Clearing it falls back.
+- **`read only`** and **`show all schemas`**. `NULL` means "whatever the
+  repository says", which is distinguishable from an explicit override
+  of the same value, and the form shows what the repository asks for
+  beside the toggle. Somebody who imported a repository to look at
+  production should be able to keep read-only on without opening a pull
+  request against a repository they may not own. The override reaches
+  the *connection*, not just the form — a `read only` that did not
+  refuse writes would be a label.
+
+Everything describing what the datasource *is* — engine, host, port,
+database, user — stays the repository's. The split is "what this is"
+versus "how I use it", and it is the same split that already puts the
+export path and the domain tagging where they are.
 
 Note the reversal against `docs/spec/datasource-paths.md`: there, paths
 were workspace-local configuration *about* a datasource, precisely so a
@@ -478,6 +514,7 @@ key on `connection_ref` as text already and need no change.
 | `git.datasource.add` | `owner` | Clone or adopt; talks to a remote, writes the host |
 | `git.datasource.remove` | `owner` | Deletes the checkout only when `managed_clone` |
 | `git.datasource.reload` | `editor` | Re-read `.datagripe/`, bypassing the mtime cache |
+| `git.datasource.set-options` | `editor` | The password and the two overrides — this project's settings, like the export path beside them |
 | `git.status` | `editor` | Branch, upstream ahead/behind, porcelain rows |
 | `git.stage` | `editor` | `add --` / `restore --staged` for named paths |
 | `git.commit` | `editor` | Stages the named paths, then commits |

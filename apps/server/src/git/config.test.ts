@@ -84,6 +84,38 @@ describe("readConfig", () => {
 		await expect(readConfig(root)).rejects.toThrow(/inline 'password'/);
 	});
 
+	test("noPassword is an alternative to passwordEnv, not an extra", async () => {
+		// "Which credential does this use" must have exactly one answer in
+		// a file everybody on the team reads.
+		const noneAtAll = await repoWith(
+			VALID.replace("  passwordEnv: WALLET_PG_PASSWORD", "  noPassword: true"),
+		);
+		const { config } = await readConfig(noneAtAll);
+		expect(config.datasource.noPassword).toBe(true);
+		expect(config.datasource.passwordEnv).toBeUndefined();
+
+		const both = await repoWith(
+			VALID.replace(
+				"  passwordEnv: WALLET_PG_PASSWORD",
+				"  passwordEnv: WALLET_PG_PASSWORD\n  noPassword: true",
+			),
+		);
+		await expect(readConfig(both)).rejects.toThrow(/alternatives/);
+
+		const neither = await repoWith(
+			VALID.replace("  passwordEnv: WALLET_PG_PASSWORD\n", ""),
+		);
+		await expect(readConfig(neither)).rejects.toThrow(/passwordEnv|noPassword/);
+	});
+
+	test("a config round-trips noPassword through a write", async () => {
+		const root = await repoWith(
+			VALID.replace("  passwordEnv: WALLET_PG_PASSWORD", "  noPassword: true"),
+		);
+		const { config, extra } = await readConfig(root);
+		expect(renderConfig(config, extra)).toContain("noPassword: true");
+	});
+
 	test("two paths with the same name are refused", async () => {
 		const root = await repoWith(`${VALID}  - name: BAR\n    path: foo\n`);
 		await expect(readConfig(root)).rejects.toThrow(/both called 'BAR'/i);

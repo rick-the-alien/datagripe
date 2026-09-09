@@ -20,6 +20,7 @@ import { clone } from "./repo";
 import { type GitOptions, workTreeRoot } from "./run";
 import {
 	deleteRow,
+	deleteSecret,
 	findRow,
 	findSecret,
 	type GitDatasourceRow,
@@ -27,6 +28,8 @@ import {
 	insertRow,
 	listRows,
 	refFor,
+	setOverrides,
+	upsertSecret,
 } from "./store";
 import type {
 	GitDatasourceEntry,
@@ -316,15 +319,28 @@ export function createGitDatasourcesService(
 	 * hatch for a deployment that would rather not export a variable; it
 	 * never goes near the repository.
 	 */
+	/**
+	 * The secret, and the reason there is not one.
+	 *
+	 * **A password stored here wins**, because storing one is a deliberate
+	 * act somebody took on this page — usually precisely because the
+	 * environment variable was missing or wrong. Falling back to the
+	 * variable after they typed a password would make the field look
+	 * broken.
+	 *
+	 * Then `passwordEnv`, which is the documented path and the one that
+	 * keeps the repository commit-safe. Then `noPassword`, for a
+	 * trust-auth cluster the repository starts for itself.
+	 */
 	async function secretFor(
 		datasourceId: string,
 		config: RepoConfig,
 	): Promise<{ password: string } | { unavailable: string }> {
-		// A `trust`-auth cluster on loopback — what a self-contained
-		// example checkout runs — takes no credential at all. Declared
-		// explicitly in the file, never inferred from a missing variable.
-		if (config.datasource.noPassword) {
-			return { password: "" };
+		const stored = await findSecret(appDb, datasourceId);
+		if (stored !== null) {
+			return {
+				password: keyring.decrypt(stored.ciphertext, stored.key_version),
+			};
 		}
 		const name = config.datasource.passwordEnv;
 		if (name !== undefined) {
@@ -332,17 +348,12 @@ export function createGitDatasourcesService(
 			if (value !== undefined) {
 				return { password: value };
 			}
-		}
-		const stored = await findSecret(appDb, datasourceId);
-		if (stored !== null) {
 			return {
-				password: keyring.decrypt(stored.ciphertext, stored.key_version),
+				unavailable: `${name} is not set on the server. Export it there, or set a password on this datasource's page.`,
 			};
 		}
-		if (name !== undefined) {
-			return {
-				unavailable: `${name} is not set on the server, so this datasource has no password yet`,
-			};
+		if (config.datasource.noPassword) {
+			return { password: "" };
 		}
 		return {
 			unavailable:
@@ -357,7 +368,9 @@ export function createGitDatasourcesService(
 		const loaded = await loadConfig(row.repo_path);
 		const ref = refFor(row.id);
 		let unavailable = loaded.problem;
+		let hasStoredPassword = false;
 		if (unavailable === null) {
+			hasStoredPassword = (await findSecret(appDb, row.id)) !== null;
 			const secret = await secretFor(row.id, loaded.config);
 			if ("unavailable" in secret) {
 				unavailable = secret.unavailable;
@@ -372,6 +385,9 @@ export function createGitDatasourcesService(
 			config: loaded.config,
 			sync: loaded.sync,
 			syncPath: loaded.syncPath,
+			hasStoredPassword,
+			readOnlyOverride: row.read_only_override,
+			showAllSchemasOverride: row.show_all_schemas_override,
 			unavailable,
 			createdAt: row.created_at.toISOString(),
 		};
@@ -393,8 +409,10 @@ export function createGitDatasourcesService(
 			databaseName: source.database,
 			username: source.username ?? null,
 			tlsMode: source.tlsMode,
-			readOnly: source.readOnly,
-			showAllSchemas: source.showAllSchemas,
+			// The repository's value is the default; this project's override
+			// wins where it set one (docs/spec/git-datasources.md).
+			readOnly: entry.readOnlyOverride ?? source.readOnly,
+			showAllSchemas: entry.showAllSchemasOverride ?? source.showAllSchemas,
 			// The sync dir out of `sync.yaml` *is* this datasource's export
 			// path. `datasource_export_paths` is not consulted for a git
 			// datasource: the repository says where its own dump goes.
@@ -488,7 +506,9 @@ export function createGitDatasourcesService(
 				username: source.username ?? "",
 				password: secret.password,
 				tlsMode: source.tlsMode,
-				readOnly: source.readOnly,
+				// The override reaches the connection, not just the form:
+				// `read only` that did not refuse writes would be a label.
+				readOnly: entry.readOnlyOverride ?? source.readOnly,
 			};
 		},
 
@@ -503,6 +523,11 @@ export function createGitDatasourcesService(
 				remoteUrl: entry.remoteUrl,
 				managedClone: entry.managedClone,
 				syncPath: entry.syncPath,
+				hasStoredPassword: entry.hasStoredPassword,
+				repoReadOnly: entry.config.datasource.readOnly,
+				repoShowAllSchemas: entry.config.datasource.showAllSchemas,
+				readOnlyOverride: entry.readOnlyOverride,
+				showAllSchemasOverride: entry.showAllSchemasOverride,
 				unavailable: entry.unavailable,
 			};
 		},
@@ -609,6 +634,72 @@ export function createGitDatasourcesService(
 				workspace.id,
 				entry,
 				await pathsFor(workspace.id, entry.ref),
+			);
+		},
+
+		/**
+		 * The settings this project owns about an imported datasource.
+		 *
+		 * Deliberately not `connection.update`: that one edits a row in
+		 * `connections`, and a git datasource has none. Nothing here is
+		 * ever written to the repository.
+		 */
+		async setOptions(workspaceId, request) {
+			assertEnabled();
+			const id = idFromRef(request.connectionRef);
+			if (id === null) {
+				throw new ServiceError(
+					ErrorCodes.BadRequest,
+					`'${request.connectionRef}' is not a git datasource`,
+				);
+			}
+			const row = await findRow(appDb, workspaceId, id);
+			if (row === null) {
+				throw new ServiceError(
+					ErrorCodes.NotFound,
+					"That git datasource no longer exists",
+				);
+			}
+			if (request.password !== undefined) {
+				if (request.password === "") {
+					// Cleared, not blanked: the datasource falls back to
+					// `passwordEnv`, or to `noPassword`, or becomes unavailable
+					// and says which variable to set.
+					await deleteSecret(appDb, id);
+				} else {
+					const secret = keyring.encrypt(request.password);
+					await upsertSecret(appDb, id, secret.ciphertext, secret.keyVersion);
+				}
+			}
+			await setOverrides(appDb, workspaceId, id, {
+				...(request.readOnly !== undefined
+					? { readOnly: request.readOnly }
+					: {}),
+				...(request.showAllSchemas !== undefined
+					? { showAllSchemas: request.showAllSchemas }
+					: {}),
+			});
+			log.audit("git.datasource.set-options", {
+				workspaceId,
+				connectionRef: request.connectionRef,
+				password:
+					request.password === undefined
+						? "unchanged"
+						: request.password === ""
+							? "cleared"
+							: "set",
+				readOnly: request.readOnly ?? null,
+				showAllSchemas: request.showAllSchemas ?? null,
+			});
+			const updated = await findRow(appDb, workspaceId, id);
+			if (updated === null) {
+				throw new ServiceError(ErrorCodes.NotFound, "It went away mid-save");
+			}
+			const entry = await entryOf(workspaceId, updated);
+			return metadataOf(
+				workspaceId,
+				entry,
+				await pathsFor(workspaceId, entry.ref),
 			);
 		},
 

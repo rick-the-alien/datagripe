@@ -35,6 +35,8 @@ let gripesOpener: (() => void) | null = null;
 let connectionFormOpener:
 	| ((connection: ConnectionMetadata | null) => void)
 	| null = null;
+let importDatasourceOpener: (() => void) | null = null;
+let closeImport: (() => void) | null = null;
 let newProjectOpener: (() => void) | null = null;
 let projectSettingsOpener: (() => void) | null = null;
 let domainManagerOpener: ((connectionRef: string) => void) | null = null;
@@ -101,6 +103,21 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 		});
 	};
 
+	/**
+	 * Importing is a different act from creating, so it is a different
+	 * tab rather than a block inside the create form: one of them asks
+	 * you for a host and a password, the other asks you for a URL and
+	 * then reads everything else out of the repository.
+	 */
+	importDatasourceOpener = () => {
+		focusOrAdd(api, {
+			id: "datasource:import",
+			component: "connectionForm",
+			title: "Import datasource",
+			params: { view: "connection", mode: "import" },
+		});
+	};
+
 	connectionFormOpener = (connection) => {
 		if (connection === null) {
 			focusOrAdd(api, {
@@ -161,6 +178,12 @@ export function registerViewPanelOpeners(api: DockviewApi): void {
 			params: { view: "run", connectionRef, connectionName: name },
 		});
 	};
+	closeImport = () => {
+		const panel = api.getPanel("datasource:import");
+		if (panel !== undefined) {
+			api.removePanel(panel);
+		}
+	};
 	accessOpener = (connectionRef, name) => {
 		focusOrAdd(api, {
 			id: `access:${connectionRef}`,
@@ -188,6 +211,16 @@ export function openConnectionForm(
 	connection: ConnectionMetadata | null,
 ): void {
 	connectionFormOpener?.(connection);
+}
+
+/** The from-a-repository form (docs/spec/git-datasources.md). */
+export function openImportDatasource(): void {
+	importDatasourceOpener?.();
+}
+
+/** Close the import tab once its datasource exists and has its own. */
+export function closeImportDatasource(): void {
+	closeImport?.();
 }
 
 export function openNewProject(): void {
@@ -243,15 +276,19 @@ export function readDatasourcePanelParams(params: unknown): {
 /** Connection form panel params: absent connectionId means "create". */
 export function readConnectionFormParams(params: unknown): {
 	connectionId: string | undefined;
+	/** `import` renders the from-a-repository form and nothing else. */
+	mode: "import" | undefined;
 } {
 	if (params === null || typeof params !== "object") {
-		return { connectionId: undefined };
+		return { connectionId: undefined, mode: undefined };
 	}
 	const connectionId =
 		"connectionId" in params && typeof params.connectionId === "string"
 			? params.connectionId
 			: undefined;
-	return { connectionId };
+	const mode =
+		"mode" in params && params.mode === "import" ? "import" : undefined;
+	return { connectionId, mode };
 }
 
 /** Panel params for the table/object views, narrowed without casts. */

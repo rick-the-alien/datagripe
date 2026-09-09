@@ -11,6 +11,8 @@ import {
 	Diamond,
 	Download,
 	Ellipsis,
+	Eye,
+	EyeOff,
 	FolderSync,
 	Group,
 	Image,
@@ -116,6 +118,10 @@ export const IconBehind = icon(ArrowDown, { size: 11 });
 /* ---- the nouns of the app -------------------------------------------- */
 
 export const IconDomains = icon(Group);
+/** A domain that is a shelf, and the objects shelved in it. */
+export const IconHidden = icon(EyeOff);
+/** The `show hidden` toggle, once it is on. */
+export const IconVisible = icon(Eye);
 export const IconSync = icon(FolderSync);
 export const IconAccess = icon(KeyRound);
 export const IconTable = icon(Table2);

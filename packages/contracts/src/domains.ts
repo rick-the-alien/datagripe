@@ -49,6 +49,15 @@ export const domainSchema = z.object({
 	description: z.string().max(500),
 	/** Reference/config domains export INSERTs alongside their DDL. */
 	includeData: z.boolean(),
+	/**
+	 * A shelf rather than a part of the project (docs/spec/domains.md
+	 * "Hidden domains"). Its objects drop out of the schema tree unless
+	 * `show hidden` is on, its group starts collapsed in the grouped
+	 * tree, and the export skips it entirely — which is the point: an
+	 * engine built-in or a function a plugin created is noise this
+	 * project did not write and does not want to commit.
+	 */
+	hidden: z.boolean(),
 	sortOrder: z.number().int(),
 });
 
@@ -100,6 +109,7 @@ export const domainUpsertRequestSchema = z.object({
 	colour: domainColourSchema,
 	description: z.string().max(500).default(""),
 	includeData: z.boolean().default(false),
+	hidden: z.boolean().default(false),
 	sortOrder: z.number().int().min(0).max(9999).default(0),
 	idempotencyKey: z.string().min(8).max(128),
 });
@@ -268,6 +278,12 @@ export const domainManifestSchema = z.object({
 		name: z.string(),
 		engine: z.string(),
 	}),
+	/**
+	 * Visible domains only. A hidden domain carries no `hidden` field
+	 * here because it never reaches this file at all — the export skips
+	 * it, and an import leaves the local hidden ones alone rather than
+	 * replacing them (docs/spec/domains.md "Hidden domains").
+	 */
 	domains: z.array(
 		z.object({
 			name: domainNameSchema,

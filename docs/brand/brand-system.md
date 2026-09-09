@@ -419,8 +419,19 @@ Hover a table or view for **450ms** and a popover appears to the right listing c
 | Click `⊞` (hover-revealed, far right) | Open **object view** |
 | Right click | Context menu |
 | Middle click | Open table view in a background tab |
+| Drag (grouped mode) | Move the object to the domain dropped on |
 
 Single click never opens a tab. Double-click gating exists so clicking around the tree does not fill the tab bar.
+
+**Right click behaves identically in both sidebar modes.** The schema
+tree and the grouped tree show the same objects and owe the same menu;
+a mode where right click does nothing reads as half-built.
+
+**The drop target is the whole group, not its header** — a 20px header
+would make moving a table a precision test. The highlight is a 1px cyan
+ring drawn *inside* the group (`outline-offset: -1px`) plus a step to
+Raised: an outline drawn outside would shift the row below it and make
+the list jitter under the pointer. See `docs/spec/domains.md` "Sorting".
 
 ### Context menu
 

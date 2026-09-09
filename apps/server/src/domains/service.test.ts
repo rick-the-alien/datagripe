@@ -5,7 +5,13 @@ import { migrate } from "../db/app/migrate";
 import type { AppDb } from "../db/app/pool";
 import { createWorkspace } from "../workspaces/service";
 import { exportPath, exportPaths, setExportPath } from "./runs";
-import { deleteDomain, listDomains, tag, upsertDomain } from "./service";
+import {
+	clearImportedDomains,
+	deleteDomain,
+	listDomains,
+	tag,
+	upsertDomain,
+} from "./service";
 
 /**
  * Domain persistence against a real app database
@@ -80,7 +86,12 @@ function key(): string {
 
 async function makeDomain(
 	name: string,
-	options: { ref?: string; workspace?: string; includeData?: boolean } = {},
+	options: {
+		ref?: string;
+		workspace?: string;
+		includeData?: boolean;
+		hidden?: boolean;
+	} = {},
 ): Promise<string> {
 	const result = await upsertDomain(appDb, options.workspace ?? workspaceId, {
 		connectionRef: options.ref ?? REF,
@@ -88,6 +99,7 @@ async function makeDomain(
 		colour: 1,
 		description: "",
 		includeData: options.includeData ?? false,
+		hidden: options.hidden ?? false,
 		sortOrder: 0,
 		idempotencyKey: key(),
 	});
@@ -258,6 +270,7 @@ describe("domains", () => {
 			colour: 5,
 			description: "sessions and tokens",
 			includeData: true,
+			hidden: false,
 			sortOrder: 3,
 			idempotencyKey: key(),
 		});
@@ -313,5 +326,67 @@ describe("domains", () => {
 				VALUES (${workspaceId}, ${REF}, ${"../etc"}, 1)
 			`;
 		}).toThrow();
+	});
+	pgTest("hidden round-trips and defaults to visible", async () => {
+		// The shelf switch (docs/spec/domains.md "Hidden domains"). It says
+		// nothing about tags: the same objects stay in the same domain.
+		await clear();
+		const shelfId = await makeDomain("inbuilt", { hidden: true });
+		const plainId = await makeDomain("auth");
+		const { domains } = await listDomains(appDb, workspaceId, REF);
+		const shelf = domains.find((domain) => domain.id === shelfId);
+		const plain = domains.find((domain) => domain.id === plainId);
+		expect(shelf?.hidden).toBe(true);
+		expect(plain?.hidden).toBe(false);
+	});
+
+	pgTest("a domain can be unhidden without losing its tags", async () => {
+		await clear();
+		const id = await makeDomain("inbuilt", { hidden: true });
+		await tag(appDb, workspaceId, userId, {
+			connectionRef: REF,
+			targets: [{ schema: "public", name: "pg_stat_x", kind: "table" }],
+			domainId: id,
+			idempotencyKey: key(),
+		});
+		await upsertDomain(appDb, workspaceId, {
+			connectionRef: REF,
+			id,
+			name: "inbuilt",
+			colour: 1,
+			description: "",
+			includeData: false,
+			hidden: false,
+			sortOrder: 0,
+			idempotencyKey: key(),
+		});
+		const { domains, tags } = await listDomains(appDb, workspaceId, REF);
+		expect(domains[0]?.hidden).toBe(false);
+		expect(tags).toHaveLength(1);
+	});
+	pgTest(
+		"an import replaces the visible domains and keeps the shelves",
+		async () => {
+			// A shelf never reached the committed file, so the file has no
+			// opinion about it (docs/spec/domains.md "Hidden domains"). Wiping
+			// it because a teammate ran an export would lose local decisions
+			// nobody asked to share.
+			await clear();
+			await makeDomain("auth");
+			await makeDomain("inbuilt", { hidden: true });
+			await clearImportedDomains(appDb, workspaceId, REF, ["auth", "billing"]);
+			const { domains } = await listDomains(appDb, workspaceId, REF);
+			expect(domains.map((domain) => domain.name)).toEqual(["inbuilt"]);
+		},
+	);
+
+	pgTest("an incoming name takes a colliding shelf with it", async () => {
+		// The unique index leaves no third option, and a failed import is
+		// worse than an unhidden shelf.
+		await clear();
+		await makeDomain("inbuilt", { hidden: true });
+		await clearImportedDomains(appDb, workspaceId, REF, ["inbuilt"]);
+		const { domains } = await listDomains(appDb, workspaceId, REF);
+		expect(domains).toEqual([]);
 	});
 });

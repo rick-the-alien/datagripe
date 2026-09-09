@@ -27,6 +27,7 @@ import {
 	buildExport,
 	type DataPage,
 	type ExportSource,
+	exportable,
 	type ObjectDdl,
 } from "./exporter";
 import { type HostFsPolicy, resolveHostDirectory } from "./paths";
@@ -155,26 +156,35 @@ export async function runExport(
 	);
 	const root = target.root;
 
-	const { domains, tags } = await listDomains(
+	const { domains: allDomains, tags } = await listDomains(
 		deps.appDb,
 		workspace.id,
 		request.connectionRef,
 	);
+	/*
+	 * A hidden domain is a shelf, not part of the structure
+	 * (docs/spec/domains.md "Hidden domains"). It never reaches the dump:
+	 * no directory, no manifest entry, and its objects are not described,
+	 * because describing an object is a round trip to the database for
+	 * DDL nobody asked to commit.
+	 */
+	const { domains, tags: visibleTags } = exportable(allDomains, tags);
 	if (domains.length === 0) {
 		throw new ServiceError(
 			ErrorCodes.BadRequest,
-			"Nothing to export — this datasource has no domains yet",
+			allDomains.length === 0
+				? "Nothing to export — this datasource has no domains yet"
+				: "Nothing to export — every domain on this datasource is hidden",
 		);
 	}
 
 	const byDomain = new Map<string, DomainTarget[]>();
-	for (const tag of tags) {
+	for (const tag of visibleTags) {
 		const list = byDomain.get(tag.domainId) ?? [];
 		list.push(tag.target);
 		byDomain.set(tag.domainId, list);
 	}
-	const allTargets = tags.map((tag) => tag.target);
-	const schemas = schemasOf(allTargets);
+	const schemas = schemasOf(visibleTags.map((tag) => tag.target));
 
 	const connection = (await deps.connections.listConnections(workspace)).find(
 		(entry) => entry.id === request.connectionRef,
@@ -230,11 +240,13 @@ export async function runExport(
 		};
 	};
 
+	// Every tag, hidden included: a shelved object has been decided about,
+	// so counting it as untagged would pad the one number worth reading.
 	const untaggedCount = await countUntagged(
 		deps,
 		workspace,
 		request.connectionRef,
-		allTargets,
+		tags.map((tag) => tag.target),
 	);
 
 	const source: ExportSource = {

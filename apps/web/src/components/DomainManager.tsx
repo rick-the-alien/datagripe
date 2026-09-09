@@ -14,9 +14,13 @@ import { RailHelp, TabShell } from "./TabRail";
  * The domain manager (docs/spec/domains.md "Domain manager").
  *
  * One row per domain: swatch, name, description, object count, `include
- * data`, delete. Deleting shows the count that is about to become
- * untagged and asks — a domain with 30 tags is 30 decisions, and losing
- * them to a stray click would be the worst kind of quiet.
+ * data`, `hidden`, delete. Deleting shows the count that is about to
+ * become untagged and asks — a domain with 30 tags is 30 decisions, and
+ * losing them to a stray click would be the worst kind of quiet.
+ *
+ * `hidden` is the other switch worth understanding: it shelves the
+ * domain (docs/spec/domains.md "Hidden domains") without untagging a
+ * thing, which is why it sits beside `data` rather than near delete.
  *
  * A tab rather than a modal, following the rest of the app: it survives
  * navigation, can sit beside the tree it is describing, and does not
@@ -64,6 +68,7 @@ export function DomainManager(props: { params?: unknown }) {
 				colour,
 				description: "",
 				includeData: false,
+				hidden: false,
 				sortOrder: domains.length,
 			});
 			setName("");
@@ -199,13 +204,16 @@ export function DomainManager(props: { params?: unknown }) {
 						<th>description</th>
 						<th>objects</th>
 						<th title="Export INSERT statements alongside the DDL">data</th>
+						<th title="A shelf: kept out of the schema tree, collapsed in the grouped tree, and skipped by the export">
+							hidden
+						</th>
 						<th />
 					</tr>
 				</thead>
 				<tbody>
 					{domains.length === 0 && (
 						<tr>
-							<td colSpan={6} className="dg-tree-note">
+							<td colSpan={7} className="dg-tree-note">
 								no domains yet — everything is untagged
 							</td>
 						</tr>
@@ -261,9 +269,31 @@ export function DomainManager(props: { params?: unknown }) {
 										type="checkbox"
 										checked={domain.includeData}
 										aria-label={`Export data for ${domain.name}`}
+										disabled={domain.hidden}
+										title={
+											domain.hidden
+												? "A hidden domain is not exported at all"
+												: undefined
+										}
 										onChange={(event) =>
 											void update(domain, {
 												includeData: event.target.checked,
+											})
+										}
+									/>
+								</td>
+								<td>
+									{/* The shelf switch (docs/spec/domains.md "Hidden
+									    domains"). Nothing is untagged by flipping it: the
+									    same objects are still in the same domain, they
+									    just stop competing for the tree. */}
+									<input
+										type="checkbox"
+										checked={domain.hidden}
+										aria-label={`Hide ${domain.name}`}
+										onChange={(event) =>
+											void update(domain, {
+												hidden: event.target.checked,
 											})
 										}
 									/>

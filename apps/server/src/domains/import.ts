@@ -14,7 +14,7 @@ import type { GitDatasourcesService } from "../git/types";
 import { log } from "../log";
 import { resolveExportTarget } from "./export";
 import type { HostFsPolicy } from "./paths";
-import { listDomains } from "./service";
+import { clearImportedDomains, listDomains } from "./service";
 
 /**
  * Reading a dump's tagging back in (docs/spec/domains.md "Import").
@@ -92,7 +92,14 @@ export async function runImport(
 		workspace.id,
 		request.connectionRef,
 	);
-	const beforeNames = new Set(before.domains.map((domain) => domain.name));
+	/*
+	 * Hidden domains are invisible to the file, so they are invisible to
+	 * the diff too (docs/spec/domains.md "Hidden domains"). Reporting one
+	 * as `removed` would be a lie: the import is about to leave it
+	 * exactly where it is.
+	 */
+	const beforeVisible = before.domains.filter((domain) => !domain.hidden);
+	const beforeNames = new Set(beforeVisible.map((domain) => domain.name));
 	const afterNames = new Set(manifest.domains.map((domain) => domain.name));
 
 	const domainsAdded = [...afterNames]
@@ -103,7 +110,7 @@ export async function runImport(
 		.sort();
 	const domainsChanged = manifest.domains
 		.filter((incoming) => {
-			const existing = before.domains.find((d) => d.name === incoming.name);
+			const existing = beforeVisible.find((d) => d.name === incoming.name);
 			return (
 				existing !== undefined &&
 				(existing.colour !== incoming.colour ||
@@ -135,20 +142,23 @@ export async function runImport(
 	// One transaction: a half-applied replace would leave the datasource
 	// tagged by two different opinions at once.
 	await deps.appDb.begin(async (tx) => {
-		await tx`
-			DELETE FROM domains
-			WHERE workspace_id = ${workspace.id}
-				AND connection_ref = ${request.connectionRef}
-		`;
+		// Replaces the visible domains and keeps the hidden shelves
+		// (docs/spec/domains.md "Hidden domains").
+		await clearImportedDomains(
+			tx,
+			workspace.id,
+			request.connectionRef,
+			manifest.domains.map((domain) => domain.name),
+		);
 		let order = 0;
 		for (const domain of manifest.domains) {
 			const rows = await tx<Array<{ id: string }>>`
 				INSERT INTO domains
 					(workspace_id, connection_ref, name, colour, description,
-					 sort_order, include_data)
+					 sort_order, include_data, hidden)
 				VALUES (${workspace.id}, ${request.connectionRef}, ${domain.name},
 					${domain.colour}, ${domain.description}, ${order},
-					${domain.includeData})
+					${domain.includeData}, false)
 				RETURNING id
 			`;
 			order += 1;

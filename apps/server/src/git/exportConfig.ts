@@ -171,14 +171,21 @@ export async function runExportConfig(
 		);
 	}
 
-	const { domains, tags } = await listDomains(
+	const { domains: allDomains, tags } = await listDomains(
 		deps.appDb,
 		workspace.id,
 		request.connectionRef,
 	);
+	// Hidden domains are a local shelf and stay out of the committed file
+	// (docs/spec/domains.md "Hidden domains").
+	const domains = allDomains.filter((domain) => !domain.hidden);
+	const visibleIds = new Set(domains.map((domain) => domain.id));
 	if (domains.length > 0) {
 		const byDomain = new Map<string, (typeof tags)[number]["target"][]>();
 		for (const tag of tags) {
+			if (!visibleIds.has(tag.domainId)) {
+				continue;
+			}
 			const list = byDomain.get(tag.domainId) ?? [];
 			list.push(tag.target);
 			byDomain.set(tag.domainId, list);

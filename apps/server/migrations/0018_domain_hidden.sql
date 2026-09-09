@@ -1,0 +1,23 @@
+-- A domain that is a shelf rather than a part of the project
+-- (docs/spec/domains.md "Hidden domains").
+--
+-- The tagging model already answers "which part of the product does this
+-- table belong to". It had no answer for the opposite: objects that
+-- belong to nobody's product — an engine built-in, a function some
+-- extension or plugin created, the debris of an old migration. Leaving
+-- them untagged is wrong, because `untagged` is the drift number and
+-- padding it with two hundred permanent residents destroys the one count
+-- worth reading.
+--
+-- So a domain can be hidden. Its objects drop out of the schema tree
+-- unless `show hidden` is on, its group starts collapsed in the grouped
+-- tree, and the export skips it: this is deliberately *not* part of the
+-- structure a teammate who clones the repository gets. It follows that
+-- an import cannot see hidden domains either, so it leaves them in place
+-- instead of replacing them with the file's opinion.
+--
+-- A flag rather than one reserved domain, so `inbuilt` and
+-- `plugin-generated` can be separate shelves and either can be unhidden
+-- later without re-tagging a thing.
+ALTER TABLE domains
+	ADD COLUMN hidden boolean NOT NULL DEFAULT false;

@@ -1514,6 +1514,52 @@ button.dg-crumb-item-main.dg-crumb-item-cur {
 	color: var(--dg-ink-mute);
 }
 
+/* ---- sorting: drag between groups ----------------------------------
+ * docs/spec/domains.md "Sorting". The whole group is the drop zone,
+ * header and members alike — demanding the header would make moving a
+ * table a precision test.
+ */
+
+.dg-domain-group-zone {
+	/* A ring drawn inside, so a highlighted group does not shift the row
+	   below it by a pixel and make the list jitter under the pointer. */
+	outline: 1px solid transparent;
+	outline-offset: -1px;
+}
+
+.dg-domain-drop {
+	outline-color: var(--dg-cyan);
+	background: var(--dg-raised);
+}
+
+.dg-domain-object[draggable="true"] {
+	cursor: grab;
+}
+
+/* ---- shelves -------------------------------------------------------
+ * A hidden domain (docs/spec/domains.md "Hidden domains"). The group is
+ * still a first-class row — it has to be, it is a drop target — but it
+ * reads as parked rather than as part of the project.
+ */
+
+.dg-domain-group-hidden .dg-domain-group-label {
+	color: var(--dg-ink-mute);
+	font-weight: 400;
+}
+
+.dg-domain-shelf-mark {
+	margin-left: 6px;
+	color: var(--dg-ink-faint);
+}
+
+/* Shelved, but on screen: the peek is on, or a filter named it. Dimmed
+   rather than badged, because a badge on every row of a two-hundred-row
+   shelf is noise. */
+.dg-tree-row-shelved .dg-tree-label {
+	color: var(--dg-ink-mute);
+	font-style: italic;
+}
+
 .dg-context-sub {
 	position: relative;
 }

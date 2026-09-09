@@ -25,8 +25,11 @@ label. Once it has the label, the script is a button.
 
 ## Non-goals
 
-- Domains are not a security boundary. They do not affect grants,
-  visibility, or which objects a query can touch.
+- Domains are not a security boundary. They do not affect grants or
+  which objects a query can touch. A **hidden** domain affects what the
+  sidebar draws and nothing else: the objects are still there, still
+  queryable, still returned by `schema.children`. Hiding is tidying, not
+  a permission.
 - Not a replacement for schemas. An object's namespace still comes from
   the engine; a domain cuts across namespaces.
 - Not nested. One flat list per datasource (see "Flat, deliberately").
@@ -46,6 +49,7 @@ label. Once it has the label, the script is a button.
 | Domain | A named, coloured label scoped to one datasource in one workspace |
 | Tag | The assignment of one object to one domain |
 | Untagged | An object the datasource reports that carries no tag |
+| Shelf | A hidden domain: tagged, but deliberately out of the way and out of the export |
 | Domain root | The allowlisted directory the export writes into |
 | Dump | The exported tree plus its `domains.yaml`, as committed to git |
 | Drift | A tag whose object no longer exists, or an object no domain claims |
@@ -122,6 +126,17 @@ CREATE TABLE domains (
 
 CREATE UNIQUE INDEX domains_unique_name
 	ON domains (workspace_id, connection_ref, name);
+```
+
+Migration `0018_domain_hidden.sql` adds the shelf flag (see
+"Hidden domains"):
+
+```sql
+ALTER TABLE domains
+	ADD COLUMN hidden boolean NOT NULL DEFAULT false;
+```
+
+```sql
 
 CREATE TABLE domain_tags (
 	domain_id uuid NOT NULL REFERENCES domains (id) ON DELETE CASCADE,
@@ -185,11 +200,11 @@ can be revisited without losing who made it.
 | Action | Min role | Behaviour |
 | --- | --- | --- |
 | `domain.list` | viewer | Domains plus every tag for one `connectionRef` |
-| `domain.upsert` | editor | Create or update name, colour, description, order, `includeData` |
+| `domain.upsert` | editor | Create or update name, colour, description, order, `includeData`, `hidden` |
 | `domain.delete` | editor | Deletes the domain; its objects become untagged. Response reports the count. |
 | `domain.tag` | editor | Batch assign: `{ targets: [...], domainId \| null }`. `null` untags. |
 | `domain.export` | owner | Writes the dump. `dryRun` returns the plan without touching disk. |
-| `domain.import` | owner | Reads a manifest back and replaces the tag set |
+| `domain.import` | owner | Reads a manifest back and replaces the visible tag set; shelves survive |
 | `domain.runs` | viewer | Export run history for one `connectionRef` |
 | `domain.git` | owner | `status` / `commit` / `push` against the domain root |
 | `domain.set-export-path` | editor | The datasource's export directory. Editor, like the settings it sits beside; *using* it still needs `owner` |
@@ -217,14 +232,15 @@ the tree you were reading.
 ┌─────────────────────────────┐
 │ wallet-prod / public     ▾  │
 ├─────────────────────────────┤
-│ filter objects…       ⌗  ⋯  │  group-by-domain · manage
+│ filter objects…    ⌗  ◎  ⋯  │  group-by-domain · show-hidden · manage
 ├─────────────────────────────┤
-│▍▸ auth                   6  │  domain row, colour rail
+│▍▾ auth                   6  │  domain row, colour rail
 │▍  ▤ basic_auth.users        │  schema-qualified: domains cut across
 │▍  ▤ basic_auth.sessions     │
 │▍  ƒ login                   │
 │▍▸ aggregation           23  │
 │▍▸ reference              6  │
+│▍▸ inbuilt          ◎  184   │  a shelf: dimmed, starts collapsed
 │ ▸ untagged               4  │  Ink dim, no rail, always last
 └─────────────────────────────┘
 ```
@@ -242,6 +258,86 @@ the tree you were reading.
   grouped mode forces the lazy category loads the tree would otherwise
   defer. The domain rows render immediately with `loading…` children,
   per the brand spec's rule that fetching must not look like empty.
+- Group order is **the project's domains, then the shelves, then
+  `untagged`**. `untagged` is the row people act on, and a fixed final
+  row is easier to find than one that moves as shelves come and go.
+- The **context menu is the same in both modes.** It is the keyboard
+  path to every edit drag-and-drop offers, and the grouped tree shipped
+  without one — "right click does nothing here" reads as the feature
+  being half-built. `ContextMenu` therefore lives in its own module
+  rather than inside either tree, and the selection both trees share
+  lives in `stores/treeUi.ts`.
+
+### Sorting
+
+The grouped tree is the sorting surface. Rows drag between groups, which
+is the gesture for the job people actually have: emptying `untagged`.
+
+- **The whole group accepts the drop**, header and member rows alike.
+  Dropping onto a row inside `auth` obviously means "put it in auth",
+  and demanding the header would make moving a table a precision test.
+- Dropping onto `untagged` untags, because "move to no domain" and
+  "move to another domain" are the same edit (see `domain.tag`).
+- A drag carries the **multi-selection if the dragged row is in it**,
+  and that row alone otherwise. The pointer is the more specific
+  statement; silently moving two hundred still-selected objects is the
+  failure this rule exists to prevent. It is the same rule the context
+  menu follows.
+- **A drop that changes nothing writes nothing.** Re-tagging an object
+  into the domain it already carries would still be a round trip and a
+  fresh `tagged_by`.
+- The payload is **validated on drop**, not trusted: a drop can arrive
+  from another tab or another application, and it ends in a write.
+- Drag is mouse-only by nature. The keyboard path to the same edit is
+  the context menu's `domain` submenu on the focused row, which is why
+  that menu is not optional.
+
+### Hidden domains
+
+A domain can be **hidden**. It is still a domain — named, coloured,
+tagged, listed in the manager — but it is a shelf rather than a part of
+the project:
+
+- Its objects **leave the schema tree**, and the category counts above
+  them count what is shown rather than what was fetched. A category
+  reading 214 above eleven rows is a bug report waiting to be filed.
+- Its group in the grouped tree **starts collapsed** and is dimmed, with
+  a mark beside the name. It is still a first-class row, because it has
+  to be a drop target — that is the point of it.
+- The **export skips it entirely**: no `domains/<name>/` directory, no
+  manifest entry, and — the reason the filter runs first — no
+  `object.describe` call, which would be a round trip to the database
+  for DDL nobody asked to commit.
+- It follows that an **import cannot see shelves**, so `domain.import`
+  leaves them in place instead of replacing them. The one shelf that
+  cannot survive is one the incoming file also names: the unique index
+  on `(workspace_id, connection_ref, name)` leaves no third option, and
+  a failed import is worse than an unhidden shelf.
+- Its objects are **not counted as untagged**, anywhere. That is the
+  whole reason the flag exists.
+
+The last point is the argument for the feature. `untagged` is the drift
+number — the objects nobody has decided about yet — and it only means
+something if it is small enough to read. A database with two hundred
+extension functions, engine built-ins and plugin debris permanently
+sitting in it has no drift number at all. Tagging them into `inbuilt`
+and hiding it is the decision "these are not ours", recorded once.
+
+**A peek, not a mode.** A `show hidden` toggle sits in the filter row,
+**off by default**, and appears only once something is actually shelved:
+a toggle for a state that cannot exist is a question with one answer. It
+is deliberately not persisted — a peek that outlives the session stops
+being one. While it is on, shelved rows render dimmed and italic rather
+than as ordinary rows, so the answer is never a lie about where the
+object lives.
+
+**A filter overrides the shelf.** Typing a name and not being shown the
+object you named is a bug, not a feature, so a filter match surfaces a
+shelved object (dimmed, as above) whatever the toggle says.
+
+**A flag, not a reserved domain.** `inbuilt` and `plugin-generated` can
+be separate shelves, and either can be unhidden later without
+re-tagging a thing. Hiding and unhiding never touch `domain_tags`.
 
 ### The colour rail
 
@@ -306,9 +402,14 @@ forms are tabs, so this one survives navigation and can sit beside the
 tree it describes (`docs/brand/mocks/datasource-selector.html`).
 
 One row per domain: colour swatch, name, description, object count,
-`include data` checkbox, delete. Deleting shows the object count that is
-about to become untagged and requires confirmation — a domain with 30
-tags is 30 decisions.
+`include data` checkbox, `hidden` checkbox, delete. Deleting shows the
+object count that is about to become untagged and requires confirmation
+— a domain with 30 tags is 30 decisions.
+
+`hidden` is the shelf switch (see "Hidden domains"), and it sits beside
+`data` rather than near delete because it destroys nothing: the same
+objects stay in the same domain. `include data` is disabled on a hidden
+domain, since a domain that is not exported cannot export data.
 
 The untagged count lives in the grouped tree and in the sync tab's scope
 line rather than here.
@@ -373,6 +474,13 @@ root:
   `pg_get_functiondef` verbatim for routines. **No external binary**: no
   `pg_dump`, no `psql`, no version-skew between the client tools on the
   server and the database being read.
+
+#### Hidden domains are not in it
+
+A hidden domain contributes nothing to the dump — no directory, no
+manifest entry, no `describe` call (see "Hidden domains"). Exporting a
+datasource whose every domain is hidden fails the same way exporting one
+with no domains does, with a message that says which of the two it is.
 
 #### Determinism is the requirement
 
@@ -630,11 +738,15 @@ the datasource's domains and tags with what it finds. It is how a
 teammate who pulls the repo gets your tagging, and how tagging survives
 a workspace being recreated.
 
-It is a **replace**, previewed as a diff — domains added, removed,
-recoloured, and tags moved — and applied in one transaction. Tags for
-objects the datasource does not currently report are imported anyway and
-show up as stale in the manager, because the alternative is silently
-losing a tag while a migration is mid-flight.
+It is a **replace** of the *visible* domains, previewed as a diff —
+domains added, removed, recoloured, and tags moved — and applied in one
+transaction. Tags for objects the datasource does not currently report
+are imported anyway and show up as stale in the manager, because the
+alternative is silently losing a tag while a migration is mid-flight.
+
+Hidden domains are not in the file and are not in the diff either;
+reporting one as `removed` would be a lie about what the import is
+about to do. They survive it (see "Hidden domains").
 
 Import does not read the `.sql` files. They are output.
 
@@ -671,6 +783,22 @@ parking lot.
   silent omission.
 - Grouped tree: a domain containing objects from two schemas renders both
   schema-qualified under one group.
+- Group order: with a shelf present, the order is domains, shelves,
+  `untagged` — and `untagged` is still last and still present at zero.
+- Shelving: an object in a hidden domain is absent from the schema tree,
+  is not counted by the category above it, and is not counted as
+  untagged. With `show hidden` on, or with a filter naming it, it comes
+  back marked.
+- Drag payload: a dragged row inside the multi-selection moves the whole
+  selection; one outside it moves alone. A payload that is not a list of
+  targets is rejected rather than written.
+- No-op drop: dropping an object onto the domain it already carries
+  issues no `domain.tag` at all.
+- Export exclusion: a datasource with one visible and one hidden domain
+  exports exactly one directory, and the hidden domain's objects are
+  never described.
+- Import survival: an import replaces the visible domains and leaves a
+  shelf in place, unless the incoming file names it.
 - Git scoping: with an unrelated modified file elsewhere in the
   repository, commit stages and commits only the domain root.
 - Git argv: a commit message of `--amend` produces a commit with that
@@ -692,7 +820,10 @@ parking lot.
   dismiss. Nothing is ever tagged without a person saying so, because a
   wrong tag that appears by itself is worse than no tag.
 - **The stale-tag report** in the manager (see above).
-- **Manual domain reordering.**
+- **Manual domain reordering.** `sort_order` exists and is honoured;
+  nothing sets it but creation order. Note that dragging *objects*
+  between groups is built (see "Sorting") — it is dragging the *groups*
+  that is not.
 
 ## Open questions
 
@@ -709,6 +840,7 @@ parking lot.
   portable across engines.
 - Whether the untagged count belongs in the status bar. It is the number
   most likely to be acted on, and the status bar already carries the
-  gripe count.
+  gripe count. Hidden domains make this more attractive, not less: the
+  count is now small enough to be worth a permanent home.
 - Multi-tag, if a table honestly belongs to two domains. It costs the
   colour rail its meaning, so it needs a different visual answer first.

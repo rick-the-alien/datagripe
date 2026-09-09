@@ -1,16 +1,6 @@
-import type {
-	DomainTarget,
-	ObjectKind,
-	SchemaNode,
-	SchemaPathSegment,
-} from "@datagripe/contracts";
-import {
-	domainTargetKey,
-	isRelationKind,
-	tabsForKind,
-} from "@datagripe/contracts";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { create } from "zustand";
+import type { SchemaNode, SchemaPathSegment } from "@datagripe/contracts";
+import { domainTargetKey } from "@datagripe/contracts";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
 	type ObjectTarget,
 	openDomainManager,
@@ -22,6 +12,7 @@ import {
 	domainColourVar,
 	selectDomainId,
 	selectDomains,
+	selectTags,
 	useDomainsStore,
 } from "../stores/domains";
 import {
@@ -30,18 +21,22 @@ import {
 	useConnectionsStore,
 	useExplorerStore,
 } from "../stores/runtime";
+import { useTreeUi } from "../stores/treeUi";
 import { DatasourceBreadcrumb, treeRootPath } from "./DatasourceBreadcrumb";
 import { DomainGroups } from "./DomainTree";
+import { shelfIds, visibleNodes } from "./domainGrouping";
 import {
 	IconAdd,
-	IconCheck,
 	IconChevronDown,
 	IconChevronRight,
 	IconDomains,
+	IconHidden,
 	IconMore,
 	IconObject,
+	IconVisible,
 } from "./icons";
 import { KIND_COLORS, TreeIcon } from "./treeIcons";
+import { ContextMenu, objectKindOf } from "./treeMenu";
 
 /**
  * Schema tree scoped to the breadcrumb's datasource + namespace
@@ -87,44 +82,6 @@ const EMPTY_LABELS: Partial<Record<SchemaNode["kind"], string>> = {
 	procedures: "no procedures",
 	sequences: "no sequences",
 };
-
-/** Single-row selection plus the singleton field popover, shared across
- * the recursive tree. Opening a popover replaces whichever was open. */
-interface TreeUiState {
-	selectedKey: string | null;
-	/**
-	 * Ctrl/Cmd-click adds to this. It is the bulk-tagging path: filter the
-	 * tree, select the matches, tag once — the thing that makes tagging
-	 * two hundred objects survivable (docs/spec/domains.md "Context menu").
-	 */
-	multiSelected: Record<string, DomainTarget>;
-	popoverKey: string | null;
-	select: (key: string | null) => void;
-	toggleMulti: (key: string, target: DomainTarget) => void;
-	clearMulti: () => void;
-	openPopover: (key: string) => void;
-	closePopover: () => void;
-}
-
-const useTreeUi = create<TreeUiState>()((set, get) => ({
-	selectedKey: null,
-	multiSelected: {},
-	popoverKey: null,
-	// A plain click collapses the multi-selection: leaving it live after
-	// you have obviously moved on is how a bulk action hits the wrong
-	// two hundred objects.
-	select: (key) => set({ selectedKey: key, multiSelected: {} }),
-	toggleMulti: (key, target) => {
-		const { [key]: existing, ...rest } = get().multiSelected;
-		set({
-			selectedKey: key,
-			multiSelected: existing === undefined ? { ...rest, [key]: target } : rest,
-		});
-	},
-	clearMulti: () => set({ multiSelected: {} }),
-	openPopover: (key) => set({ popoverKey: key }),
-	closePopover: () => set({ popoverKey: null }),
-}));
 
 /**
  * The type icon swaps to a chevron on hover and keyboard focus
@@ -283,248 +240,6 @@ function FieldPopover(props: {
 	);
 }
 
-/* ---- context menu ----------------------------------------------------
- * Structural entries deep-link into the object view (brand-system.md
- * "Context menu").
- */
-
-/** Narrow a tree node kind to the object kinds the object view takes. */
-function objectKindOf(kind: SchemaNode["kind"]): ObjectKind {
-	switch (kind) {
-		case "view":
-		case "function":
-		case "procedure":
-		case "sequence":
-			return kind;
-		default:
-			return "table";
-	}
-}
-
-/**
- * The `domain ▸` submenu (docs/spec/domains.md "Context menu").
- *
- * Each item carries its own colour rail and a check on the current
- * domain. `untag` appears only when the object is tagged, because an
- * item that does nothing is worse than no item.
- */
-function DomainSubmenu(props: {
-	connectionRef: string;
-	target: ObjectTarget;
-	onClose: () => void;
-}) {
-	const domains = useDomainsStore(selectDomains(props.connectionRef));
-	const currentId = useDomainsStore(
-		(state) =>
-			state.tagsByConnection[props.connectionRef]?.[
-				domainTargetKey({
-					schema: props.target.schema,
-					name: props.target.name,
-					kind: props.target.kind,
-				})
-			] ?? null,
-	);
-	const tag = useDomainsStore((state) => state.tag);
-	const multiSelected = useTreeUi((state) => state.multiSelected);
-	const clearMulti = useTreeUi((state) => state.clearMulti);
-	const [open, setOpen] = useState(false);
-
-	const own: DomainTarget = {
-		schema: props.target.schema,
-		name: props.target.name,
-		kind: props.target.kind,
-	};
-	// With a multi-selection live the submenu applies to all of it. The
-	// right-clicked row joins in even if it was not part of the selection,
-	// because it is what the pointer is on.
-	const selection = Object.values(multiSelected);
-	const targets =
-		selection.length === 0
-			? [own]
-			: selection.some(
-						(entry) => domainTargetKey(entry) === domainTargetKey(own),
-					)
-				? selection
-				: [...selection, own];
-
-	const assign = (domainId: string | null) => {
-		props.onClose();
-		clearMulti();
-		void tag(props.connectionRef, targets, domainId);
-	};
-
-	return (
-		<div
-			className="dg-context-sub"
-			role="none"
-			onMouseEnter={() => setOpen(true)}
-			onMouseLeave={() => setOpen(false)}
-		>
-			<button
-				type="button"
-				className="dg-context-item"
-				role="menuitem"
-				aria-haspopup="menu"
-				aria-expanded={open}
-				onClick={() => setOpen(!open)}
-			>
-				{targets.length > 1 ? `domain (${targets.length} objects)` : "domain"}{" "}
-				<span className="dg-context-chevron">
-					<IconChevronRight />
-				</span>
-			</button>
-			{open && (
-				<div className="dg-context-menu dg-context-submenu" role="menu">
-					{domains.length === 0 && (
-						<div className="dg-context-note">no domains yet</div>
-					)}
-					{domains.map((domain) => (
-						<button
-							key={domain.id}
-							type="button"
-							className="dg-context-item dg-context-domain"
-							role="menuitemradio"
-							aria-checked={targets.length === 1 && domain.id === currentId}
-							style={
-								{
-									"--dg-domain-rail": domainColourVar(domain.colour),
-								} as React.CSSProperties
-							}
-							onClick={() => assign(domain.id)}
-						>
-							{domain.name}
-							{/* Mixed current domains show no check: a tick that only
-							    described one of seven objects would be a lie. */}
-							{targets.length === 1 && domain.id === currentId && <IconCheck />}
-						</button>
-					))}
-					{(currentId !== null || targets.length > 1) && (
-						<>
-							<div className="dg-context-separator" />
-							<button
-								type="button"
-								className="dg-context-item"
-								role="menuitem"
-								onClick={() => assign(null)}
-							>
-								untag
-							</button>
-						</>
-					)}
-					<div className="dg-context-separator" />
-					<button
-						type="button"
-						className="dg-context-item"
-						role="menuitem"
-						onClick={() => {
-							props.onClose();
-							openDomainManager(props.connectionRef);
-						}}
-					>
-						new domain…
-					</button>
-				</div>
-			)}
-		</div>
-	);
-}
-
-function ContextMenu(props: {
-	x: number;
-	y: number;
-	target: ObjectTarget;
-	onClose: () => void;
-}) {
-	const relation = isRelationKind(props.target.kind);
-	useEffect(() => {
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") {
-				props.onClose();
-			}
-		};
-		window.addEventListener("keydown", onKeyDown);
-		window.addEventListener("mousedown", props.onClose);
-		return () => {
-			window.removeEventListener("keydown", onKeyDown);
-			window.removeEventListener("mousedown", props.onClose);
-		};
-	}, [props.onClose]);
-
-	return (
-		<div
-			className="dg-context-menu"
-			role="menu"
-			style={{ top: props.y, left: props.x }}
-			onMouseDown={(event) => event.stopPropagation()}
-		>
-			{relation && (
-				<>
-					<button
-						type="button"
-						className="dg-context-item"
-						role="menuitem"
-						onClick={() => {
-							props.onClose();
-							openTableView(props.target);
-						}}
-					>
-						view rows <kbd>dbl click</kbd>
-					</button>
-					<div className="dg-context-separator" />
-				</>
-			)}
-			{tabsForKind(props.target.kind).map((tab) => (
-				<button
-					key={tab}
-					type="button"
-					className="dg-context-item"
-					role="menuitem"
-					onClick={() => {
-						props.onClose();
-						openObjectView(props.target, tab);
-					}}
-				>
-					{tab}
-					{!relation && tab === "ddl" && <kbd>dbl click</kbd>}
-				</button>
-			))}
-			<div className="dg-context-separator" />
-			<DomainSubmenu
-				connectionRef={props.target.connectionId}
-				target={props.target}
-				onClose={props.onClose}
-			/>
-			<button
-				type="button"
-				className="dg-context-item"
-				role="menuitem"
-				onClick={() => {
-					props.onClose();
-					void navigator.clipboard.writeText(props.target.name);
-				}}
-			>
-				copy name
-			</button>
-			{relation && (
-				<>
-					<div className="dg-context-separator" />
-					<button
-						type="button"
-						className="dg-context-item dg-context-danger"
-						role="menuitem"
-						onClick={() => {
-							props.onClose();
-							openObjectView(props.target, "danger");
-						}}
-					>
-						danger zone…
-					</button>
-				</>
-			)}
-		</div>
-	);
-}
-
 /* ---- filtering ------------------------------------------------------
  * "filter objects…" matches against loaded nodes by name. Categories
  * (and Redis prefixes) with matching loaded children open for the
@@ -556,6 +271,25 @@ function subtreeMatches(
 	);
 }
 
+/**
+ * The shelves for a datasource, and whether the peek is on
+ * (docs/spec/domains.md "Hidden domains").
+ *
+ * `shelfIds` builds a Set, so it is memoised on the stored domain array:
+ * a fresh Set every render would be a fresh snapshot every render.
+ */
+function useShelves(connectionId: string): {
+	shelves: ReadonlySet<string>;
+	tags: Readonly<Record<string, string>>;
+	showHidden: boolean;
+} {
+	const domains = useDomainsStore(selectDomains(connectionId));
+	const tags = useDomainsStore(selectTags(connectionId));
+	const showHidden = useDomainsStore((state) => state.showHidden);
+	const shelves = useMemo(() => shelfIds(domains), [domains]);
+	return { shelves, tags, showHidden };
+}
+
 function NodeRows(props: {
 	connectionId: string;
 	parentPath: SchemaPathSegment[];
@@ -566,6 +300,7 @@ function NodeRows(props: {
 	const children = useExplorerStore((state) => state.children[key]);
 	const allChildren = useExplorerStore((state) => state.children);
 	const filtering = props.filter.length > 0;
+	const shelves = useShelves(props.connectionId);
 
 	if (children === undefined || children.status === "loading") {
 		return (
@@ -587,7 +322,7 @@ function NodeRows(props: {
 			</div>
 		);
 	}
-	const visible = filtering
+	const matching = filtering
 		? children.nodes.filter((node) =>
 				subtreeMatches(
 					props.connectionId,
@@ -598,6 +333,16 @@ function NodeRows(props: {
 				),
 			)
 		: children.nodes;
+	// Objects shelved in a hidden domain leave the level entirely, unless
+	// the peek is on or a filter is naming them
+	// (docs/spec/domains.md "Hidden domains").
+	const visible = visibleNodes(matching, {
+		schema: props.parentPath[0]?.name ?? "",
+		tags: shelves.tags,
+		shelves: shelves.shelves,
+		showHidden: shelves.showHidden,
+		filtering,
+	});
 	if (visible.length === 0) {
 		if (filtering) {
 			return null;
@@ -705,6 +450,7 @@ function TreeNode(props: {
 	const inMulti = multiSelected[key] !== undefined;
 	const openPopover = useTreeUi((state) => state.openPopover);
 	const closePopover = useTreeUi((state) => state.closePopover);
+	const shelves = useShelves(props.connectionId);
 
 	const isObject = OBJECT_KINDS[props.node.kind] === true;
 	const isCategory = CATEGORY_KINDS[props.node.kind] === true;
@@ -896,6 +642,10 @@ function TreeNode(props: {
 					"dg-tree-row",
 					selected ? "dg-tree-row-selected" : "",
 					inMulti ? "dg-tree-row-multi" : "",
+					// Shelved, but on screen because the peek is on or a filter
+					// named it. Dimmed so the answer is never a lie about where
+					// the object lives.
+					railDomain?.hidden === true ? "dg-tree-row-shelved" : "",
 				]
 					.filter((entry) => entry !== "")
 					.join(" ")}
@@ -947,7 +697,20 @@ function TreeNode(props: {
 					{isCategory &&
 						children !== undefined &&
 						children.status === "loaded" && (
-							<span className="dg-tree-count">{children.nodes.length}</span>
+							// Counting what is shown, not what was fetched: a
+							// category reading 214 above eleven rows is a bug report
+							// waiting to be filed.
+							<span className="dg-tree-count">
+								{
+									visibleNodes(children.nodes, {
+										schema: path[0]?.name ?? "",
+										tags: shelves.tags,
+										shelves: shelves.shelves,
+										showHidden: shelves.showHidden,
+										filtering,
+									}).length
+								}
+							</span>
 						)}
 					{props.node.kind === "column" &&
 						props.node.dataType !== undefined && (
@@ -1012,11 +775,15 @@ export function Explorer() {
 	const [filter, setFilter] = useState("");
 	const grouped = useDomainsStore((state) => state.grouped);
 	const setGrouped = useDomainsStore((state) => state.setGrouped);
+	const showHidden = useDomainsStore((state) => state.showHidden);
+	const setShowHidden = useDomainsStore((state) => state.setShowHidden);
 	const loadDomains = useDomainsStore((state) => state.load);
 
 	const active =
 		connections.find((connection) => connection.id === activeConnectionId) ??
 		null;
+	const activeDomains = useDomainsStore(selectDomains(active?.id ?? ""));
+	const hasShelves = activeDomains.some((domain) => domain.hidden);
 	const rootPath =
 		active === null
 			? null
@@ -1068,6 +835,26 @@ export function Explorer() {
 				>
 					<IconDomains />
 				</button>
+				{/* Only once there is something shelved: a toggle for a state
+				    that cannot exist is a question with one answer. */}
+				{hasShelves && (
+					<button
+						type="button"
+						className={
+							showHidden ? "dg-tree-group-on dg-tree-group" : "dg-tree-group"
+						}
+						aria-pressed={showHidden}
+						title={
+							showHidden
+								? "Hide objects shelved in a hidden domain"
+								: "Show objects shelved in a hidden domain"
+						}
+						aria-label="Show hidden"
+						onClick={() => setShowHidden(!showHidden)}
+					>
+						{showHidden ? <IconVisible /> : <IconHidden />}
+					</button>
+				)}
 				<button
 					type="button"
 					className="dg-tree-group"

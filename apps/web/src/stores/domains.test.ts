@@ -33,6 +33,7 @@ function stateWith(overrides: Partial<DomainsState> = {}): DomainsState {
 		tagsByConnection: {},
 		loaded: {},
 		grouped: false,
+		showHidden: false,
 		load: async () => {},
 		upsert: async () => {
 			throw new Error("not used");
@@ -40,6 +41,7 @@ function stateWith(overrides: Partial<DomainsState> = {}): DomainsState {
 		remove: async () => 0,
 		tag: async () => {},
 		setGrouped: () => {},
+		setShowHidden: () => {},
 		reset: () => {},
 		...overrides,
 	};
@@ -61,6 +63,7 @@ describe("selectDomains", () => {
 				colour: 1,
 				description: "",
 				includeData: false,
+				hidden: false,
 				sortOrder: 0,
 			},
 		];

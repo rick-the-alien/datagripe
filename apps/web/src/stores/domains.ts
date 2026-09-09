@@ -26,6 +26,13 @@ export type DomainsState = {
 	loaded: Record<string, boolean>;
 	/** Group the tree by domain instead of by category. A view mode. */
 	grouped: boolean;
+	/**
+	 * Show objects shelved in a hidden domain (docs/spec/domains.md
+	 * "Hidden domains"). Off by default — that is the whole point of the
+	 * shelf — and deliberately *not* persisted: it is a peek, and a peek
+	 * that outlives the session stops being one.
+	 */
+	showHidden: boolean;
 	load: (connectionRef: string) => Promise<void>;
 	upsert: (
 		connectionRef: string,
@@ -38,6 +45,7 @@ export type DomainsState = {
 		domainId: string | null,
 	) => Promise<void>;
 	setGrouped: (grouped: boolean) => void;
+	setShowHidden: (showHidden: boolean) => void;
 	reset: () => void;
 };
 
@@ -66,6 +74,7 @@ export const useDomainsStore = create<DomainsState>()((set, get) => ({
 	tagsByConnection: {},
 	loaded: {},
 	grouped: false,
+	showHidden: false,
 
 	async load(connectionRef) {
 		try {
@@ -130,6 +139,10 @@ export const useDomainsStore = create<DomainsState>()((set, get) => ({
 
 	setGrouped(grouped) {
 		set({ grouped });
+	},
+
+	setShowHidden(showHidden) {
+		set({ showHidden });
 	},
 
 	reset() {

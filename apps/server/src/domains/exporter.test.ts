@@ -6,6 +6,7 @@ import type { Domain, DomainTarget } from "@datagripe/contracts";
 import {
 	buildExport,
 	type ExportSource,
+	exportable,
 	objectFileBody,
 	renderManifest,
 	sqlLiteral,
@@ -27,6 +28,7 @@ const AUTH: Domain = {
 	colour: 1,
 	description: "",
 	includeData: false,
+	hidden: false,
 	sortOrder: 0,
 };
 
@@ -36,6 +38,7 @@ const REFERENCE: Domain = {
 	colour: 2,
 	description: "static config",
 	includeData: true,
+	hidden: false,
 	sortOrder: 1,
 };
 
@@ -399,5 +402,51 @@ describe("applyExport", () => {
 		expect(preview.entries.filter((e) => e.action === "deleted")).toEqual(
 			applied.entries.filter((e) => e.action === "deleted"),
 		);
+	});
+});
+
+describe("exportable", () => {
+	/*
+	 * A hidden domain is a shelf, not part of the structure
+	 * (docs/spec/domains.md "Hidden domains"). It has to be filtered here,
+	 * before anything else: the tags it carries would otherwise become
+	 * `describe` calls, one round trip per object, for DDL nobody asked to
+	 * commit.
+	 */
+	const SHELF: Domain = {
+		id: "d-inbuilt",
+		name: "inbuilt",
+		colour: 3,
+		description: "",
+		includeData: false,
+		hidden: true,
+		sortOrder: 2,
+	};
+
+	test("drops the hidden domain and every tag in it", () => {
+		const result = exportable(
+			[AUTH, SHELF, REFERENCE],
+			[
+				{ domainId: "d-auth", target: LOGIN },
+				{ domainId: "d-inbuilt", target: LOGIN },
+				{ domainId: "d-ref", target: LOGIN },
+			],
+		);
+		expect(result.domains.map((domain) => domain.name)).toEqual([
+			"auth",
+			"reference",
+		]);
+		expect(result.tags.map((tag) => tag.domainId)).toEqual(["d-auth", "d-ref"]);
+	});
+
+	test("leaves a datasource with no shelves untouched", () => {
+		const tags = [{ domainId: "d-auth", target: LOGIN }];
+		const result = exportable([AUTH], tags);
+		expect(result.domains).toEqual([AUTH]);
+		expect(result.tags).toEqual(tags);
+	});
+
+	test("every domain hidden means nothing to export", () => {
+		expect(exportable([SHELF], []).domains).toEqual([]);
 	});
 });

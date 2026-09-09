@@ -28,6 +28,7 @@ type DomainRow = {
 	colour: number;
 	description: string;
 	include_data: boolean;
+	hidden: boolean;
 	sort_order: number;
 };
 
@@ -45,6 +46,7 @@ function rowToDomain(row: DomainRow): Domain {
 		colour: row.colour,
 		description: row.description,
 		includeData: row.include_data,
+		hidden: row.hidden,
 		sortOrder: row.sort_order,
 	};
 }
@@ -62,7 +64,7 @@ export async function listDomains(
 	connectionRef: string,
 ): Promise<DomainListResult> {
 	const domains = await appDb<DomainRow[]>`
-		SELECT id, name, colour, description, include_data, sort_order
+		SELECT id, name, colour, description, include_data, hidden, sort_order
 		FROM domains
 		WHERE workspace_id = ${workspaceId} AND connection_ref = ${connectionRef}
 		ORDER BY sort_order, name
@@ -86,12 +88,13 @@ export async function upsertDomain(
 		const rows = await appDb<DomainRow[]>`
 			INSERT INTO domains
 				(workspace_id, connection_ref, name, colour, description,
-				 sort_order, include_data)
+				 sort_order, include_data, hidden)
 			VALUES (${workspaceId}, ${request.connectionRef}, ${request.name},
 				${request.colour}, ${request.description}, ${request.sortOrder},
-				${request.includeData})
+				${request.includeData}, ${request.hidden})
 			ON CONFLICT (workspace_id, connection_ref, name) DO NOTHING
-			RETURNING id, name, colour, description, include_data, sort_order
+			RETURNING id, name, colour, description, include_data, hidden,
+				sort_order
 		`;
 		const row = rows[0];
 		if (row === undefined) {
@@ -114,11 +117,13 @@ export async function upsertDomain(
 			colour = ${request.colour},
 			description = ${request.description},
 			sort_order = ${request.sortOrder},
-			include_data = ${request.includeData}
+			include_data = ${request.includeData},
+			hidden = ${request.hidden}
 		WHERE id = ${request.id}
 			AND workspace_id = ${workspaceId}
 			AND connection_ref = ${request.connectionRef}
-		RETURNING id, name, colour, description, include_data, sort_order
+		RETURNING id, name, colour, description, include_data, hidden,
+			sort_order
 	`;
 	const row = rows[0];
 	if (row === undefined) {
@@ -130,6 +135,47 @@ export async function upsertDomain(
 		domainId: row.id,
 	});
 	return { domain: rowToDomain(row) };
+}
+
+/**
+ * Clears the domains an import is about to replace
+ * (docs/spec/domains.md "Hidden domains").
+ *
+ * Visible domains go, because the file is the whole opinion about them.
+ * Hidden ones stay: a shelf is local, it never reached the file, and
+ * reporting it as removed would be a lie about what the import is doing.
+ *
+ * The one shelf that cannot survive is one the file also names — the
+ * unique index on `(workspace_id, connection_ref, name)` leaves no third
+ * option, and a failed import is worse than an unhidden shelf. One
+ * statement per name rather than an array parameter, per
+ * `files/service.ts`: the driver does not build an array literal from a
+ * JS array.
+ *
+ * Takes a handle so the caller can run it inside its transaction; a
+ * half-applied replace would leave the datasource tagged by two
+ * different opinions at once.
+ */
+export async function clearImportedDomains(
+	db: AppDb,
+	workspaceId: string,
+	connectionRef: string,
+	incomingNames: readonly string[],
+): Promise<void> {
+	await db`
+		DELETE FROM domains
+		WHERE workspace_id = ${workspaceId}
+			AND connection_ref = ${connectionRef}
+			AND hidden = false
+	`;
+	for (const name of incomingNames) {
+		await db`
+			DELETE FROM domains
+			WHERE workspace_id = ${workspaceId}
+				AND connection_ref = ${connectionRef}
+				AND name = ${name}
+		`;
+	}
 }
 
 /**

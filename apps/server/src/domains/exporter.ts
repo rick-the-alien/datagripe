@@ -201,6 +201,28 @@ function sortTargets(targets: DomainTarget[]): DomainTarget[] {
 	);
 }
 
+/**
+ * The domains and tags an export is allowed to see
+ * (docs/spec/domains.md "Hidden domains").
+ *
+ * A hidden domain is a shelf, not part of the structure a teammate who
+ * clones the repository should get: no directory, no manifest entry, and
+ * — the reason this filter runs before anything else — no `describe`
+ * call, because describing an object is a round trip to the database for
+ * DDL nobody asked to commit.
+ */
+export function exportable<T extends { domainId: string }>(
+	domains: readonly Domain[],
+	tags: readonly T[],
+): { domains: Domain[]; tags: T[] } {
+	const visible = domains.filter((domain) => !domain.hidden);
+	const ids = new Set(visible.map((domain) => domain.id));
+	return {
+		domains: visible,
+		tags: tags.filter((tag) => ids.has(tag.domainId)),
+	};
+}
+
 export async function buildExport(
 	domains: Domain[],
 	tagsByDomain: Map<string, DomainTarget[]>,

@@ -25,6 +25,7 @@ import { parseHostRoots } from "./domains/paths";
 import { createExecutionRegistry } from "./execution/registry";
 import { CommandRunner } from "./git/runner";
 import { createGitDatasourcesService } from "./git/service";
+import { disposePrevious, hotState } from "./hot";
 import { createAuthRoutes, sessionFromRequest } from "./http/auth";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
@@ -41,15 +42,28 @@ import { SocketHub } from "./ws/hub";
 
 const config = await loadConfig();
 
+/**
+ * Under `bun --hot` this module is evaluated again in the same process,
+ * so close what the last evaluation opened before opening anything —
+ * otherwise every save leaks a connection pool and two intervals
+ * (see `hot.ts`).
+ */
+const hot = hotState<EmbeddedPgHandle>();
+await disposePrevious(hot);
+
 // Embedded mode: boot the managed PostgreSQL cluster first, then keep its
 // schema current automatically. External mode expects `bun run db:migrate`.
-let embeddedPg: EmbeddedPgHandle | null = null;
-if (config.DATABASE_MODE === "embedded") {
+// The cluster is handed across hot reloads rather than restarted: it takes
+// seconds to start and it is not the code being edited.
+let embeddedPg: EmbeddedPgHandle | null = hot.kept;
+if (embeddedPg === null && config.DATABASE_MODE === "embedded") {
 	embeddedPg = await startEmbeddedPostgres(config);
+	hot.kept = embeddedPg;
 }
 const appDb = createAppDb(
 	embeddedPg?.url ?? (config.APP_DATABASE_URL as string),
 );
+hot.disposers.push(() => appDb.close());
 if (embeddedPg !== null) {
 	await migrate(appDb);
 }
@@ -92,10 +106,16 @@ const adapters = {
 	sqlite: new SqliteAdapter(),
 	redis: new RedisAdapter(),
 };
+// One pool per target connection lives in here, so an abandoned set of
+// adapters is the other half of the leak.
+hot.disposers.push(async () => {
+	await Promise.all(Object.values(adapters).map((adapter) => adapter.close()));
+});
 const hub = new SocketHub();
 const presence = new PresenceTracker();
 const viewThrottle = new ViewBroadcastThrottle();
 const sessions = createSessionStore(appDb);
+hot.disposers.push(() => sessions.stopSweep());
 const rateLimiter = createRateLimiter({
 	"auth.login.ip": { capacity: 30, refillPerMinute: 30 },
 	"auth.login.email": { capacity: 5, refillPerMinute: 5 },
@@ -117,6 +137,7 @@ const rateLimiter = createRateLimiter({
 	"mcp.tools.call": { capacity: 120, refillPerMinute: 120 },
 	"mcp.query": { capacity: 30, refillPerMinute: 30 },
 });
+hot.disposers.push(() => rateLimiter.stop());
 
 /**
  * Above this many estimated rows the table view's footer count comes
@@ -386,18 +407,27 @@ const server = serve<SocketData>({
 	websocket: createWebsocketHandler(dispatch, hub, presence),
 });
 
+// Stopped before the next evaluation calls serve() again, so the port is
+// free rather than contested.
+hot.disposers.push(() => server.stop(true));
+
 async function shutdown() {
 	log.info("shutting down");
-	server.stop();
-	sessions.stopSweep();
-	rateLimiter.stop();
-	await Promise.all(Object.values(adapters).map((a) => a.close()));
-	await appDb.close();
+	// The disposers own everything except the cluster: draining them here
+	// keeps one description of what has to be closed.
+	await disposePrevious(hot);
 	await embeddedPg?.stop();
 	process.exit(0);
 }
-process.on("SIGINT", () => void shutdown());
-process.on("SIGTERM", () => void shutdown());
+const onSignal = () => void shutdown();
+process.on("SIGINT", onSignal);
+process.on("SIGTERM", onSignal);
+// Otherwise a reload adds a pair every save, and the first stale handler
+// to fire would shut down using the previous evaluation's resources.
+hot.disposers.push(() => {
+	process.off("SIGINT", onSignal);
+	process.off("SIGTERM", onSignal);
+});
 
 log.info("server listening", {
 	port: server.port,

@@ -419,6 +419,21 @@ Timeout and concurrency come from the existing `QUERY_*` limits.
   `apps/web/src/stores/mcp.ts`, `defaultCollapsed` in
   `SidebarSections.tsx`
 
+### A note on `bun --hot`
+
+Not MCP's, but found while building it and fixed alongside: hot reload
+re-evaluates the entry point in the same process, so every save opened
+another connection pool and another pair of intervals while the previous
+ones stayed alive — measured at +10 connections per save, which empties
+a `max_connections = 100` cluster in six edits.
+
+There is no hook for this: `import.meta.hot` is undefined under `bun
+--hot` (Bun 1.4 — it exists for the frontend dev server, not for server
+code), and `Bun.SQL`'s `idleTimeout` does not reap an abandoned pool's
+sockets. `globalThis` does survive a reload, so `apps/server/src/hot.ts`
+stashes a disposer per resource and the next evaluation runs them first.
+The embedded cluster is handed forward instead of restarted.
+
 ## Open questions
 
 - Whether a live MCP token appears in presence ("Online") as a

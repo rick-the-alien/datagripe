@@ -88,6 +88,37 @@ Three things resist bundling and are handled explicitly:
   three times. The staging step collapses each chain onto the SONAME the
   loader asks for.
 
+## Updates
+
+The shell asks Electrobun's updater 10 seconds after launch and every six
+hours after that. When the manifest's hash differs from the installed
+one it offers a native dialog; accepting downloads the new bundle,
+stops the server, and hands off to a helper that replaces the installed
+app and relaunches it. `DATAGRIPE_DISABLE_UPDATES=true` turns the whole
+thing off.
+
+It hangs on three things lining up, and all three are easy to break:
+
+- `release.baseUrl` in `electrobun.config.ts` is baked into
+  `Resources/version.json` at build time. An installed app asks
+  `<baseUrl>/<channel>-<os>-<arch>-update.json` — nothing can repoint a
+  build after the fact, so a wrong URL is only fixable by hand-installing
+  the next version.
+- The release workflow uploads `artifacts/stable-*` **under the names the
+  build gave them**. Those names are what the installed app asks for;
+  renaming them per tag breaks every client.
+- `releases/latest/download` follows the newest release that is not a
+  prerelease and not a draft. Marking a release as a prerelease hides it
+  from everyone already installed.
+
+The server is stopped and waited on before the handoff, because the
+embedded PostgreSQL holds a lock on its data directory and the relaunched
+app opens the same one.
+
+Deltas are off (`generatePatch: false`): a patch is diffed against the
+previous release's artifact at build time and the release job has nothing
+to diff against, so every update is a full bundle.
+
 ## Icon
 
 `icon.png` is a copy of `brand/app-icon/icon.png`, written by

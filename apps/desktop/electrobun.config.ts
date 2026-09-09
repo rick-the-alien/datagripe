@@ -42,4 +42,18 @@ export default {
 			bundleCEF: false,
 		},
 	},
+	release: {
+		// GitHub redirects `releases/latest/download/<asset>` to the newest
+		// non-prerelease release, which is exactly what a stable channel
+		// wants to point at. The release workflow uploads
+		// `apps/desktop/artifacts/stable-*` under the names the build gives
+		// them — `<channel>-<os>-<arch>-update.json` and the bundle it
+		// names — which is what `Updater.checkForUpdate` goes looking for.
+		baseUrl:
+			"https://github.com/rick-the-alien/datagripe/releases/latest/download",
+		// Full bundles, not deltas. A patch is diffed against the previous
+		// release's artifact at build time, and the release job builds each
+		// platform from a clean checkout with nothing to diff against.
+		generatePatch: false,
+	},
 } satisfies ElectrobunConfig;

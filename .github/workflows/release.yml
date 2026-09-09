@@ -69,11 +69,16 @@ jobs:
       - name: Build desktop app
         run: bun run build
 
+      # `artifacts/stable-*` is the update manifest and the bundle it
+      # names. Their generated filenames are the ones the installed app
+      # asks `release.baseUrl` for, so they are uploaded verbatim —
+      # renaming them per tag would break `releases/latest/download`.
       - name: Package desktop build (unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p "$GITHUB_WORKSPACE/release-assets"
           tar -czf "$GITHUB_WORKSPACE/release-assets/datagripe-desktop-${GITHUB_REF_NAME}-${{ matrix.platform }}.tar.gz" -C "build/stable-${{ matrix.platform }}" .
+          cp artifacts/stable-* "$GITHUB_WORKSPACE/release-assets/"
 
       - name: Package desktop build (windows)
         if: runner.os == 'Windows'
@@ -81,6 +86,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE/release-assets" | Out-Null
           Compress-Archive -Path "build/stable-${{ matrix.platform }}/*" -DestinationPath "$env:GITHUB_WORKSPACE/release-assets/datagripe-desktop-$env:GITHUB_REF_NAME-${{ matrix.platform }}.zip"
+          Copy-Item artifacts/stable-* -Destination "$env:GITHUB_WORKSPACE/release-assets/"
 
       - uses: actions/upload-artifact@v4
         with:

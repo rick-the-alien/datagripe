@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { BrowserWindow, Utils } from "electrobun/main";
+import { scheduleUpdateChecks } from "./updates";
 
 /**
  * DataGripe desktop shell: spawns the DataGripe server in embedded,
@@ -183,6 +184,19 @@ function stopServer(): void {
 		// Already exited.
 	}
 }
+
+/**
+ * Stop the server and wait for it to go, so that whatever happens next
+ * does not race the embedded PostgreSQL's lock on its data directory.
+ * Bounded: a backend that will not exit should not strand the caller.
+ */
+async function stopServerAndWait(timeoutMs = 15_000): Promise<void> {
+	stopServer();
+	await Promise.race([
+		server.exited,
+		new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+	]);
+}
 process.on("exit", stopServer);
 process.on("SIGINT", () => {
 	stopServer();
@@ -205,3 +219,5 @@ new BrowserWindow({
 		height: 900,
 	},
 });
+
+scheduleUpdateChecks({ stopServer: stopServerAndWait });

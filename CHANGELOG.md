@@ -16,6 +16,14 @@
   `.desktop` entry had no `Icon=` line, because Electrobun's
   `build.linux.icon` was never set and no icon shipped with the app.
 
+- **The desktop app checks for its own updates.** It asks 10 seconds
+  after launch and every six hours after, offers the new version in a
+  dialog, and on acceptance downloads it, stops the server and restarts
+  into it. Electrobun had shipped the updater and the build had been
+  writing an update manifest all along; nothing pointed at a URL, nothing
+  published the manifest, and nothing ever asked.
+  `DATAGRIPE_DISABLE_UPDATES=true` turns it off.
+
 ### Changed
 
 - **The shipped brand assets live in `brand/`.** The app icon and the

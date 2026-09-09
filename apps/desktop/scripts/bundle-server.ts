@@ -32,8 +32,18 @@ const pgOut = path.join(outDir, "pg");
 
 /** The longest path the installer's tar reader can hold in a header. */
 const TAR_NAME_MAX = 100;
-/** What the staged paths are prefixed with inside the archive. */
-const BUNDLE_PREFIX = "DataGripe/Resources/app/";
+
+/**
+ * What the staged paths are prefixed with inside the archive. Linux was
+ * measured — it is where the limit was found — and macOS is read off the
+ * bundle layout Electrobun uses there, `<name>.app/Contents/Resources/`,
+ * which is 13 characters longer.
+ */
+function bundlePrefix(): string {
+	return os.platform() === "darwin"
+		? "DataGripe.app/Contents/Resources/app/"
+		: "DataGripe/Resources/app/";
+}
 
 /** The `@embedded-postgres` package holding this platform's binaries. */
 function nativePostgresPackage(): string {
@@ -77,16 +87,31 @@ export const postgres = path.join(dir, "bin", "postgres");
 };
 
 /**
- * Electrobun's `copy` follows symlinks, and `native/lib` is a web of them:
- * three names for every shared library, so ICU's 27MB data file would
- * otherwise land in the bundle three times over.
+ * Electrobun's `copy` follows symlinks, and Linux's `native/lib` is a web
+ * of them: three names for every shared library, so ICU's 27MB data file
+ * would otherwise land in the bundle three times over.
  *
  * Collapse each chain onto the SONAME the loader actually asks for —
  * `libicuuc.so.60`, which is what every library here records — and drop
  * the unversioned `libicuuc.so` a compiler would want along with the
  * static archives nothing at runtime links against.
+ *
+ * Linux only, and the suffix test is why. macOS names the same chain
+ * `libicudata.dylib` → `libicudata.77.dylib` → `libicudata.77.1.dylib`,
+ * where nothing ends in `.so`, every link looks like a SONAME to the rule
+ * below, and the second one renames a target the first already moved.
+ * Getting it right there means reading the Mach-O install name rather
+ * than inferring it from the filename, and a wrong guess is a bundle that
+ * builds cleanly and fails when somebody runs it. So macOS and Windows
+ * ship the duplicated copies — larger, which is a cost, not a defect.
  */
 async function pruneNativePostgres(nativeDir: string): Promise<void> {
+	if (os.platform() !== "linux") {
+		console.log(
+			`[bundle-server] skipping the shared-library prune on ${os.platform()}`,
+		);
+		return;
+	}
 	const lib = path.join(nativeDir, "lib");
 	const entries = await readdir(lib, { withFileTypes: true });
 	const links = entries.filter((entry) => entry.isSymbolicLink());
@@ -133,25 +158,37 @@ async function run(command: string[], cwd: string): Promise<void> {
 /**
  * A path over the tar budget does not fail the build; it fails the
  * install, on someone else's machine, with `TarUnsupportedFileType`.
+ *
+ * Only Linux fails the build on it. That is where the limit was actually
+ * hit — Electrobun's self-extractor rejects the GNU long-name entries a
+ * path over 100 characters needs — and macOS installs from a DMG that
+ * copies the bundle rather than unpacking it, so the same limit may only
+ * apply there to updates, or not at all. Warning rather than failing says
+ * what was found without blocking a release on a limit nobody has watched
+ * break.
  */
 async function checkTarPaths(): Promise<void> {
+	const prefix = bundlePrefix();
 	const overLong: string[] = [];
 	for (const [dest, dir] of [
 		["server", serverOut],
 		["pg", pgOut],
 	] as const) {
 		for (const entry of await readdir(dir, { recursive: true })) {
-			const archived = `${BUNDLE_PREFIX}${dest}/${entry}`;
+			const archived = `${prefix}${dest}/${entry}`;
 			if (archived.length > TAR_NAME_MAX) {
 				overLong.push(archived);
 			}
 		}
 	}
-	if (overLong.length > 0) {
-		throw new Error(
-			`${overLong.length} staged path(s) exceed the installer's ${TAR_NAME_MAX}-character tar limit, starting with:\n  ${overLong.slice(0, 5).join("\n  ")}`,
-		);
+	if (overLong.length === 0) {
+		return;
 	}
+	const detail = `${overLong.length} staged path(s) exceed the installer's ${TAR_NAME_MAX}-character tar limit, starting with:\n  ${overLong.slice(0, 5).join("\n  ")}`;
+	if (os.platform() === "linux") {
+		throw new Error(detail);
+	}
+	console.warn(`[bundle-server] warning: ${detail}`);
 }
 
 // Clear both staging directories but keep them — and their self-ignoring

@@ -62,8 +62,12 @@ jobs:
       - name: Sync Electrobun devkit
         run: bunx electrobun sync
 
-      - name: Build desktop shell
-        run: bunx electrobun build --env=stable
+      # Not `electrobun build` directly: that skips staging the backend
+      # (bundled server, migrations, web app, PostgreSQL binaries) and
+      # ships an app that cannot start. It also builds the web app, which
+      # this job does not do separately.
+      - name: Build desktop app
+        run: bun run build
 
       - name: Package desktop build (unix)
         if: runner.os != 'Windows'

@@ -44,11 +44,18 @@ server in embedded, direct-in mode (data under the OS app-data dir) and
 loads it in a frameless window — the web app's header is the drag region.
 
 ```bash
-bun run --cwd apps/web build    # the desktop shell serves apps/web/dist
+bun run --cwd apps/web build    # the dev shell serves apps/web/dist
 cd apps/desktop
-hutch electrobun dev            # dev build, opens the window
-hutch electrobun build          # packaged build under build/
+hutch electrobun dev            # dev build, runs the server from the checkout
+bun run build                   # packaged build under build/
 ```
+
+A dev build runs the server straight out of the checkout. A packaged one
+has no checkout to run, so `bun run build` first stages the backend —
+the bundled server, its migrations, the built web app and the PostgreSQL
+binaries — into `apps/desktop/staged/`, which Electrobun copies into the
+app. Running `electrobun build` on its own skips that step and produces
+an app that cannot start.
 
 The web app is also an installable PWA (`bun run --cwd apps/web build` +
 any static host, or `WEB_STATIC_DIR` on the server): frameless via

@@ -3,6 +3,10 @@
 	"version": "0.0.1",
 	"private": true,
 	"description": "DataGripe standalone desktop app (Electrobun shell over the local server)",
+	"scripts": {
+		"bundle:server": "bun run scripts/bundle-server.ts",
+		"build": "bun run scripts/bundle-server.ts && bunx electrobun build --env=stable"
+	},
 	"devDependencies": {
 		"@types/bun": "^1.2.21",
 		"typescript": "^5.9.2"

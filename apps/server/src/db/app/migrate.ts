@@ -1,10 +1,20 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { loadConfig } from "../../config";
+import { type AppConfig, loadConfig, resolveRepoPath } from "../../config";
 import { log } from "../../log";
 import { type AppDb, createAppDb } from "./pool";
 
+/** Where the migrations sit in a checkout; `MIGRATIONS_DIR` overrides it. */
 const MIGRATIONS_DIR = path.join(import.meta.dir, "../../../migrations");
+
+/** The configured migrations directory, resolved, or the checkout's. */
+export function migrationsDir(
+	config: Pick<AppConfig, "MIGRATIONS_DIR">,
+): string {
+	return config.MIGRATIONS_DIR === undefined
+		? MIGRATIONS_DIR
+		: resolveRepoPath(config.MIGRATIONS_DIR);
+}
 
 async function ensureMigrationsTable(db: AppDb): Promise<void> {
 	await db`
@@ -31,17 +41,20 @@ export async function listMigrationFiles(
  * Apply pending migrations in filename order. Each migration runs in a
  * transaction and is recorded in schema_migrations.
  */
-export async function migrate(db: AppDb): Promise<string[]> {
+export async function migrate(
+	db: AppDb,
+	dir: string = MIGRATIONS_DIR,
+): Promise<string[]> {
 	await ensureMigrationsTable(db);
 	const applied = await appliedMigrations(db);
-	const files = await listMigrationFiles();
+	const files = await listMigrationFiles(dir);
 	const newlyApplied: string[] = [];
 
 	for (const file of files) {
 		if (applied.has(file)) {
 			continue;
 		}
-		const sql = await Bun.file(path.join(MIGRATIONS_DIR, file)).text();
+		const sql = await Bun.file(path.join(dir, file)).text();
 		await db.begin(async (tx) => {
 			await tx.unsafe(sql);
 			await tx`INSERT INTO schema_migrations (name) VALUES (${file})`;
@@ -62,7 +75,7 @@ if (import.meta.main) {
 	}
 	const db = createAppDb(config.APP_DATABASE_URL);
 	try {
-		const applied = await migrate(db);
+		const applied = await migrate(db, migrationsDir(config));
 		if (applied.length === 0) {
 			log.info("database already up to date");
 		}

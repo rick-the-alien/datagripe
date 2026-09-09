@@ -1,0 +1,6 @@
+# `scripts/bundle-server.ts` stages the packaged backend here and
+# `electrobun.config.ts` copies it into the bundle. This file keeps the
+# directory tracked: Electrobun's `copy` fails on a missing source, and a
+# dev build runs the server from the checkout without staging anything.
+*
+!.gitignore

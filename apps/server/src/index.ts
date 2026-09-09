@@ -18,7 +18,7 @@ import {
 	type EmbeddedPgHandle,
 	startEmbeddedPostgres,
 } from "./db/app/embedded";
-import { migrate } from "./db/app/migrate";
+import { migrate, migrationsDir } from "./db/app/migrate";
 import { createAppDb } from "./db/app/pool";
 import { createDocumentsService } from "./documents/service";
 import { parseHostRoots } from "./domains/paths";
@@ -65,7 +65,7 @@ const appDb = createAppDb(
 );
 hot.disposers.push(() => appDb.close());
 if (embeddedPg !== null) {
-	await migrate(appDb);
+	await migrate(appDb, migrationsDir(config));
 }
 
 // Direct-in mode: a single implicit identity, no accounts or cookies.

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The packaged desktop app now runs.** It expected a monorepo checkout
+  beside the install and died at startup looking for
+  `apps/server/src/index.ts`. `apps/desktop/scripts/bundle-server.ts` now
+  stages the backend — the server bundled with `bun build`, its
+  migrations, the built web app and the PostgreSQL binaries — into the
+  bundle, and the shell runs that when there is no checkout to run from.
+  Build packaged desktop apps with `bun run build` in `apps/desktop`;
+  `electrobun build` on its own skips the staging step.
+- **The launcher no longer shows a broken icon.** The generated
+  `.desktop` entry had no `Icon=` line, because Electrobun's
+  `build.linux.icon` was never set and no icon shipped with the app.
+
 ## 0.0.1 — 2026-09-07
 
 First tagged release. Version zero in the honest sense: it works, it is

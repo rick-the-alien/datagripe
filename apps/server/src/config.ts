@@ -34,6 +34,10 @@ const envSchema = z.object({
 	WEB_STATIC_DIR: z.string().min(1).optional(),
 	/** Predefined connections file; defaults to connections.json at repo root. */
 	CONNECTIONS_FILE: z.string().min(1).optional(),
+	/** Directory of migration `.sql` files. Defaults to the checkout's
+	 * `apps/server/migrations`, which a packaged build does not have: it
+	 * ships the migrations beside the bundled server and points here. */
+	MIGRATIONS_DIR: z.string().min(1).optional(),
 	/** Allow account signup after the bootstrap user exists. */
 	ALLOW_SIGNUP: z
 		.enum(["true", "false"])

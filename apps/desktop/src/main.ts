@@ -4,17 +4,34 @@ import path from "node:path";
 import { BrowserWindow, Utils } from "electrobun/main";
 
 /**
- * DataGripe desktop shell: spawns the monorepo server in embedded,
+ * DataGripe desktop shell: spawns the DataGripe server in embedded,
  * direct-in mode (managed postgres, no accounts) with its data under the
  * OS app-data dir, then loads it in a frameless window. The header of the
  * web app doubles as the window drag region (app-region CSS in the web
  * app), so no native titlebar is wasted.
  *
- * Backend selection:
- * - DATAGRIPE_SERVER_ENTRY: absolute path to the server entry (default:
- *   discovered upward from this bundle as apps/server/src/index.ts).
+ * Backend selection, first match wins:
  * - DATAGRIPE_SERVER_CMD / DATAGRIPE_SERVER_CMD_ARGS: full custom command.
+ * - DATAGRIPE_SERVER_ENTRY: absolute path to a server entry point.
+ * - a checkout above this bundle, run from source — this is what
+ *   `hutch electrobun dev` gets, so changing the server stays a restart
+ *   rather than a rebuild.
+ * - the backend staged into `Resources/app/server` by
+ *   `scripts/bundle-server.ts`, which is what a packaged build ships.
  */
+
+/** What runs a server entry point from source; the shell's own runtime
+ * for the bundled one. A packaged install has no `bun` on its PATH. */
+const runtime = Bun.env.DATAGRIPE_SERVER_RUNTIME ?? "bun";
+
+interface Backend {
+	command: string[];
+	cwd: string;
+	/** Built web app for the server to serve, when we know where it is. */
+	webStaticDir?: string;
+	/** Migrations to apply at boot, when they are not in a checkout. */
+	migrationsDir?: string;
+}
 
 function freePort(): Promise<number> {
 	const { promise, resolve, reject } = Promise.withResolvers<number>();
@@ -32,15 +49,19 @@ function freePort(): Promise<number> {
 	return promise;
 }
 
-/** Walk up from the bundle directory looking for the monorepo server. */
-function findServerEntry(): { entry: string; cwd: string } {
+/** Walk up from the bundle directory looking for a DataGripe checkout. */
+function checkoutBackend(): Backend | null {
 	let dir = import.meta.dir;
 	// Dev bundles run from build/<env>/DataGripe-dev/Resources/app/bun —
-	// eight levels below the repo root; packaged builds may nest deeper.
+	// eight levels below the repo root.
 	for (let depth = 0; depth < 12; depth += 1) {
 		const entry = path.join(dir, "apps/server/src/index.ts");
 		if (existsSync(entry)) {
-			return { entry, cwd: path.join(dir, "apps/server") };
+			return {
+				command: [runtime, "run", entry],
+				cwd: path.join(dir, "apps/server"),
+				webStaticDir: path.join(dir, "apps/web/dist"),
+			};
 		}
 		const parent = path.dirname(dir);
 		if (parent === dir) {
@@ -48,9 +69,56 @@ function findServerEntry(): { entry: string; cwd: string } {
 		}
 		dir = parent;
 	}
-	throw new Error(
-		`Could not locate apps/server/src/index.ts above ${import.meta.dir}; set DATAGRIPE_SERVER_ENTRY`,
-	);
+	return null;
+}
+
+/**
+ * The backend a packaged build ships: the bundled server, its migrations,
+ * the built web app and the PostgreSQL binaries, all under
+ * `Resources/app/server` (see `scripts/bundle-server.ts`). This module
+ * runs from `Resources/app/bun`.
+ */
+function bundledBackend(): Backend | null {
+	const dir = path.join(import.meta.dir, "../server");
+	const entry = path.join(dir, "index.js");
+	if (!existsSync(entry)) {
+		return null;
+	}
+	return {
+		// The shell's own runtime, not `bun`: a packaged install has one
+		// Bun on disk and this is it.
+		command: [process.execPath, entry],
+		cwd: dir,
+		webStaticDir: path.join(dir, "web"),
+		migrationsDir: path.join(dir, "migrations"),
+	};
+}
+
+function resolveBackend(): Backend {
+	const customCmd = Bun.env.DATAGRIPE_SERVER_CMD;
+	if (customCmd !== undefined) {
+		return {
+			command: [
+				customCmd,
+				...(Bun.env.DATAGRIPE_SERVER_CMD_ARGS?.split(" ") ?? []),
+			],
+			cwd: Bun.env.DATAGRIPE_SERVER_CWD ?? process.cwd(),
+		};
+	}
+	const override = Bun.env.DATAGRIPE_SERVER_ENTRY;
+	if (override !== undefined) {
+		return {
+			command: [runtime, "run", override],
+			cwd: path.dirname(override),
+		};
+	}
+	const backend = checkoutBackend() ?? bundledBackend();
+	if (backend === null) {
+		throw new Error(
+			`No DataGripe server to run: no checkout above ${import.meta.dir}, and no bundled server at ${path.join(import.meta.dir, "../server/index.js")}. Set DATAGRIPE_SERVER_ENTRY or DATAGRIPE_SERVER_CMD.`,
+		);
+	}
+	return backend;
 }
 
 async function waitForServer(port: number): Promise<void> {
@@ -72,22 +140,12 @@ async function waitForServer(port: number): Promise<void> {
 const port = Number(Bun.env.DATAGRIPE_PORT ?? (await freePort()));
 const origin = `http://localhost:${port}`;
 const userData = Utils.paths.userData;
-
-const customCmd = Bun.env.DATAGRIPE_SERVER_CMD;
-const { entry, cwd } = customCmd
-	? { entry: "", cwd: Bun.env.DATAGRIPE_SERVER_CWD ?? process.cwd() }
-	: (() => {
-			const override = Bun.env.DATAGRIPE_SERVER_ENTRY;
-			if (override !== undefined) {
-				return { entry: override, cwd: path.dirname(override) };
-			}
-			return findServerEntry();
-		})();
+const backend = resolveBackend();
 
 // The desktop shell is the personal, direct-in deployment: embedded
 // postgres under the OS app-data dir, no accounts. Explicit environment
 // variables (DATABASE_MODE/APP_DATABASE_URL/AUTH_DISABLED) still win.
-const serverEnv = {
+const serverEnv: Record<string, string | undefined> = {
 	...process.env,
 	DATABASE_MODE: Bun.env.DATABASE_MODE ?? "embedded",
 	EMBEDDED_PG_DATA_DIR:
@@ -95,17 +153,24 @@ const serverEnv = {
 	AUTH_DISABLED: Bun.env.AUTH_DISABLED ?? "true",
 	PORT: String(port),
 	WEB_ORIGIN: origin,
-	WEB_STATIC_DIR: Bun.env.WEB_STATIC_DIR ?? path.join(cwd, "../web/dist"),
 	NODE_ENV: Bun.env.NODE_ENV ?? "production",
 };
+// Left alone when neither the environment nor the backend names one, so
+// the server keeps its own defaults rather than being handed "undefined".
+for (const [key, value] of [
+	["WEB_STATIC_DIR", Bun.env.WEB_STATIC_DIR ?? backend.webStaticDir],
+	["MIGRATIONS_DIR", Bun.env.MIGRATIONS_DIR ?? backend.migrationsDir],
+] as const) {
+	if (value !== undefined) {
+		serverEnv[key] = value;
+	}
+}
 
-const command = customCmd
-	? [customCmd, ...(Bun.env.DATAGRIPE_SERVER_CMD_ARGS?.split(" ") ?? [])]
-	: ["bun", "run", entry];
-
-console.log(`[desktop] starting server: ${command.join(" ")} (cwd ${cwd})`);
-const server = Bun.spawn(command, {
-	cwd,
+console.log(
+	`[desktop] starting server: ${backend.command.join(" ")} (cwd ${backend.cwd})`,
+);
+const server = Bun.spawn(backend.command, {
+	cwd: backend.cwd,
 	env: serverEnv,
 	stdout: "inherit",
 	stderr: "inherit",

@@ -136,6 +136,41 @@ const envSchema = z.object({
 		.default(10_000),
 	/** Access-report ceiling; above it the request asks for a filter. */
 	ACCESS_REPORT_MAX_CELLS: z.coerce.number().int().positive().default(250_000),
+	/**
+	 * The MCP endpoint (docs/spec/mcp.md). On by default, and unlike
+	 * `GIT_ENABLED` or `REPO_COMMANDS_ENABLED` that is deliberate: the
+	 * opt-in for this feature is per project and off until an owner
+	 * flips it, so a second default-off gate would only mean editing
+	 * `.env` to try it on your own machine. This is the deployment's
+	 * kill switch — off means the route is absent and so is the panel.
+	 */
+	MCP_ENABLED: z
+		.enum(["true", "false"])
+		.default("true")
+		.transform((value) => value === "true"),
+	/**
+	 * Row cap for one `run_query`, and a much lower one than the grid's:
+	 * the consumer is a context window. A tool call asking for more is
+	 * clamped, not refused.
+	 */
+	MCP_MAX_ROWS: z.coerce.number().int().positive().default(200),
+	/** Serialized-bytes cap for one tool call's rows. */
+	MCP_MAX_BYTES: z.coerce.number().int().positive().default(1_000_000),
+	/** Per-call cap on reading a file or a resource. */
+	MCP_READ_MAX_BYTES: z.coerce.number().int().positive().default(65_536),
+	/**
+	 * What the panel tells people to point their client at. Set it when
+	 * the server sits behind a proxy or a hostname; the default is the
+	 * port it is listening on, which is what a desktop or personal
+	 * install actually wants.
+	 */
+	MCP_PUBLIC_URL: z.url().optional(),
+	/** Cap on the briefing handed to every client at initialize. */
+	MCP_INSTRUCTIONS_MAX_BYTES: z.coerce
+		.number()
+		.int()
+		.positive()
+		.default(16_384),
 });
 
 type EnvConfig = z.infer<typeof envSchema>;

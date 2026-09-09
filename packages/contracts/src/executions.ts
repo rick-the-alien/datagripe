@@ -124,6 +124,15 @@ export const historyEntrySchema = z.object({
 	connectionName: z.string().min(1).max(255),
 	/** Executor identity (multiplayer 6d/6e attribution). */
 	actorEmail: z.string(),
+	/**
+	 * Where it came from (docs/spec/mcp.md "Visibility inside the app").
+	 * An agent's query is still somebody's query — the account is in
+	 * `actorEmail` — but a teammate reading the list needs to know that
+	 * nobody typed it.
+	 */
+	source: z.enum(["editor", "mcp"]).default("editor"),
+	/** The MCP token's name, when the row came from one and it still exists. */
+	via: z.string().nullable().default(null),
 	documentId: z.uuid().nullable(),
 	status: executionStatusSchema,
 	preview: z.string(),

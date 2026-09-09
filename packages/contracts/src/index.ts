@@ -10,6 +10,7 @@ export * from "./explorer";
 export * from "./files";
 export * from "./git";
 export * from "./gripes";
+export * from "./mcp";
 export * from "./multiplayer";
 export * from "./objects";
 export * from "./predefined";

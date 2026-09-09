@@ -164,6 +164,7 @@ describe("MysqlAdapter", () => {
 			maxRows: 100,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const events: Array<{ kind: string; payload: unknown }> = [];
@@ -195,6 +196,7 @@ describe("MysqlAdapter", () => {
 			maxRows: 1,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const result = await session.run(
@@ -216,6 +218,7 @@ describe("MysqlAdapter", () => {
 			maxRows: 100,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const before = Date.now();
@@ -238,6 +241,7 @@ describe("MysqlAdapter", () => {
 			maxRows: 100,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const result = await session.run(

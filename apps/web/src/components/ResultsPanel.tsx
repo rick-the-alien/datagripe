@@ -249,7 +249,19 @@ function HistoryView(props: {
 									)}
 								</td>
 								<td>{entry.connectionName}</td>
-								{scope === "workspace" && <td>{entry.actorEmail}</td>}
+								{scope === "workspace" && (
+									<td>
+										{entry.actorEmail}
+										{/* An agent's query is still somebody's query, but
+											  nobody typed it (docs/spec/mcp.md). */}
+										{entry.source === "mcp" && (
+											<span className="dg-history-via">
+												{" "}
+												· mcp{entry.via === null ? "" : ` · ${entry.via}`}
+											</span>
+										)}
+									</td>
+								)}
 								<td>
 									{entry.rowCount ?? "—"}
 									{entry.truncated === true ? "+" : ""}

@@ -238,6 +238,12 @@ export class MysqlAdapter implements DatabaseAdapter {
 			if (limits.readOnly) {
 				await reserved.unsafe("SET SESSION transaction_read_only = 1");
 			}
+			// docs/spec/mcp.md "Read-only", layer 2. Worth remembering that
+			// MySQL commits DDL regardless of this, which is why the
+			// classifier ahead of it is the layer that actually refuses.
+			if (limits.sandbox) {
+				await reserved.unsafe("START TRANSACTION READ ONLY");
+			}
 			const idRows = await reserved.unsafe("SELECT CONNECTION_ID() AS id");
 			const connectionId = Number(idRows[0]?.id);
 			if (!Number.isInteger(connectionId)) {
@@ -324,6 +330,9 @@ class MysqlExecutionSession implements ExecutionSession {
 	}
 
 	async close(): Promise<void> {
+		if (this.limits.sandbox) {
+			await this.reserved.unsafe("ROLLBACK").catch(() => {});
+		}
 		this.reserved.release();
 	}
 

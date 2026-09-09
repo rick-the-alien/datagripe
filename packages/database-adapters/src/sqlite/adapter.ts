@@ -171,7 +171,17 @@ export class SqliteAdapter implements DatabaseAdapter {
 		// Bun's SQLite adapter does not support reserve(); the per-file
 		// client IS the dedicated connection, so the session wraps it
 		// directly (close is a no-op — the adapter owns its lifecycle).
-		return new SqliteExecutionSession(this.clientFor(connection), limits);
+		const client = this.clientFor(connection);
+		// docs/spec/mcp.md "Read-only", layer 2 — a pragma rather than a
+		// transaction. The client is shared per file, so a BEGIN here
+		// would be a transaction across everybody using that database,
+		// and a second overlapping session would fail on it. `query_only`
+		// refuses the write outright, which is the property wanted, and
+		// close() puts it back.
+		if (limits.sandbox) {
+			await client.unsafe("PRAGMA query_only = 1");
+		}
+		return new SqliteExecutionSession(client, limits);
 	}
 
 	readTable(
@@ -236,6 +246,11 @@ class SqliteExecutionSession implements ExecutionSession {
 
 	async close(): Promise<void> {
 		// The client is shared per file; the adapter owns its lifecycle.
+		// The pragma is ours, though, and leaving it set would make the
+		// database read-only for the editor too.
+		if (this.limits.sandbox) {
+			await this.client.unsafe("PRAGMA query_only = 0").catch(() => {});
+		}
 	}
 
 	async run(

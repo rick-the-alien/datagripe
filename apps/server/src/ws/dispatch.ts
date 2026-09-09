@@ -45,6 +45,9 @@ import {
 	gitStatusRequestSchema,
 	historyListRequestSchema,
 	hostPathCheckRequestSchema,
+	mcpSettingsSetRequestSchema,
+	mcpTokenCreateRequestSchema,
+	mcpTokenRevokeRequestSchema,
 	memberAddRequestSchema,
 	memberRemoveRequestSchema,
 	objectAlterRequestSchema,
@@ -121,6 +124,7 @@ import {
 	restoreAll,
 } from "../gripes/dismissals";
 import { log } from "../log";
+import type { McpService } from "../mcp/service";
 import type { PresenceTracker } from "../multiplayer/presence";
 import type { ViewBroadcastThrottle } from "../multiplayer/views";
 import type { RateLimiter } from "../security/rateLimit";
@@ -166,6 +170,8 @@ export interface DispatcherDeps {
 	gitDatasources?: GitDatasourcesServiceWithAdmin;
 	/** Present only when REPO_COMMANDS_ENABLED is on as well. */
 	commandRunner?: CommandRunner;
+	/** The MCP panel's service; absent when MCP_ENABLED is off. */
+	mcp?: McpService;
 }
 
 const ROLE_RANK = { viewer: 0, editor: 1, owner: 2 } as const;
@@ -244,6 +250,15 @@ const MINIMUM_ROLE: Partial<Record<ClientAction, Role>> = {
 	"workspace.rename": "owner",
 	"workspace.member.add": "owner",
 	"workspace.member.remove": "owner",
+	// MCP is an owner decision, like repository trust: it is the switch
+	// that lets something outside the app read the project and run
+	// queries in a member's name (docs/spec/mcp.md). Reading the state is
+	// owner-only too, because it carries the token list — and because the
+	// panel is absent for everybody else rather than disabled.
+	"mcp.settings": "owner",
+	"mcp.settings.set": "owner",
+	"mcp.token.create": "owner",
+	"mcp.token.revoke": "owner",
 };
 
 function requireRole(ctx: AuthContext, action: ClientAction): void {
@@ -399,6 +414,20 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					? "Running a repository's commands is disabled — REPO_COMMANDS_ENABLED is off"
 					: null,
 		};
+	}
+
+	/**
+	 * The MCP service, or a named refusal. Absent rather than
+	 * present-and-disabled, so the one place that decides is the wiring.
+	 */
+	function requireMcp(): McpService {
+		if (deps.mcp === undefined) {
+			throw new ServiceError(
+				ErrorCodes.Forbidden,
+				"MCP is disabled for this deployment — MCP_ENABLED is off",
+			);
+		}
+		return deps.mcp;
 	}
 
 	function requireGit(): GitDatasourcesServiceWithAdmin {
@@ -762,6 +791,46 @@ export function createDispatcher(deps: DispatcherDeps): Dispatch {
 					request.idempotencyKey,
 					() => connections.alterColumns(workspace, request),
 				);
+			}
+
+			case "mcp.settings":
+				return requireMcp().state(workspace);
+
+			case "mcp.settings.set": {
+				const request = mcpSettingsSetRequestSchema.parse(payload);
+				log.audit("mcp.settings.change", {
+					workspaceId: workspace.id,
+					userId: ctx.userId,
+					enabled: request.enabled,
+					mode: request.mode,
+				});
+				return requireMcp().setSettings(workspace, ctx.userId, request);
+			}
+
+			case "mcp.token.create": {
+				const request = mcpTokenCreateRequestSchema.parse(payload);
+				const created = await requireMcp().createToken(
+					workspace,
+					ctx.userId,
+					request.name,
+				);
+				log.audit("mcp.token.create", {
+					workspaceId: workspace.id,
+					userId: ctx.userId,
+					tokenId: created.token.id,
+					name: created.token.name,
+				});
+				return created;
+			}
+
+			case "mcp.token.revoke": {
+				const request = mcpTokenRevokeRequestSchema.parse(payload);
+				log.audit("mcp.token.revoke", {
+					workspaceId: workspace.id,
+					userId: ctx.userId,
+					tokenId: request.id,
+				});
+				return requireMcp().revokeToken(workspace, request.id);
 			}
 
 			case "gripe.dismissals":

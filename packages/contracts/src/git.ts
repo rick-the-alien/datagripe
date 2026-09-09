@@ -114,12 +114,26 @@ export type RepoPath = z.infer<typeof repoPathSchema>;
  * when it rewrites the file. Unknown keys inside a block DataGripe owns
  * are an error, because that is almost always a typo.
  */
+/**
+ * What the repository tells an agent (docs/spec/mcp.md "The briefing").
+ *
+ * A file rather than an inline string: the briefing is prose, it wants
+ * a diff of its own, and the people who write it are writing markdown
+ * anyway. It is read on demand and never cached beyond the config.
+ */
+export const repoMcpSchema = z.object({
+	instructions: repoRelativePathSchema,
+});
+
+export type RepoMcp = z.infer<typeof repoMcpSchema>;
+
 export const repoConfigSchema = z
 	.looseObject({
 		version: z.literal(1),
 		datasource: repoDatasourceSchema,
 		branding: repoBrandingSchema.optional(),
 		paths: z.array(repoPathSchema).max(20).default([]),
+		mcp: repoMcpSchema.optional(),
 	})
 	.check((ctx) => {
 		const source = ctx.value.datasource;

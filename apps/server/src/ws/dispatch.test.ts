@@ -58,6 +58,9 @@ function createTestDispatcher() {
 				calls.push({ action: "execution.start" });
 				return { executionId: crypto.randomUUID() };
 			},
+			runOnce: async () => {
+				throw new Error("not used by the dispatcher");
+			},
 			cancel: executions.cancel,
 			replay: executions.replay,
 			get: executions.get,

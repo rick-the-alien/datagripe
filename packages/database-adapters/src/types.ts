@@ -201,6 +201,15 @@ export interface ExecuteLimits {
 	batchRows: number;
 	/** Run the whole session with default_transaction_read_only = on. */
 	readOnly: boolean;
+	/**
+	 * Run everything inside one read-only transaction and roll it back
+	 * unconditionally (docs/spec/mcp.md "Read-only"). This is layer 2 of
+	 * three: statement classification refuses the write before it gets
+	 * here, and the connection's own `readOnly` is layer 3. It catches a
+	 * classifier miss — it is not a sandbox, and what a rollback cannot
+	 * undo is listed in the spec.
+	 */
+	sandbox: boolean;
 }
 
 export interface ExecutionSink {

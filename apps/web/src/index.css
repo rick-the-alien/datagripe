@@ -4523,3 +4523,119 @@ th.dg-tv-pk .dg-tv-th {
 	white-space: pre-wrap;
 	word-break: break-word;
 }
+
+/* ---- mcp section (docs/spec/mcp.md "The panel") ---------------------------- */
+
+.dg-mcp {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 6px 10px 10px;
+	font-size: var(--dg-fs-meta);
+}
+
+.dg-mcp-mode {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.dg-mcp-note {
+	margin: 0;
+	color: var(--dg-ink-mute);
+	max-width: 40ch;
+}
+
+/* The mode is a ceiling, not a grant; this is the line that says so.
+	 Warning severity, because it is exactly that: the switch is on and
+	 something still stands in the way. */
+.dg-mcp-ceiling {
+	color: var(--dg-sev-warning);
+}
+
+.dg-mcp-url,
+.dg-mcp-revealed {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.dg-mcp-url code,
+.dg-mcp-revealed code {
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 4px 6px;
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	overflow-wrap: anywhere;
+}
+
+.dg-mcp-revealed {
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	padding: 6px;
+	background: var(--dg-raised);
+}
+
+.dg-mcp-revealed p {
+	margin: 0;
+	max-width: 40ch;
+}
+
+.dg-mcp-tokens {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.dg-mcp-tokens li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.dg-mcp-token-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--dg-font-mono);
+}
+
+.dg-mcp-token-meta {
+	color: var(--dg-ink-mute);
+}
+
+.dg-mcp-new {
+	display: flex;
+	gap: 4px;
+}
+
+.dg-mcp-new input {
+	flex: 1;
+	min-width: 0;
+	background: var(--dg-void);
+	border: 1px solid var(--dg-rule);
+	border-radius: var(--dg-radius-input);
+	color: var(--dg-ink);
+	font-family: var(--dg-font-mono);
+	font-size: var(--dg-fs-meta);
+	padding: 3px 6px;
+}
+
+.dg-mcp-status {
+	margin: 0;
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+}
+
+/* Which client ran it, beside who it ran as (docs/spec/mcp.md). */
+.dg-history-via {
+	color: var(--dg-ink-mute);
+	font-family: var(--dg-font-mono);
+}

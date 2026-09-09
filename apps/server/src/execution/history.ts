@@ -17,6 +17,8 @@ export async function listHistory(
 		connection_ref: string | null;
 		connection_name: string | null;
 		actor_email: string | null;
+		source: "editor" | "mcp";
+		via: string | null;
 		document_id: string | null;
 		status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
 		preview: string;
@@ -37,11 +39,13 @@ export async function listHistory(
 			q.id, q.connection_id, q.connection_ref,
 			coalesce(c.name, q.connection_ref, 'unknown') AS connection_name,
 			u.email AS actor_email,
+			q.source, t.name AS via,
 			q.document_id, q.status, q.preview,
 			q.started_at, q.finished_at, q.row_count, q.truncated, q.error_code
 		FROM query_executions q
 		LEFT JOIN connections c ON c.id = q.connection_id
 		LEFT JOIN users u ON u.id = q.user_id
+		LEFT JOIN mcp_tokens t ON t.id = q.mcp_token_id
 		${scopeFilter}
 		ORDER BY q.created_at DESC
 		LIMIT ${limit} OFFSET ${offset}
@@ -61,6 +65,8 @@ export async function listHistory(
 				connectionId: row.connection_id ?? row.connection_ref ?? "unknown",
 				connectionName: predefinedDisplay ?? row.connection_name ?? "unknown",
 				actorEmail: row.actor_email ?? "unknown",
+				source: row.source,
+				via: row.via,
 				documentId: row.document_id,
 				status: row.status,
 				preview: row.preview,

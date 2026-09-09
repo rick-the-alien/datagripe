@@ -21,12 +21,16 @@ import {
 import { migrate } from "./db/app/migrate";
 import { createAppDb } from "./db/app/pool";
 import { createDocumentsService } from "./documents/service";
+import { parseHostRoots } from "./domains/paths";
 import { createExecutionRegistry } from "./execution/registry";
 import { CommandRunner } from "./git/runner";
 import { createGitDatasourcesService } from "./git/service";
 import { createAuthRoutes, sessionFromRequest } from "./http/auth";
 import { errorResponse } from "./http/errors";
 import { log } from "./log";
+import type { McpDeps } from "./mcp/context";
+import { createMcpRoute } from "./mcp/route";
+import { createMcpService } from "./mcp/service";
 import { PresenceTracker } from "./multiplayer/presence";
 import { ViewBroadcastThrottle } from "./multiplayer/views";
 import { createRateLimiter } from "./security/rateLimit";
@@ -107,6 +111,11 @@ const rateLimiter = createRateLimiter({
 	"object.describe": { capacity: 60, refillPerMinute: 120 },
 	// Previews are cheap and frequent while editing; applies are neither.
 	"object.alter": { capacity: 40, refillPerMinute: 60 },
+	// Per token, not per user (docs/spec/mcp.md): an agent in a loop must
+	// not be able to outrun the people sharing the datasource. The query
+	// budget matches what a person gets on execution.start.
+	"mcp.tools.call": { capacity: 120, refillPerMinute: 120 },
+	"mcp.query": { capacity: 30, refillPerMinute: 30 },
 });
 
 /**
@@ -180,6 +189,31 @@ const executions = createExecutionRegistry({
 const documents = createDocumentsService(appDb);
 
 /**
+ * MCP (docs/spec/mcp.md). One endpoint per project, off in every project
+ * until an owner turns it on; `MCP_ENABLED` is the deployment's kill
+ * switch, and when it is off the route and the panel are both absent.
+ */
+const mcpDeps: McpDeps = {
+	appDb,
+	config,
+	connections,
+	documents,
+	executions,
+	rateLimiter,
+	hostFs: {
+		roots: parseHostRoots(
+			config.HOST_FS_ROOTS === ""
+				? config.DOMAIN_EXPORT_ROOTS
+				: config.HOST_FS_ROOTS,
+		),
+		disabled: config.HOST_FS_DISABLED,
+	},
+	...(config.GIT_ENABLED && !config.HOST_FS_DISABLED ? { gitDatasources } : {}),
+};
+const mcp = config.MCP_ENABLED ? createMcpService(mcpDeps) : null;
+const mcpRoute = config.MCP_ENABLED ? createMcpRoute(mcpDeps) : null;
+
+/**
  * The command runner (docs/spec/repo-commands.md). Output is streamed to
  * the whole workspace rather than to the socket that pressed the button:
  * a run that starts a database is something everybody in the project is
@@ -227,6 +261,7 @@ const dispatch = createDispatcher({
 	!config.HOST_FS_DISABLED
 		? { commandRunner }
 		: {}),
+	...(mcp === null ? {} : { mcp }),
 });
 const auth = createAuthRoutes({
 	appDb,
@@ -331,6 +366,14 @@ const server = serve<SocketData>({
 				"WebSocket upgrade failed",
 				requestId,
 			);
+		}
+
+		// `/mcp/<projectId>`: the project id is in the path because the
+		// scope is the project. Two projects mean two entries in an MCP
+		// client's config, and no tool has to ask which one was meant.
+		const mcpPath = /^\/mcp\/([0-9a-fA-F-]{36})\/?$/.exec(url.pathname);
+		if (mcpPath !== null && mcpRoute !== null) {
+			return mcpRoute(req, mcpPath[1] as string);
 		}
 
 		if (staticDir !== null) {

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+	ColumnDescriptor,
 	ConnectionAdapter,
 	ConnectionSource,
 	ExecutionCancelResult,
@@ -51,6 +52,50 @@ interface ExecutionRecord {
 	session?: ExecutionSession | undefined;
 	cancelRequested: boolean;
 	cleanupTimer?: ReturnType<typeof setTimeout>;
+	/** Set by `runOnce`: the caller wants the rows, not the events. */
+	collect?: Collected;
+	options: ExecutionOptions;
+}
+
+/**
+ * What a non-editor caller may change about one execution
+ * (docs/spec/mcp.md). Deliberately not part of the wire request: a
+ * browser cannot ask for a sandbox, or for someone else's attribution.
+ */
+export interface ExecutionOptions {
+	/** One rolled-back read-only transaction for the whole run. */
+	sandbox?: boolean;
+	/** Tighter than the server caps, for a caller whose consumer is a
+	 * context window rather than a grid. */
+	maxRows?: number;
+	maxBytes?: number;
+	/** History attribution. */
+	source?: "editor" | "mcp";
+	mcpTokenId?: string;
+}
+
+interface Collected {
+	sets: Map<number, { columns: ColumnDescriptor[]; rows: unknown[][] }>;
+	statements: Array<{ command: string; affectedRows?: number }>;
+	rowCount: number;
+	truncated: boolean;
+	elapsedMs: number;
+	error?: { code?: string; message: string; position?: number };
+}
+
+/** One execution, awaited to its terminal state, with its last result. */
+export interface ExecutionOutcome {
+	executionId: string;
+	status: ExecutionStatus;
+	columns: ColumnDescriptor[];
+	rows: unknown[][];
+	/** How many result sets the run produced; `rows` is the last one. */
+	resultSets: number;
+	statements: Array<{ command: string; affectedRows?: number }>;
+	rowCount: number;
+	truncated: boolean;
+	elapsedMs: number;
+	error?: { code?: string; message: string; position?: number };
 }
 
 export interface ExecutionRegistryDeps {
@@ -77,6 +122,21 @@ export interface ExecutionRegistry {
 		workspace: { id: string; name: string },
 		request: ExecutionStartRequest,
 	) => Promise<ExecutionStartResult>;
+	/**
+	 * Start an execution and wait for it, returning the rows.
+	 *
+	 * The editor's path is fire-and-forget because a grid fills from
+	 * events; a tool call is one request and one answer. Everything else
+	 * is identical — same admission check, same history row, same events
+	 * broadcast to the workspace — so an agent's query is visible to the
+	 * people in the project while it runs.
+	 */
+	runOnce: (
+		userId: string,
+		workspace: { id: string; name: string },
+		request: ExecutionStartRequest,
+		options: ExecutionOptions,
+	) => Promise<ExecutionOutcome>;
 	cancel: (
 		userId: string,
 		role: "owner" | "editor" | "viewer",
@@ -127,6 +187,7 @@ export function createExecutionRegistry(
 				(event) => !drop.has(event.sequence),
 			);
 		}
+		collectEvent(record, topic, payload);
 		deps.emit(
 			{ userId: record.userId, workspaceId: record.workspaceId },
 			record.id,
@@ -134,6 +195,73 @@ export function createExecutionRegistry(
 			sequence,
 			payload,
 		);
+	}
+
+	/**
+	 * Accumulate what `runOnce` will return. Reading it off the event
+	 * stream rather than the sink keeps one description of a result:
+	 * whatever the grid would show is what the tool call answers with.
+	 */
+	function collectEvent(
+		record: ExecutionRecord,
+		topic: string,
+		payload: unknown,
+	): void {
+		const collect = record.collect;
+		if (collect === undefined) {
+			return;
+		}
+		const data = payload as Record<string, unknown>;
+		const setFor = (index: number) => {
+			const existing = collect.sets.get(index);
+			if (existing !== undefined) {
+				return existing;
+			}
+			const created = {
+				columns: [] as ColumnDescriptor[],
+				rows: [] as unknown[][],
+			};
+			collect.sets.set(index, created);
+			return created;
+		};
+		switch (topic) {
+			case "execution.columns":
+				setFor(data.resultSet as number).columns =
+					data.columns as ColumnDescriptor[];
+				break;
+			case "execution.rows":
+				setFor(data.resultSet as number).rows.push(
+					...(data.rows as unknown[][]),
+				);
+				break;
+			case "execution.progress":
+				collect.statements.push({
+					command: data.command as string,
+					...(typeof data.affectedRows === "number"
+						? { affectedRows: data.affectedRows }
+						: {}),
+				});
+				break;
+			case "execution.completed":
+				collect.rowCount = data.rowCount as number;
+				collect.truncated = data.truncated as boolean;
+				collect.elapsedMs = data.elapsedMs as number;
+				break;
+			case "execution.failed":
+				collect.error = {
+					message: data.message as string,
+					...(typeof data.code === "string" ? { code: data.code } : {}),
+					...(typeof data.position === "number"
+						? { position: data.position }
+						: {}),
+				};
+				break;
+			case "execution.cancelled":
+				collect.elapsedMs = data.elapsedMs as number;
+				break;
+			default:
+				break;
+		}
 	}
 
 	function finish(
@@ -179,12 +307,23 @@ export function createExecutionRegistry(
 
 		let session: ExecutionSession | undefined;
 		try {
+			// A caller may ask for *less* than the server caps, never more:
+			// Math.min, so an option can tighten a limit and not lift one.
+			const maxRows = Math.min(
+				limits.maxRows,
+				record.options.maxRows ?? limits.maxRows,
+			);
+			const maxBytes = Math.min(
+				limits.maxBytes,
+				record.options.maxBytes ?? limits.maxBytes,
+			);
 			session = await adapters[connection.adapter].beginExecution(connection, {
 				timeoutMs: limits.timeoutMs,
-				maxRows: limits.maxRows,
-				maxBytes: limits.maxBytes,
-				batchRows: BATCH_ROWS,
+				maxRows,
+				maxBytes,
+				batchRows: Math.min(BATCH_ROWS, maxRows),
 				readOnly: connection.readOnly,
+				sandbox: record.options.sandbox === true,
 			});
 			record.session = session;
 
@@ -255,86 +394,157 @@ export function createExecutionRegistry(
 		}
 	}
 
-	return {
-		async start(userId, workspace, request) {
-			const running = [...records.values()].filter(
-				(record) =>
-					record.userId === userId &&
-					(record.status === "queued" || record.status === "running"),
-			).length;
-			if (running >= limits.maxConcurrentPerUser) {
-				throw new ServiceError(
-					ErrorCodes.RateLimited,
-					`Too many concurrent queries (limit ${limits.maxConcurrentPerUser})`,
-				);
-			}
-
-			// Resolve before anything dialect-specific so unknown
-			// connections fail fast and the splitter sees the adapter.
-			const connection = await deps.resolveConnection(
-				workspace,
-				request.connectionId,
+	/**
+	 * Admission, resolution, history row and registry entry — everything
+	 * both entry points share. It stops short of running so `start` can
+	 * hand the socket its id immediately and `runOnce` can await.
+	 */
+	async function admit(
+		userId: string,
+		workspace: { id: string; name: string },
+		request: ExecutionStartRequest,
+		options: ExecutionOptions,
+	): Promise<{ record: ExecutionRecord; connection: ResolvedConnection }> {
+		const running = [...records.values()].filter(
+			(record) =>
+				record.userId === userId &&
+				(record.status === "queued" || record.status === "running"),
+		).length;
+		if (running >= limits.maxConcurrentPerUser) {
+			throw new ServiceError(
+				ErrorCodes.RateLimited,
+				`Too many concurrent queries (limit ${limits.maxConcurrentPerUser})`,
 			);
-			if (adapters[connection.adapter].capabilities.execution === null) {
-				throw new ServiceError(
-					ErrorCodes.BadRequest,
-					`Connection '${request.connectionId}' does not support SQL execution`,
-				);
-			}
+		}
 
-			// The dialect is a capability, not the adapter id: they only
-			// coincide today, and Redis has no dialect at all.
-			const dialect =
-				ADAPTER_CAPABILITIES[connection.adapter].sqlDialect ?? "postgres";
-			const statements = splitStatements(
-				request.sql,
-				splitOptionsForDialect(dialect),
-			).map((statement) => statement.text);
-			if (statements.length === 0) {
-				throw new ServiceError(
-					ErrorCodes.BadRequest,
-					"No executable statement found",
-				);
-			}
+		// Resolve before anything dialect-specific so unknown
+		// connections fail fast and the splitter sees the adapter.
+		const connection = await deps.resolveConnection(
+			workspace,
+			request.connectionId,
+		);
+		if (adapters[connection.adapter].capabilities.execution === null) {
+			throw new ServiceError(
+				ErrorCodes.BadRequest,
+				`Connection '${request.connectionId}' does not support SQL execution`,
+			);
+		}
 
-			const id = crypto.randomUUID();
-			const isPredefined = connection.source === "predefined";
-			await appDb`
+		// The dialect is a capability, not the adapter id: they only
+		// coincide today, and Redis has no dialect at all.
+		const dialect =
+			ADAPTER_CAPABILITIES[connection.adapter].sqlDialect ?? "postgres";
+		const statements = splitStatements(
+			request.sql,
+			splitOptionsForDialect(dialect),
+		).map((statement) => statement.text);
+		if (statements.length === 0) {
+			throw new ServiceError(
+				ErrorCodes.BadRequest,
+				"No executable statement found",
+			);
+		}
+
+		const id = crypto.randomUUID();
+		// `connection_id` is a uuid column, so only a managed datasource
+		// can go in it: predefined ids are slugs and git ids are
+		// `git:<uuid>`. Everything else is recorded as a ref, which is
+		// also what the history view falls back to for a display name.
+		const isManaged = connection.source === "managed";
+		const ref =
+			connection.source === "predefined"
+				? `predefined:${request.connectionId}`
+				: request.connectionId;
+		await appDb`
 				INSERT INTO query_executions (
 					id, user_id, connection_id, connection_ref, document_id,
-					status, query_hash, preview
+					status, query_hash, preview, source, mcp_token_id
 				) VALUES (
 					${id}, ${userId},
-					${isPredefined ? null : request.connectionId},
-					${isPredefined ? `predefined:${request.connectionId}` : null},
+					${isManaged ? request.connectionId : null},
+					${isManaged ? null : ref},
 					${request.documentId ?? null},
 					'queued', ${queryHash(request.sql)},
-					${request.sql.slice(0, QUERY_PREVIEW_LENGTH)}
+					${request.sql.slice(0, QUERY_PREVIEW_LENGTH)},
+					${options.source ?? "editor"},
+					${options.mcpTokenId ?? null}
 				)
 			`;
 
-			const record: ExecutionRecord = {
-				id,
+		const record: ExecutionRecord = {
+			id,
+			userId,
+			workspaceId: workspace.id,
+			connectionId: request.connectionId,
+			...(request.documentId !== undefined
+				? { documentId: request.documentId }
+				: {}),
+			status: "queued",
+			statements,
+			nextSequence: 1,
+			events: [],
+			cancelRequested: false,
+			options,
+		};
+		records.set(id, record);
+		log.audit("execution.start", {
+			userId,
+			executionId: id,
+			connectionId: request.connectionId,
+			source: options.source ?? "editor",
+			...(options.mcpTokenId === undefined
+				? {}
+				: { mcpTokenId: options.mcpTokenId }),
+		});
+		return { record, connection };
+	}
+
+	return {
+		async start(userId, workspace, request) {
+			const { record, connection } = await admit(
 				userId,
-				workspaceId: workspace.id,
-				connectionId: request.connectionId,
-				...(request.documentId !== undefined
-					? { documentId: request.documentId }
-					: {}),
-				status: "queued",
-				statements,
-				nextSequence: 1,
-				events: [],
-				cancelRequested: false,
-			};
-			records.set(id, record);
-			log.audit("execution.start", {
-				userId,
-				executionId: id,
-				connectionId: request.connectionId,
-			});
+				workspace,
+				request,
+				{},
+			);
 			void run(record, connection);
-			return { executionId: id };
+			return { executionId: record.id };
+		},
+
+		async runOnce(userId, workspace, request, options) {
+			const { record, connection } = await admit(
+				userId,
+				workspace,
+				request,
+				options,
+			);
+			const collect: Collected = {
+				sets: new Map(),
+				statements: [],
+				rowCount: 0,
+				truncated: false,
+				elapsedMs: 0,
+			};
+			record.collect = collect;
+			await run(record, connection);
+			const indexes = [...collect.sets.keys()].sort((a, b) => a - b);
+			const last = indexes[indexes.length - 1];
+			const set =
+				last === undefined
+					? { columns: [], rows: [] }
+					: (collect.sets.get(last) ?? { columns: [], rows: [] });
+			return {
+				executionId: record.id,
+				status: record.status,
+				columns: set.columns,
+				rows: set.rows,
+				resultSets: indexes.length,
+				statements: collect.statements,
+				rowCount: collect.rowCount,
+				truncated: collect.truncated,
+				elapsedMs: collect.elapsedMs,
+				...(collect.error === undefined ? {} : { error: collect.error }),
+			};
 		},
 
 		async cancel(userId, role, executionId) {

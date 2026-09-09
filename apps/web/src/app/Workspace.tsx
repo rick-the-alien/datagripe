@@ -27,6 +27,7 @@ import { EditorTab } from "../components/EditorTab";
 import { Explorer } from "../components/Explorer";
 import { GripesPanel } from "../components/GripesPanel";
 import { IconClose, IconSettings } from "../components/icons";
+import { McpSection } from "../components/McpSection";
 import { NewProjectForm } from "../components/NewProjectForm";
 import { ObjectView } from "../components/ObjectView";
 import { PathTree } from "../components/PathTree";
@@ -635,6 +636,19 @@ export function Workspace() {
 								title: "Online",
 								body: <PresenceSidebar />,
 							},
+							// Collapsed by default, and only for an owner: MCP is
+							// the switch that lets something outside the app read
+							// the project (docs/spec/mcp.md).
+							...(currentWorkspace?.role === "owner"
+								? [
+										{
+											id: "mcp",
+											title: "mcp",
+											defaultCollapsed: true,
+											body: <McpSection />,
+										},
+									]
+								: []),
 						]}
 					/>
 				</aside>

@@ -311,6 +311,51 @@ the query in it, tick a file in the repository section and commit it,
 with nothing having been committed, pushed, pulled or executed that was
 not pressed.
 
+## Phase 15 — MCP server · shipped 2026-09-09
+
+Designed in `docs/spec/mcp.md`. The project's own knowledge — which
+datasource is which, how they relate, what a column means — reaches an
+agent instead of being re-guessed from field names.
+
+- [x] `POST /mcp/<projectId>`, stateless JSON-RPC, hand-rolled: one
+      endpoint per project, so no tool ever takes a project argument
+- [x] `mcp_tokens` + `mcp_settings` (migration 0019); bearer only,
+      cookies ignored, effective role = the minter's current role capped
+      at `editor` and never `owner`, resolved per call so demoting or
+      removing them stops their agent
+- [x] Off by default per project, read-only by default; `MCP_ENABLED`
+      defaults on as the deployment's kill switch
+- [x] Read-only in three layers: statement classification refuses on
+      tokens rather than text, `ExecuteLimits.sandbox` runs the call in
+      a read-only transaction that always rolls back, and the
+      datasource's own constraints still apply. The mode is a ceiling
+      and never overrides a datasource's own `read only`
+- [x] What a rollback cannot undo is written down rather than papered
+      over, and layer 2 is proven against a real server
+      (`postgres/sandbox.test.ts`) with the classifier out of the way
+- [x] Nine tools: `describe_project`, `describe_domain`, `list_docs`,
+      `read_doc`, `search_docs`, `list_schemas`, `list_objects`,
+      `describe_object`, `run_query` — with the domain map in the
+      orientation call, because `information_schema` cannot say which
+      tables are billing
+- [x] `resources/list` and `resources/read` mirror the file reads for
+      clients where a human assembles context by hand
+- [x] `instructions` from `.datagripe/config.yaml` → `AGENTS.md` → our
+      words alone, with the mode sentence always ours and always first
+- [x] `mcp` sidebar section, collapsed by default and owner-only:
+      toggle, mode, endpoint, copy-client-config, tokens with
+      reveal-once, last used, revoke. `defaultCollapsed` in
+      `SidebarSections`, with an expanded list beside the collapsed one
+- [x] An MCP query is an execution — history row, workspace-wide
+      events, `source = 'mcp'` and the token's name in the history list
+      so a teammate sees which client ran it
+- [x] Per-token rate limits, a 200-row default cap and compact
+      serialisation, because the consumer is a context window
+
+Exit: point an agent at a cloned project and it answers a question about
+the database using the project's own runbook — with a read-only project
+unable to change a row no matter what it is asked to run.
+
 ## Unscheduled / parking lot
 - SQLite type/nullability/default changes — need the 12-step table rebuild
 - Index, constraint and trigger editing — the preview-then-apply shape is

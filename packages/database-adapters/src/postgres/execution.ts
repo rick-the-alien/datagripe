@@ -37,6 +37,14 @@ export async function beginPostgresExecution(
 		if (limits.readOnly) {
 			await reserved.unsafe("SET default_transaction_read_only = on");
 		}
+		// One transaction for the whole session, rolled back in close()
+		// whatever happened (docs/spec/mcp.md "Read-only"). Opened here
+		// rather than per statement so a second statement cannot land
+		// outside it.
+		if (limits.sandbox) {
+			await reserved.unsafe("BEGIN");
+			await reserved.unsafe("SET TRANSACTION READ ONLY");
+		}
 		const pidRows = await reserved.unsafe("SELECT pg_backend_pid() AS pid");
 		const pid = Number(pidRows[0]?.pid);
 		if (!Number.isInteger(pid)) {
@@ -66,6 +74,11 @@ class PostgresExecutionSession implements ExecutionSession {
 	}
 
 	async close(): Promise<void> {
+		// Unconditional: a sandbox session that succeeded is rolled back
+		// exactly like one that failed. There is no path here that commits.
+		if (this.limits.sandbox) {
+			await this.reserved.unsafe("ROLLBACK").catch(() => {});
+		}
 		this.reserved.release();
 	}
 
@@ -160,13 +173,24 @@ class PostgresExecutionSession implements ExecutionSession {
 		sink: ExecutionSink,
 		state: RunState,
 	): Promise<number | null> {
-		await this.reserved.unsafe("BEGIN");
+		// A cursor needs a transaction. Outside a sandbox this path owns
+		// one per statement; inside one there is already a transaction
+		// open, and issuing BEGIN/ROLLBACK here would end it — leaving
+		// every later statement running in autocommit, which is the one
+		// thing the sandbox exists to prevent. So: a savepoint.
+		const sandbox = this.limits.sandbox;
+		await this.reserved.unsafe(sandbox ? "SAVEPOINT dg_cur_sp" : "BEGIN");
 		try {
 			await this.reserved.unsafe(
 				`DECLARE dg_cur NO SCROLL CURSOR FOR ${statement}`,
 			);
 		} catch (error) {
-			await this.reserved.unsafe("ROLLBACK").catch(() => {});
+			// A failed DECLARE aborted the transaction, so the fallback to
+			// direct execution needs it back: rewind to the savepoint
+			// rather than throwing the whole session away.
+			await this.reserved
+				.unsafe(sandbox ? "ROLLBACK TO SAVEPOINT dg_cur_sp" : "ROLLBACK")
+				.catch(() => {});
 			const message = error instanceof Error ? error.message : "";
 			if (
 				message.includes(USER_CANCEL_MESSAGE) ||
@@ -203,7 +227,9 @@ class PostgresExecutionSession implements ExecutionSession {
 			}
 		} finally {
 			await this.reserved.unsafe("CLOSE dg_cur").catch(() => {});
-			await this.reserved.unsafe("ROLLBACK").catch(() => {});
+			await this.reserved
+				.unsafe(sandbox ? "RELEASE SAVEPOINT dg_cur_sp" : "ROLLBACK")
+				.catch(() => {});
 		}
 		return offset;
 	}

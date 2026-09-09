@@ -113,6 +113,7 @@ describe("SqliteAdapter", () => {
 			maxRows: 100,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const events: Array<{ kind: string; payload: unknown }> = [];
@@ -140,6 +141,7 @@ describe("SqliteAdapter", () => {
 			maxRows: 1,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const result = await session.run(
@@ -159,6 +161,7 @@ describe("SqliteAdapter", () => {
 			maxRows: 100,
 			maxBytes: 1_000_000,
 			batchRows: 500,
+			sandbox: false,
 			readOnly: false,
 		});
 		const result = await session.run(

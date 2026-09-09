@@ -3,11 +3,13 @@
 The datagripe.com landing page. Plain HTML, CSS and one script — there
 is nothing to build, so there is nothing to break in a build.
 
-`tokens.css`, `icon.svg` and `mascot/` are **copies** of
-`docs/brand/tokens.css`, `apps/web/public/icon.svg` and
-`apps/web/public/mascot/`. Re-copy them when any of those change; the
-site deliberately does not import across the repo, because the deployed
-artifact is just this folder.
+`icon.svg` and `mascot/` are **copies** of `brand/app-icon/icon.svg` and
+`brand/mascot/`, written by `bun run sync:brand`; CI fails if they drift.
+`tokens.css` is still a hand copy of `docs/brand/tokens.css`.
+
+The site deliberately does not import across the repo, because the
+deployed artifact is just this folder — which is also why the copies are
+committed rather than assembled at deploy time.
 
 ## How it deploys
 

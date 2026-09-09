@@ -68,6 +68,8 @@ Linux, macOS, and Windows and attaches them to a GitHub release (see
 
 ## Documentation
 
+- [brand/](brand) — the shipped brand assets (app icon, mascot), copied
+  into `apps/` and `site/` by `bun run sync:brand`
 - [site/](site) — the datagripe.com landing page, deployed to GitHub Pages
 - [roadmap.md](roadmap.md) — phases, progress, scheduling
 - [docs/initial_idea.md](docs/initial_idea.md) — original engineering handoff

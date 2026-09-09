@@ -4,6 +4,10 @@ Version 3. Everything needed to build the thing.
 
 Datagripe is a database client that does its job perfectly and resents you the entire time. It is an independent parody — see the parody boundary section of the spec before doing anything with marketing.
 
+This directory is the writing. The shipped files it describes — the app
+icon and the painted mascot set — live in [`brand/`](../../brand) at the
+repository root.
+
 ## What is in here
 
 | File | What it is |
@@ -44,4 +48,4 @@ These were each found the hard way and are the most likely regressions.
 
 - Light theme — dark only, listed as an open item
 - The gripe rule catalogue — how to write one is specified, which ones ship is not
-- Mascot assets — the painted set is drawn and in the app (`apps/web/public/mascot/`, used by `MascotArt`); the flat SVG rig for animation has not been
+- Mascot assets — the painted set is drawn and in the app (`brand/mascot/`, used by `MascotArt`); the flat SVG rig for animation has not been

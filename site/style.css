@@ -124,7 +124,7 @@ h1 {
 /* ---- mascot ------------------------------------------------ */
 
 /* The painted set (docs/brand/brand-system.md "Two asset sets, not
-   one"), copied from apps/web/public/mascot. Marketing may show more of
+   one"), copied from brand/mascot by `sync:brand`. Marketing may show more of
    it than the app does, but one per section and never the same pose
    twice: "you should be pleased to see it" only holds while it is rare.
 

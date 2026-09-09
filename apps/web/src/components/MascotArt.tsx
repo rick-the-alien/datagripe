@@ -6,7 +6,8 @@
  * asset.
  *
  * Every pose lives here so the set is registered in one place, and each
- * is loaded by URL out of `public/mascot/` rather than inlined. Inlining
+ * is loaded by URL out of `public/mascot/` (a copy of `brand/mascot/`,
+ * see brand/README.md) rather than inlined. Inlining
  * would put ~90kB of paths per pose into the bundle whether or not it
  * renders, collide the poses' gradient ids with each other, and buy
  * nothing back: the paint is baked, so there is no custom property for

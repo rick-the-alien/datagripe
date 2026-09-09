@@ -16,6 +16,17 @@
   `.desktop` entry had no `Icon=` line, because Electrobun's
   `build.linux.icon` was never set and no icon shipped with the app.
 
+### Changed
+
+- **The shipped brand assets live in `brand/`.** The app icon and the
+  painted mascot set had been sitting in `apps/web/public/`, hand-copied
+  into `site/`. `brand/app-icon/icon.svg` is now the drawing everything
+  else comes from: `bun run brand:render` rasterises it into the sizes
+  the platforms ask for, `bun run sync:brand` copies the results into
+  `apps/` and `site/`, and CI fails if a copy drifts. The desktop, the
+  PWA and the landing page now show the same mark, and the placeholder
+  cylinder favicon is retired.
+
 ## 0.0.1 — 2026-09-07
 
 First tagged release. Version zero in the honest sense: it works, it is

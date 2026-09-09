@@ -90,10 +90,10 @@ Three things resist bundling and are handled explicitly:
 
 ## Icon
 
-`icon.png` is a 256x256 rasterisation of `site/icon.svg`
-(`rsvg-convert -w 256 -h 256 site/icon.svg -o apps/desktop/icon.png`), and
-inherits that file's MOCK placeholder status — see
-`docs/brand/brand-system.md` "Favicon".
+`icon.png` is a copy of `brand/app-icon/icon.png`, written by
+`bun run sync:brand` — do not edit it here. It is rendered from
+`brand/app-icon/icon.svg` by `bun run brand:render`; see
+[brand/README.md](../../brand/README.md).
 
 `build.linux.icon` points Electrobun at it; Electrobun copies it to
 `Resources/appIcon.png` and writes `Icon=appIcon` into the generated

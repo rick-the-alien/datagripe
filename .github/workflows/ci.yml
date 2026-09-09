@@ -68,6 +68,10 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # brand/ is the source of truth; apps/ and site/ hold copies of it.
+      - name: Brand assets in sync
+        run: bun run check:brand
+
       - name: Unit tests
         run: bun test
 

@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { BrowserWindow, Utils } from "electrobun/main";
+import { app, BrowserWindow, Utils } from "electrobun/main";
 import { scheduleUpdateChecks } from "./updates";
 
 /**
@@ -206,6 +206,18 @@ process.on("SIGTERM", () => {
 	stopServer();
 	process.exit(0);
 });
+// Closing the window does not go through any of those. Electrobun quits
+// natively, and the process ends without Bun running an exit handler — so
+// the server outlived the app that spawned it, and with it the embedded
+// PostgreSQL holding the data directory. The next launch then could not
+// start its own, and the app never opened again.
+//
+// `before-quit` is the one hook every quit path passes through: the window
+// closing, `Utils.quit`, and the updater's handoff. Handlers are called
+// synchronously and shutdown proceeds without waiting, so this signals and
+// does not block; the native quit allows five seconds, which is longer
+// than the server needs to stop a local cluster.
+app.on("before-quit", () => stopServer());
 
 await waitForServer(port);
 console.log(`[desktop] server healthy on ${origin}`);

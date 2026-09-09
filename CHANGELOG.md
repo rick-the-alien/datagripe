@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Quitting the desktop app no longer leaves its database running.**
+  Closing the window quits Electrobun natively, without running a Bun
+  exit handler, so the shell never signalled the server it had spawned —
+  the server outlived the app, the embedded PostgreSQL kept its lock on
+  the data directory, and the next launch could not start its own and
+  never opened. The shell now stops the server from `before-quit`, which
+  every quit path passes through.
+- **A cluster left behind by a crash no longer bricks the app.** The
+  server adopts a postmaster already serving its data directory instead
+  of failing to start beside it, and stops it on the way out — including
+  from an exit handler, which is the only thing that runs when shutdown
+  is cut short.
+
 ## 0.0.2 — 2026-09-09
 
 ### Fixed

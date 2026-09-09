@@ -88,6 +88,26 @@ Three things resist bundling and are handled explicitly:
   three times. The staging step collapses each chain onto the SONAME the
   loader asks for.
 
+## Shutting down, and the cluster that outlives it
+
+Closing the window does not run a Bun exit handler — Electrobun quits
+natively — so `src/main.ts` stops the server from the `before-quit` event
+instead. Without that the server outlived the app that spawned it, and
+with it the embedded PostgreSQL holding the data directory; the next
+launch could not start its own and never opened.
+
+A kill the app cannot intercept still strands both, so the server
+**adopts a cluster that is already running** rather than refusing to
+start: `postmaster.pid` gives the postmaster's pid and port, and if that
+process is alive the server connects to it instead of starting one.
+Postgres removes the file itself when the pid is dead, so a stale one is
+already handled.
+
+One caveat: two DataGripe instances now share one cluster instead of the
+second refusing to start, and whichever quits first takes the cluster
+with it. That trade is deliberate — an orphan left by a crash is common
+and used to be unrecoverable, and two instances is neither.
+
 ## Updates
 
 The shell asks Electrobun's updater 10 seconds after launch and every six

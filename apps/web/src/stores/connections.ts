@@ -2,6 +2,7 @@ import type {
 	ConnectionAdapter,
 	ConnectionMetadata,
 	ConnectionTestResult,
+	TlsMode,
 	WorkspaceOpenResult,
 } from "@datagripe/contracts";
 import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
@@ -41,7 +42,7 @@ export type ConnectionDraft = {
 	username: string;
 	/** Empty when editing and keeping the stored password. */
 	password: string;
-	tlsMode: "disable" | "require" | "verify-full";
+	tlsMode: TlsMode;
 	readOnly: boolean;
 	/** Tree shows every schema as an expandable level. */
 	showAllSchemas: boolean;

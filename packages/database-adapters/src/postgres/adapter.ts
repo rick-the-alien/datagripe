@@ -69,12 +69,8 @@ export class PostgresAdapter implements DatabaseAdapter {
 				database: connection.database,
 				username: connection.username,
 				password: connection.password,
-				tls:
-					connection.tlsMode === "disable"
-						? false
-						: connection.tlsMode === "require"
-							? true
-							: { rejectUnauthorized: true },
+				// libpq's own vocabulary, which this option accepts verbatim.
+				tls: connection.tlsMode,
 				max: 3,
 				idleTimeout: 20,
 				connectionTimeout: 10,

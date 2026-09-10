@@ -11,6 +11,7 @@ import type {
 	TableColumn,
 	TableEdit,
 	TableSort,
+	TlsMode,
 } from "@datagripe/contracts";
 import type {
 	AccessReportData,
@@ -31,7 +32,7 @@ export interface ResolvedConnection {
 	database: string;
 	username: string;
 	password: string;
-	tlsMode: "disable" | "require" | "verify-full";
+	tlsMode: TlsMode;
 	readOnly: boolean;
 }
 

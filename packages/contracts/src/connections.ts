@@ -8,7 +8,33 @@ import { documentListEntrySchema } from "./multiplayer";
 
 export type { AdapterDialect, ConnectionAdapter } from "./adapters";
 
-export const tlsModeSchema = z.enum(["disable", "require", "verify-full"]);
+/**
+ * The `sslmode` values this driver can actually honour, in ascending
+ * strictness.
+ *
+ * `verify-ca` joins the original three because it is a real distinction
+ * somebody chooses deliberately — the chain must validate but the
+ * hostname need not match, which is what a certificate issued for an
+ * internal name behind a load balancer needs — and Bun's `tls` option
+ * takes libpq's spellings verbatim, so it costs nothing to pass along.
+ *
+ * libpq's other two, `allow` and `prefer`, are deliberately absent.
+ * Measured against a non-TLS PostgreSQL on Bun 1.4: `disable` connects,
+ * `require`/`verify-ca`/`verify-full` fail immediately with "Server does
+ * not support SSL", and `allow` and `prefer` **hang until the connection
+ * timeout**. There is no negotiated fallback behind them, so offering
+ * either would be offering a setting whose only behaviour is a ten-second
+ * stall. A pasted `?sslmode=prefer` is raised to `require` instead, and
+ * the user is told: failing visibly beats quietly not encrypting.
+ */
+export const tlsModeSchema = z.enum([
+	"disable",
+	"require",
+	"verify-ca",
+	"verify-full",
+]);
+
+export type TlsMode = z.infer<typeof tlsModeSchema>;
 
 /**
  * `git` is a datasource whose definition is read from a repository's

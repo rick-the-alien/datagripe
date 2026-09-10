@@ -1,6 +1,7 @@
 export * from "./access";
 export * from "./adapters";
 export * from "./auth";
+export * from "./connectionString";
 export * from "./connections";
 export * from "./documents";
 export * from "./domains";

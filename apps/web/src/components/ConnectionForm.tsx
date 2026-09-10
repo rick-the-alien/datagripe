@@ -6,8 +6,13 @@ import type {
 	DomainExportPathCheck,
 	GitDatasource,
 	HostPathCheck,
+	TlsMode,
 } from "@datagripe/contracts";
-import { ADAPTER_CAPABILITIES } from "@datagripe/contracts";
+import {
+	ADAPTER_CAPABILITIES,
+	formatConnectionString,
+	tlsModeSchema,
+} from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useState } from "react";
 import { wsClient } from "../api/ws";
@@ -53,6 +58,13 @@ const EMPTY_DRAFT: ConnectionDraft = {
 };
 
 const ADAPTERS: ConnectionAdapter[] = ["postgres", "mysql", "sqlite", "redis"];
+
+/**
+ * libpq's `sslmode` values in ascending strictness, so the select reads as
+ * a scale rather than a set. Taken from the schema so adding one there
+ * cannot leave this list behind.
+ */
+const TLS_MODES: readonly TlsMode[] = tlsModeSchema.options;
 
 /** Display names per the mock; the tree and status line use short ids. */
 const ADAPTER_NAMES: Record<ConnectionAdapter, string> = {
@@ -506,12 +518,10 @@ function ConnectionFormBody(props: {
 	 * log. `help` explains the fields. The rail toggles between them
 	 * rather than stacking two columns.
 	 */
-	const connectionString =
-		draft.adapter === "sqlite"
-			? `sqlite:${draft.databaseName || "…"}`
-			: draft.adapter === "redis"
-				? `redis://${draft.host || "…"}:${draft.port}/${draft.databaseName || "0"}`
-				: `${draft.adapter}://${draft.username || "…"}@${draft.host || "…"}:${draft.port}/${draft.databaseName || "…"}`;
+	// The same writer the paste box reads back, so the string shown here
+	// and the string this form accepts cannot drift into two dialects. It
+	// takes no password argument at all: this is read on screen.
+	const connectionString = formatConnectionString(draft);
 
 	const status: { text: string; tone: "ok" | "bad" | "dim" } = testing
 		? { text: "testing…", tone: "dim" }
@@ -771,9 +781,11 @@ function ConnectionFormBody(props: {
 								})
 							}
 						>
-							<option value="disable">disable</option>
-							<option value="require">require</option>
-							<option value="verify-full">verify-full</option>
+							{TLS_MODES.map((mode) => (
+								<option key={mode} value={mode}>
+									{mode}
+								</option>
+							))}
 						</select>
 					</label>
 				)}

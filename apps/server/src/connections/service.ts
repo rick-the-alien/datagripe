@@ -19,6 +19,7 @@ import type {
 	TableMutateResult,
 	TableRowsRequest,
 	TableRowsResult,
+	TlsMode,
 } from "@datagripe/contracts";
 import { adapterInfoOf } from "@datagripe/contracts";
 import { ErrorCodes } from "@datagripe/contracts/errors";
@@ -65,7 +66,7 @@ type ConnectionRow = {
 	port: number | null;
 	database_name: string;
 	username: string | null;
-	tls_mode: "disable" | "require" | "verify-full" | null;
+	tls_mode: TlsMode | null;
 	read_only: boolean;
 	show_all_schemas: boolean;
 	created_at: string;

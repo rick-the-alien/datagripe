@@ -69,7 +69,7 @@ export class MysqlAdapter implements DatabaseAdapter {
 				database: connection.database,
 				username: connection.username,
 				password: connection.password,
-				tls: connection.tlsMode !== "disable",
+				tls: connection.tlsMode,
 				// caching_sha2_password over plain TCP needs key retrieval;
 				// acceptable on trusted local links, never with TLS modes.
 				allowPublicKeyRetrieval: connection.tlsMode === "disable",

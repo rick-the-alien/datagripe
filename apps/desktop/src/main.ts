@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { app, BrowserWindow, Utils } from "electrobun/main";
+import { useSystemCertificates } from "./certificates";
 import { applyRenderingSettings, readSettings } from "./rendering";
 import { scheduleUpdateChecks } from "./updates";
 
@@ -138,6 +139,11 @@ async function waitForServer(port: number): Promise<void> {
 	}
 	throw new Error(`DataGripe server did not become healthy on port ${port}`);
 }
+
+// Before anything reaches the network, and before `serverEnv` is built
+// below: the server inherits this and needs it for the same reason the
+// updater does — it is the same runtime, talking TLS to databases.
+useSystemCertificates();
 
 const port = Number(Bun.env.DATAGRIPE_PORT ?? (await freePort()));
 const origin = `http://localhost:${port}`;

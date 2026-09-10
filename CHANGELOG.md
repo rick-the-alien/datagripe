@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The desktop app can reach its own update manifest.** Every check since
+  the updater shipped failed with `unable to get local issuer
+  certificate`: the bundled runtime does not find the system's
+  certificate authorities on its own, while the system Bun on the same
+  machine fetches the same URL fine. It is pointed at them now, before
+  anything reaches the network — the server inherits it too, and needs it
+  for the same reason. 0.0.2 and 0.0.3 cannot update themselves; 0.0.4
+  has to be installed by hand, and updates work from there.
+- **The update dialog no longer says "0.0.3 is available" to someone
+  running 0.0.3.** Updates are compared by build hash, so two builds can
+  share a version; when they do, the dialog names the builds instead.
+
 ## 0.0.3 — 2026-09-10
 
 ### Added

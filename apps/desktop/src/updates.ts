@@ -66,11 +66,21 @@ async function offerUpdate(hooks: UpdateHooks): Promise<void> {
 		offered.add(info.hash);
 
 		const local = await Updater.getLocalInfo();
+		// What is compared is the build hash, so two builds can share a
+		// version — a local one against a release, or a re-tagged release.
+		// Saying "0.0.3 is available, you are running 0.0.3" in that case
+		// reads as a bug in the updater rather than a difference in builds.
+		const sameVersion = info.version === local.version;
+		const build = (hash: string) => hash.slice(0, 8);
 		const { response } = await Utils.showMessageBox({
 			type: "question",
 			title: "Update DataGripe",
-			message: `DataGripe ${info.version} is available.`,
-			detail: `You are running ${local.version}. Installing closes DataGripe and reopens it on the new version.`,
+			message: sameVersion
+				? `A different build of DataGripe ${info.version} is available.`
+				: `DataGripe ${info.version} is available.`,
+			detail: sameVersion
+				? `You are running build ${build(local.hash)} and this is ${build(info.hash)}. Installing closes DataGripe and reopens it on the other build.`
+				: `You are running ${local.version}. Installing closes DataGripe and reopens it on the new version.`,
 			buttons: ["Install and Restart", "Later"],
 			defaultId: 0,
 			cancelId: 1,

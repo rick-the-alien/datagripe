@@ -142,6 +142,13 @@ stops the server, and hands off to a helper that replaces the installed
 app and relaunches it. `DATAGRIPE_DISABLE_UPDATES=true` turns the whole
 thing off.
 
+The runtime does not find the system's certificate authorities on its
+own, so `src/certificates.ts` points it at them before anything reaches
+the network. Without that every check failed with `unable to get local
+issuer certificate` — quietly, in the log, exactly as a network problem
+should, which is why it looked like one user's proxy rather than the
+updater being dead for everyone.
+
 It hangs on three things lining up, and all three are easy to break:
 
 - `release.baseUrl` in `electrobun.config.ts` is baked into

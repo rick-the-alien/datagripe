@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- **Paste a connection string to create a datasource.** A box above the
+  engine picker on the new-datasource form reads a provider's URL —
+  scheme, host, port, database, user, password, `sslmode` — and fills the
+  fields in for you to check. Parsed in the browser; the string itself is
+  never sent anywhere. Anything it cannot honour is named underneath with
+  the reason, so nothing is dropped in silence.
+- **`verify-ca` joins the TLS modes**, so a pasted `sslmode` has somewhere
+  to land. libpq's `allow` and `prefer` deliberately do not: measured
+  against a non-TLS PostgreSQL, both hang until the connection timeout
+  because the driver has no negotiated fallback, so a pasted one is raised
+  to `require` and you are told.
+- **A setting for the blank window on some Linux GPUs.**
+  `disableDmabufRenderer` in `settings.json` beside the data directory,
+  for when WebKit cannot allocate a DMABUF buffer and the app opens as an
+  empty rectangle. Previously fixable only by launching from a terminal
+  with an environment variable, which the desktop icon cannot do.
+- **[docs/moving-a-datasource.md](docs/moving-a-datasource.md)** — how to
+  export a datasource into git and import it on another machine, and
+  where the password lives instead of in the repository.
+
 ### Fixed
 
 - **Quitting the desktop app no longer leaves its database running.**

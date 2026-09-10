@@ -88,6 +88,31 @@ Three things resist bundling and are handled explicitly:
   three times. The staging step collapses each chain onto the SONAME the
   loader asks for.
 
+## A blank window on Linux
+
+If the app opens as an empty rectangle — the log says
+`Failed to create GBM buffer of size 1440x900` and the server is
+otherwise fine — WebKit's DMABUF renderer cannot allocate on this GPU.
+Reported on NVIDIA.
+
+```bash
+# once, to confirm it is this:
+WEBKIT_DISABLE_DMABUF_RENDERER=1 ~/.local/share/app.datagripe.dev/stable/app/bin/launcher
+```
+
+To make it stick, including when launched from the desktop icon, write
+`settings.json` beside the data directory:
+
+```bash
+echo '{ "disableDmabufRenderer": true }' \
+  > ~/.local/share/app.datagripe.dev/stable/settings.json
+```
+
+It costs hardware-accelerated compositing and buys a window you can see.
+It is a setting rather than something detected, deliberately:
+`src/rendering.ts` explains why an NVIDIA-is-present check is the wrong
+test, and why applying it needs libc rather than `process.env`.
+
 ## Shutting down, and the cluster that outlives it
 
 Closing the window does not run a Bun exit handler — Electrobun quits

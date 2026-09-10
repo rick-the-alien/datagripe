@@ -74,6 +74,8 @@ Linux, macOS, and Windows and attaches them to a GitHub release (see
 - [roadmap.md](roadmap.md) — phases, progress, scheduling
 - [docs/initial_idea.md](docs/initial_idea.md) — original engineering handoff
 - [docs/adr/](docs/adr/) — architecture decision records
+- [docs/moving-a-datasource.md](docs/moving-a-datasource.md) — export a
+  datasource to git and import it elsewhere, without a password in the repo
 - [docs/spec/](docs/spec/) — feature/subsystem specifications
 - [docs/rfc/](docs/rfc/) — proposals under discussion
 

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { app, BrowserWindow, Utils } from "electrobun/main";
+import { applyRenderingSettings, readSettings } from "./rendering";
 import { scheduleUpdateChecks } from "./updates";
 
 /**
@@ -221,6 +222,11 @@ app.on("before-quit", () => stopServer());
 
 await waitForServer(port);
 console.log(`[desktop] server healthy on ${origin}`);
+
+// Before the first window: WebKit reads its rendering environment when it
+// builds a backing store, and on some Linux GPU setups the default one
+// cannot allocate — see `rendering.ts`.
+applyRenderingSettings(readSettings(userData));
 
 new BrowserWindow({
 	title: "DataGripe",

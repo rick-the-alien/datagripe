@@ -1,6 +1,6 @@
 {
 	"name": "@datagripe/desktop",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"private": true,
 	"description": "DataGripe standalone desktop app (Electrobun shell over the local server)",
 	"scripts": {

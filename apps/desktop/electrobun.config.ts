@@ -4,7 +4,7 @@ export default {
 	app: {
 		name: "DataGripe",
 		identifier: "app.datagripe.dev",
-		version: "0.0.2",
+		version: "0.0.3",
 	},
 	build: {
 		mainProcess: "cottontail",

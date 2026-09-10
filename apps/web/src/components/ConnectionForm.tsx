@@ -6,11 +6,13 @@ import type {
 	DomainExportPathCheck,
 	GitDatasource,
 	HostPathCheck,
+	IgnoredParam,
 	TlsMode,
 } from "@datagripe/contracts";
 import {
 	ADAPTER_CAPABILITIES,
 	formatConnectionString,
+	parseConnectionString,
 	tlsModeSchema,
 } from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
@@ -29,6 +31,7 @@ import {
 	useDatasourceStore,
 } from "../stores/datasource";
 import { type ConnectionDraft, useConnectionsStore } from "../stores/runtime";
+import { applyParsed } from "./connectionPaste";
 import { ExportConfigPanel } from "./ExportConfigPanel";
 import { GitDatasourceRepo } from "./GitDatasourceRepo";
 import { ImportDatasource } from "./ImportDatasource";
@@ -225,6 +228,14 @@ function ConnectionFormBody(props: {
 	 * stored here — so the form can show what an override is overriding
 	 * rather than presenting a toggle with no reference point.
 	 */
+	/**
+	 * The paste box. `notes` outlives the input being cleared, because the
+	 * reason a parameter could not be honoured is the part worth reading
+	 * after the fields have filled in.
+	 */
+	const [pasted, setPasted] = useState("");
+	const [pasteError, setPasteError] = useState<string | null>(null);
+	const [pasteNotes, setPasteNotes] = useState<IgnoredParam[]>([]);
 	const [repoDefaults, setRepoDefaults] = useState<GitDatasource | null>(null);
 	useEffect(() => {
 		if (!fromRepo || editing === null) {
@@ -375,6 +386,21 @@ function ConnectionFormBody(props: {
 				})),
 			idempotencyKey: crypto.randomUUID(),
 		});
+	};
+
+	const applyPasted = () => {
+		const result = parseConnectionString(pasted);
+		if (!result.ok) {
+			setPasteError(result.error);
+			setPasteNotes([]);
+			return;
+		}
+		setDraft((current) => applyParsed(current, result.parsed.fields));
+		setPasteError(null);
+		setPasteNotes(result.parsed.ignored);
+		// The string held a plaintext password; there is no reason for it to
+		// stay in the DOM once the fields have it.
+		setPasted("");
 	};
 
 	const capabilities = ADAPTER_CAPABILITIES[draft.adapter];
@@ -667,6 +693,62 @@ function ConnectionFormBody(props: {
 					</>
 				)}
 			</p>
+
+			{/* Above the engine picker because it sets the engine too: the
+				    scheme decides it, and a box that filled six fields but left
+				    the seventh to be noticed would be worse than no box. Only
+				    when creating — a paste rewrites a connection wholesale,
+				    which is not an edit. */}
+			{editing === null && !readOnly && (
+				<div className="dg-form-section">
+					<span className="dg-form-section-title">
+						paste a connection string
+					</span>
+					<p className="dg-form-hint">
+						Read here in your browser and never sent anywhere — the fields below
+						are what gets saved. The box is cleared once it has filled them in.
+					</p>
+					<div className="dg-paste-row">
+						<input
+							type="text"
+							value={pasted}
+							placeholder="postgresql://user:password@host/database?sslmode=require"
+							spellCheck={false}
+							autoComplete="off"
+							onChange={(event) => setPasted(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter") {
+									event.preventDefault();
+									applyPasted();
+								}
+							}}
+						/>
+						<button
+							type="button"
+							disabled={pasted.trim() === ""}
+							onClick={applyPasted}
+						>
+							fill in
+						</button>
+					</div>
+					{pasteError !== null && (
+						<p className="dg-test-failed">{pasteError}</p>
+					)}
+					{pasteNotes.length > 0 && (
+						<ul className="dg-paste-notes">
+							{pasteNotes.map((note) => (
+								<li key={`${note.key}:${note.value}`}>
+									<code>{note.key}</code>{" "}
+									{note.reason === "unsupported"
+										? "is not applied"
+										: "was left out"}{" "}
+									— {note.detail}
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+			)}
 
 			<fieldset className="dg-eng" aria-label="Engine">
 				{ADAPTERS.map((adapter) => (

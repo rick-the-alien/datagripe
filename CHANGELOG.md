@@ -9,7 +9,10 @@
   scheme, host, port, database, user, password, `sslmode` — and fills the
   fields in for you to check. Parsed in the browser; the string itself is
   never sent anywhere. Anything it cannot honour is named underneath with
-  the reason, so nothing is dropped in silence.
+  the reason, so nothing is dropped in silence — `channel_binding` has no
+  option in this driver, and runtime parameters like `application_name`
+  and `search_path` have nowhere to live until a datasource can carry
+  them.
 - **`verify-ca` joins the TLS modes**, so a pasted `sslmode` has somewhere
   to land. libpq's `allow` and `prefer` deliberately do not: measured
   against a non-TLS PostgreSQL, both hang until the connection timeout

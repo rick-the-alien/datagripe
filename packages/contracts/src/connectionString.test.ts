@@ -118,36 +118,27 @@ describe("parseConnectionString", () => {
 		expect(fields.port).toBe(5433);
 	});
 
-	test("carries allowlisted params from application_name and options -c", () => {
-		const { fields, applied } = parsed(
-			"postgres://u:p@h/d?application_name=datagripe&options=-c%20search_path%3Dsales",
-		);
-		expect(fields.params).toEqual({
-			application_name: "datagripe",
-			search_path: "sales",
-		});
-		expect(applied).toContain("application_name");
-		expect(applied).toContain("options:search_path");
+	test.each([
+		["application_name", "parameter store"],
+		["search_path", "schema tree"],
+		["statement_timeout", "overwritten"],
+	])("names %s as recognised but not carried", (key, because) => {
+		// There is no per-datasource parameter store, so the honest answer
+		// is the reason rather than silence — or a store that pretends.
+		const { ignored } = parsed(`postgres://u:p@h/d?${key}=x`);
+		const note = ignored.find((entry) => entry.key === key);
+		expect(note?.reason).toBe("unsupported");
+		expect(note?.detail).toContain(because);
 	});
 
-	test("reports statement_timeout rather than storing one the adapter overwrites", () => {
-		const { fields, ignored } = parsed(
-			"postgres://u:p@h/d?statement_timeout=5s",
+	test("unpacks options -c settings so each is reported by name", () => {
+		const { ignored } = parsed(
+			"postgres://u:p@h/d?options=-c%20search_path%3Dsales%20-cwat%3D1",
 		);
-		expect(fields.params).toEqual({});
-		expect(ignored[0]?.key).toBe("statement_timeout");
-		expect(ignored[0]?.detail).toContain("per statement");
-	});
-
-	test("refuses to store a runtime parameter it does not know", () => {
+		expect(ignored.map((entry) => entry.key)).toEqual(["search_path", "wat"]);
 		// An unrecognised one in the startup packet is a connect-time FATAL,
 		// so carrying it would be a datasource that cannot connect at all.
-		const { fields, ignored } = parsed(
-			"postgres://u:p@h/d?options=-c%20wat%3D1",
-		);
-		expect(fields.params).toEqual({});
-		expect(ignored[0]?.key).toBe("wat");
-		expect(ignored[0]?.reason).toBe("unknown");
+		expect(ignored[1]?.reason).toBe("unknown");
 	});
 
 	test("reports an options fragment it cannot carry", () => {
@@ -161,10 +152,9 @@ describe("parseConnectionString", () => {
 
 	test("reports an unrecognised parameter as unknown rather than guessing", () => {
 		// Supabase's pooler and Prisma both add their own.
-		const { fields, ignored } = parsed(
+		const { ignored } = parsed(
 			"postgres://u:p@h/d?pgbouncer=true&connection_limit=1",
 		);
-		expect(fields.params).toEqual({});
 		expect(ignored.map((entry) => entry.key)).toEqual([
 			"pgbouncer",
 			"connection_limit",

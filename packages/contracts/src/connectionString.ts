@@ -32,8 +32,6 @@ export interface ConnectionStringFields {
 	username: string;
 	password: string;
 	tlsMode: TlsMode;
-	/** Postgres runtime parameters, from `application_name` and `options`. */
-	params: Record<string, string>;
 }
 
 export interface IgnoredParam {
@@ -116,24 +114,23 @@ const RAISED_TLS_MODES: Record<string, TlsMode> = {
 };
 
 /**
- * Runtime parameters worth carrying across as-is.
+ * Runtime parameters DataGripe could pass to the driver but does not
+ * store yet, each with the reason.
  *
- * An allowlist rather than "anything we do not recognise", because these
- * ride in the startup packet and PostgreSQL answers an unrecognised one
- * with a FATAL at connect time. A parameter store that can stop a
- * datasource from connecting at all is worse than one that carries less.
+ * There is no parameter store on a connection, so the honest answer for
+ * all of these is "recognised, not carried". Reporting them by name beats
+ * both silence and a store that pretends: an unrecognised parameter rides
+ * the startup packet and PostgreSQL answers with a FATAL at connect time,
+ * so anything kept here has to be a deliberate, tested addition rather
+ * than a passthrough.
  */
-const RUNTIME_PARAMS = new Set(["application_name", "search_path"]);
-
-/**
- * Accepted, stored, and then overwritten by the adapter before every
- * statement it runs — so it is reported for the same reason
- * `channel_binding` is. A value that is taken and quietly overridden is
- * the failure this module exists to avoid.
- */
-const OVERRIDDEN_PARAMS: Record<string, string> = {
+const RUNTIME_PARAMS: Record<string, string> = {
+	application_name:
+		"DataGripe has no per-datasource parameter store yet, so this cannot be carried. It would show up in pg_stat_activity if it could.",
+	search_path:
+		"DataGripe has no per-datasource parameter store yet — and a stored search_path would let an unqualified name in a query resolve somewhere the schema tree is not pointing, which needs deciding before it is offered.",
 	statement_timeout:
-		"the query timeout is set per statement from the server's own limits, so a value here would not survive.",
+		"the query timeout is set per statement from the deployment's own limits, so a value here would be overwritten before it took effect.",
 };
 
 /**
@@ -183,24 +180,18 @@ function decode(value: string): string | null {
 	}
 }
 
-/**
- * Whether a runtime parameter can be carried, or the reason it cannot.
- * `null` means "store it".
- */
+/** Why a runtime parameter is not carried. Never `null` today. */
 function classifyRuntimeParam(
 	name: string,
-): Pick<IgnoredParam, "reason" | "detail"> | null {
-	if (RUNTIME_PARAMS.has(name)) {
-		return null;
-	}
-	const overridden = OVERRIDDEN_PARAMS[name];
-	if (overridden !== undefined) {
-		return { reason: "unsupported", detail: overridden };
+): Pick<IgnoredParam, "reason" | "detail"> {
+	const known = RUNTIME_PARAMS[name];
+	if (known !== undefined) {
+		return { reason: "unsupported", detail: known };
 	}
 	return {
 		reason: "unknown",
 		detail:
-			"not a runtime parameter this app carries. PostgreSQL refuses an unrecognised one at connect time, so it has been left out rather than risked.",
+			"not a runtime parameter this app recognises. PostgreSQL refuses an unrecognised one at connect time, so it has been left out rather than risked.",
 	};
 }
 
@@ -266,7 +257,6 @@ export function parseConnectionString(input: string): ConnectionStringResult {
 					username: "",
 					password: "",
 					tlsMode: "disable",
-					params: {},
 				},
 				applied: [],
 				ignored: [],
@@ -293,7 +283,6 @@ export function parseConnectionString(input: string): ConnectionStringResult {
 		};
 	}
 
-	const params: Record<string, string> = {};
 	const applied: string[] = [];
 	const ignored: IgnoredParam[] = [];
 	let tlsMode: TlsMode | undefined = matched.tls;
@@ -332,13 +321,11 @@ export function parseConnectionString(input: string): ConnectionStringResult {
 		if (lower === "options") {
 			const { params: fromOptions, leftovers } = parseOptions(value);
 			for (const [name, setting] of Object.entries(fromOptions)) {
-				const note = classifyRuntimeParam(name);
-				if (note === null) {
-					params[name] = setting;
-					applied.push(`${key}:${name}`);
-				} else {
-					ignored.push({ key: name, value: setting, ...note });
-				}
+				ignored.push({
+					key: name,
+					value: setting,
+					...classifyRuntimeParam(name),
+				});
 			}
 			for (const leftover of leftovers) {
 				ignored.push({
@@ -351,28 +338,12 @@ export function parseConnectionString(input: string): ConnectionStringResult {
 			}
 			continue;
 		}
-		const runtimeNote = classifyRuntimeParam(lower);
-		if (runtimeNote === null) {
-			params[lower] = value;
-			applied.push(key);
-			continue;
-		}
-		if (runtimeNote.reason === "unsupported" && lower in OVERRIDDEN_PARAMS) {
-			ignored.push({ key, value, ...runtimeNote });
-			continue;
-		}
 		const unsupported = UNSUPPORTED[lower];
 		if (unsupported !== undefined) {
 			ignored.push({ key, value, reason: "unsupported", detail: unsupported });
 			continue;
 		}
-		ignored.push({
-			key,
-			value,
-			reason: "unknown",
-			detail:
-				"not a connection parameter this app recognises, so it has been left out rather than guessed at.",
-		});
+		ignored.push({ key, value, ...classifyRuntimeParam(lower) });
 	}
 
 	return {
@@ -394,7 +365,6 @@ export function parseConnectionString(input: string): ConnectionStringResult {
 				// `sslmode`, assume the encryption the host almost certainly
 				// requires; it is visible in the field and easy to turn down.
 				tlsMode: tlsMode ?? "require",
-				params,
 			},
 			applied,
 			ignored,

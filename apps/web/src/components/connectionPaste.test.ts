@@ -25,7 +25,6 @@ const fields: ConnectionStringFields = {
 	username: "neondb_owner",
 	password: "npg_secret",
 	tlsMode: "require",
-	params: {},
 };
 
 describe("applyParsed", () => {

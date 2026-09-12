@@ -118,6 +118,13 @@ datasource:
   username: reader
   passwordEnv: WALLET_PG_PASSWORD
   tlsMode: verify-full
+  # Optional. PostgreSQL runtime parameters, sent when the connection
+  # opens, so a teammate who clones this resolves unqualified names the
+  # same way you do. An allowlist — `search_path` and `application_name` —
+  # because an unrecognised one is a FATAL at connect time rather than a
+  # warning. Never a secret; this file is committed.
+  params:
+    search_path: wallet,public
   readOnly: true
   showAllSchemas: false
 

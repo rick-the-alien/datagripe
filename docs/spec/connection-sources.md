@@ -55,6 +55,7 @@ itself stays commit-safe:
       "username": "datagripe",
       "passwordEnv": "DEV_PG_PASSWORD",
       "tlsMode": "disable",
+      "params": { "search_path": "sales,public" },
       "readOnly": true,
       "workspaces": ["*"]
     }
@@ -66,6 +67,11 @@ itself stays commit-safe:
 - Secrets are declared as `passwordEnv: "VAR_NAME"` (indirection into the
   process environment). Inline `password` is accepted but documented as
   development-only.
+- `params` are PostgreSQL runtime parameters sent when the connection
+  opens (`packages/contracts/src/connectionParams.ts`). An allowlist, not
+  free-form: an unrecognised one is a FATAL at connect time rather than a
+  warning, so a typo here would be a datasource that cannot connect at
+  all. Optional, and never a secret.
 - `workspaces` lists workspace names or `"*"` for all workspaces.
 - The file is validated at startup with a Zod schema in
   `packages/contracts` (`predefinedConnectionsFileSchema`); invalid files

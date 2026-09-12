@@ -13,6 +13,7 @@ const CONNECTION: ResolvedConnection = {
 	password: "",
 	tlsMode: "disable",
 	readOnly: false,
+	params: {},
 };
 
 async function probe(): Promise<boolean> {

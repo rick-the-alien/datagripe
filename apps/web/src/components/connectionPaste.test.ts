@@ -12,6 +12,7 @@ const draft: ConnectionDraft = {
 	username: "",
 	password: "",
 	tlsMode: "disable",
+	params: {},
 	readOnly: true,
 	showAllSchemas: false,
 };
@@ -25,6 +26,7 @@ const fields: ConnectionStringFields = {
 	username: "neondb_owner",
 	password: "npg_secret",
 	tlsMode: "require",
+	params: {},
 };
 
 describe("applyParsed", () => {
@@ -66,6 +68,16 @@ describe("applyParsed", () => {
 		});
 		expect(next.adapter).toBe("mysql");
 		expect(next.port).toBe(3306);
+	});
+
+	test("replaces params rather than merging them", () => {
+		// A merge would leave an earlier paste's search_path attached to a
+		// different database.
+		const stale = { ...draft, params: { search_path: "old" } };
+		expect(
+			applyParsed(stale, { ...fields, params: { search_path: "new" } }).params,
+		).toEqual({ search_path: "new" });
+		expect(applyParsed(stale, fields).params).toEqual({});
 	});
 
 	test("clears a password the string did not carry", () => {

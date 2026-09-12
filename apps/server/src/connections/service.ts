@@ -3,6 +3,7 @@ import type {
 	ConnectionAdapter,
 	ConnectionCreateRequest,
 	ConnectionMetadata,
+	ConnectionParams,
 	ConnectionSource,
 	ConnectionTestRequest,
 	ConnectionTestResult,
@@ -40,6 +41,11 @@ import { idFromRef } from "../git/store";
 import type { GitDatasourcesService } from "../git/types";
 import { log } from "../log";
 import type { SsrfPolicy } from "../security/ssrf";
+import {
+	connectionParamsByConnection,
+	listConnectionParams,
+	replaceConnectionParams,
+} from "./params";
 import type { PredefinedEntry } from "./predefined";
 
 /** Domain error with a protocol error code. */
@@ -184,6 +190,7 @@ function rowToMetadata(
 	row: ConnectionRow,
 	exportPath: string | null = null,
 	paths: DatasourcePath[] = [],
+	params: ConnectionParams = {},
 ): ConnectionMetadata {
 	return {
 		id: row.id,
@@ -199,6 +206,7 @@ function rowToMetadata(
 		showAllSchemas: row.show_all_schemas,
 		domainExportPath: exportPath,
 		paths,
+		params,
 		source: "managed",
 		// Only a repository defines these (docs/spec/git-datasources.md).
 		branding: null,
@@ -240,6 +248,7 @@ export function createConnectionsService(
 			port: definition.port ?? null,
 			databaseName: definition.database,
 			username: definition.username ?? null,
+			params: definition.params,
 			tlsMode: definition.tlsMode,
 			readOnly: definition.readOnly,
 			showAllSchemas: definition.showAllSchemas,
@@ -324,10 +333,25 @@ export function createConnectionsService(
 			}
 			return entry.resolved;
 		}
+		// Parameters fold into the same round trip: this is the hot path,
+		// taken before every query, and a second query for a record that is
+		// usually empty is not worth the latency.
 		const rows = await appDb<
-			(ConnectionRow & { ciphertext: Buffer; key_version: number })[]
+			(ConnectionRow & {
+				ciphertext: Buffer;
+				key_version: number;
+				params: ConnectionParams | null;
+			})[]
 		>`
-			SELECT c.*, s.ciphertext, s.key_version
+			SELECT
+				c.*,
+				s.ciphertext,
+				s.key_version,
+				(
+					SELECT jsonb_object_agg(p.name, p.value)
+					FROM connection_params p
+					WHERE p.connection_id = c.id
+				) AS params
 			FROM connections c
 			JOIN connection_secrets s ON s.connection_id = c.id
 			WHERE c.id = ${id} AND c.workspace_id = ${workspace.id}
@@ -351,6 +375,7 @@ export function createConnectionsService(
 			password: keyring.decrypt(row.ciphertext, row.key_version),
 			tlsMode: row.tls_mode ?? "disable",
 			readOnly: row.read_only,
+			params: row.params ?? {},
 		};
 	}
 
@@ -364,9 +389,10 @@ export function createConnectionsService(
 			// One lookup for the whole list: the export path is workspace-local
 			// configuration keyed by connection ref, so it cannot come from the
 			// connection row (predefined ones have none).
-			const [exports, browsePaths] = await Promise.all([
+			const [exports, browsePaths, params] = await Promise.all([
 				exportPaths(appDb, workspace.id),
 				datasourcePathsByConnection(appDb, workspace.id),
+				connectionParamsByConnection(appDb, workspace.id),
 			]);
 			const fromRepos =
 				gitDatasources === undefined
@@ -387,6 +413,7 @@ export function createConnectionsService(
 						row,
 						exports.get(row.id) ?? null,
 						browsePaths.get(row.id) ?? [],
+						params.get(row.id) ?? {},
 					),
 				),
 			].sort((a, b) => a.name.localeCompare(b.name));
@@ -418,6 +445,7 @@ export function createConnectionsService(
 					INSERT INTO connection_secrets (connection_id, ciphertext, key_version)
 					VALUES (${row.id}, ${secret.ciphertext}, ${secret.keyVersion})
 				`;
+				await replaceConnectionParams(tx, row.id, request.params);
 				return inserted;
 			});
 			const row = rows[0];
@@ -428,7 +456,7 @@ export function createConnectionsService(
 				workspaceId: workspace.id,
 				connectionId: row.id,
 			});
-			return rowToMetadata(row);
+			return rowToMetadata(row, null, [], request.params);
 		},
 
 		async updateConnection(workspace, request) {
@@ -482,6 +510,11 @@ export function createConnectionsService(
 						WHERE connection_id = ${request.id}
 					`;
 				}
+				// Omitted keeps the stored set, the way an omitted password
+				// keeps the stored one; `{}` is how you clear it.
+				if (request.params !== undefined) {
+					await replaceConnectionParams(tx, request.id, request.params);
+				}
 				return updated;
 			});
 			const row = rows[0];
@@ -492,7 +525,12 @@ export function createConnectionsService(
 				workspaceId: workspace.id,
 				connectionId: row.id,
 			});
-			return rowToMetadata(row);
+			return rowToMetadata(
+				row,
+				null,
+				[],
+				await listConnectionParams(appDb, row.id),
+			);
 		},
 
 		async deleteConnection(workspace, id) {
@@ -531,6 +569,9 @@ export function createConnectionsService(
 					password: request.draft.password,
 					tlsMode: request.draft.tlsMode ?? "disable",
 					readOnly: request.draft.readOnly,
+					// Tested as configured: a `search_path` that will not apply
+					// should fail here, not after saving.
+					params: request.draft.params,
 				};
 			}
 			return adapters[resolved.adapter].testConnection(resolved);

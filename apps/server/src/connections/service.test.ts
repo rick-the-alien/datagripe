@@ -51,6 +51,7 @@ const PREDEFINED: PredefinedEntry = {
 		passwordEnv: "DEV_PG_PASSWORD",
 		tlsMode: "disable",
 		readOnly: true,
+		params: {},
 		showAllSchemas: false,
 		workspaces: ["*"],
 	},
@@ -63,6 +64,7 @@ const PREDEFINED: PredefinedEntry = {
 		password: "datagripe",
 		tlsMode: "disable",
 		readOnly: true,
+		params: {},
 	},
 	loadedAt: new Date().toISOString(),
 };
@@ -119,6 +121,7 @@ const CREATE_REQUEST = {
 	password: "super-secret-pw",
 	tlsMode: "disable" as const,
 	readOnly: true,
+	params: {},
 	showAllSchemas: false,
 	idempotencyKey: "test-key-0001",
 };
@@ -131,6 +134,7 @@ describe("connections service", () => {
 			source: "managed",
 			databaseName: "postgres",
 			readOnly: true,
+			params: {},
 		});
 		expect(created).not.toHaveProperty("password");
 
@@ -142,6 +146,43 @@ describe("connections service", () => {
 		expect(row).toBeDefined();
 		expect(row?.ciphertext.toString("utf8")).not.toContain("super-secret-pw");
 		expect(row?.key_version).toBe(1);
+	});
+
+	pgTest("runtime parameters round-trip, and delete takes them", async () => {
+		const created = await service.createConnection(workspace, {
+			...CREATE_REQUEST,
+			name: "With params",
+			idempotencyKey: crypto.randomUUID(),
+			params: { search_path: "sales,public" },
+		});
+		expect(created.params).toEqual({ search_path: "sales,public" });
+
+		// Omitted keeps the stored set, the way an omitted password does.
+		const untouched = await service.updateConnection(workspace, {
+			id: created.id,
+			name: "With params, renamed",
+			idempotencyKey: crypto.randomUUID(),
+		});
+		expect(untouched.params).toEqual({ search_path: "sales,public" });
+
+		// The whole set is replaced, so removing one is possible at all.
+		const replaced = await service.updateConnection(workspace, {
+			id: created.id,
+			params: { application_name: "datagripe" },
+			idempotencyKey: crypto.randomUUID(),
+		});
+		expect(replaced.params).toEqual({ application_name: "datagripe" });
+
+		const listed = await service.listConnections(workspace);
+		expect(listed.find((c) => c.id === created.id)?.params).toEqual({
+			application_name: "datagripe",
+		});
+
+		await service.deleteConnection(workspace, created.id);
+		const orphans = await appDb<{ name: string }[]>`
+			SELECT name FROM connection_params WHERE connection_id = ${created.id}
+		`;
+		expect(orphans).toHaveLength(0);
 	});
 
 	pgTest("list returns managed and predefined, never secrets", async () => {
@@ -215,6 +256,7 @@ describe("connections service", () => {
 					username: "datagripe",
 					password: "datagripe",
 					readOnly: true,
+					params: {},
 					showAllSchemas: false,
 				},
 			});

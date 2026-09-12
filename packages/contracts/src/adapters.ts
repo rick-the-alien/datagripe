@@ -24,7 +24,9 @@ export type AdapterField =
 	| "username"
 	| "password"
 	| "tlsMode"
-	| "readOnly";
+	| "readOnly"
+	/** PostgreSQL runtime parameters (`connectionParams.ts`). */
+	| "params";
 
 /**
  * The SQL dialect an adapter speaks, for the tokenizer and the splitter.
@@ -107,6 +109,10 @@ export const ADAPTER_CAPABILITIES: Record<
 			"password",
 			"tlsMode",
 			"readOnly",
+			// Only here: Bun documents its `connection` option as PostgreSQL
+			// client configuration, and a store that might or might not reach
+			// the driver is worse than one that visibly does not exist.
+			"params",
 		],
 		databaseLabel: "Database",
 	},

@@ -37,9 +37,47 @@ const CONNECTION: ResolvedConnection = {
 	password: "datagripe",
 	tlsMode: "disable",
 	readOnly: true,
+	params: {},
 };
 
 const adapter = new PostgresAdapter();
+
+/**
+ * One setting's value, read down the adapter's own execution path so the
+ * test exercises the client the adapter builds rather than one assembled
+ * here to match.
+ */
+async function currentSetting(
+	connection: ResolvedConnection,
+	name: string,
+): Promise<string> {
+	const session = await adapter.beginExecution(connection, {
+		timeoutMs: 5_000,
+		maxRows: 10,
+		maxBytes: 1_000_000,
+		batchRows: 10,
+		readOnly: false,
+		sandbox: false,
+	});
+	let value = "";
+	const result = await session.run(
+		[`SELECT current_setting('${name}') AS value`],
+		{
+			columns: () => {},
+			rows: (_resultSet, rows) => {
+				value = String(rows[0]?.[0] ?? "");
+			},
+			statementDone: () => {},
+		},
+		() => false,
+	);
+	await session.close();
+	if (result.outcome !== "completed") {
+		throw new Error(result.error?.message ?? "execution failed");
+	}
+	return value;
+}
+
 let admin: SQL;
 
 beforeAll(async () => {
@@ -87,6 +125,41 @@ describe("PostgresAdapter", () => {
 		expect(result.latencyMs).toBeGreaterThanOrEqual(0);
 	});
 
+	pgTest("runtime parameters reach the session", async () => {
+		// Measured behaviour, not an assumption: Bun's `connection` option
+		// is delivered in the startup packet, so `search_path` is in force
+		// before the first statement rather than set by one.
+		const withParams: ResolvedConnection = {
+			...CONNECTION,
+			params: { search_path: "sales,public", application_name: "datagripe" },
+		};
+		const plain = await currentSetting(CONNECTION, "search_path");
+		expect(await currentSetting(withParams, "search_path")).toBe(
+			"sales,public",
+		);
+		expect(await currentSetting(withParams, "application_name")).toBe(
+			"datagripe",
+		);
+		// And the pool is keyed on them: two connections differing only in
+		// `search_path` sharing a client would make the same query mean
+		// different tables.
+		expect(plain).not.toBe("sales,public");
+		expect(await currentSetting(CONNECTION, "search_path")).toBe(plain);
+	});
+	pgTest(
+		"an unrecognised runtime parameter fails at connect time",
+		async () => {
+			// Why the parameter list is an allowlist rather than free-form: this
+			// is a FATAL when the connection opens, not a warning, so a typed-in
+			// name would be a datasource that cannot connect at all.
+			const result = await adapter.testConnection({
+				...CONNECTION,
+				params: { not_a_setting: "1" } as never,
+			});
+			expect(result.ok).toBe(false);
+			expect(result.error?.message).toContain("not_a_setting");
+		},
+	);
 	pgTest("testConnection reports failure without throwing", async () => {
 		// The dev container uses trust auth, so exercise the failure path
 		// with a port nothing listens on.

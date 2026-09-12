@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { connectionAdapterSchema } from "./adapters";
+import { connectionParamsSchema } from "./connectionParams";
 import { tlsModeSchema } from "./connections";
 import {
 	domainColourSchema,
@@ -82,6 +83,13 @@ export const repoDatasourceSchema = z.object({
 	 */
 	noPassword: z.boolean().default(false),
 	tlsMode: tlsModeSchema.default("disable"),
+	/**
+	 * PostgreSQL runtime parameters (`connectionParams.ts`). Part of the
+	 * datasource's definition rather than configuration about it, so it is
+	 * committed with the rest — a teammate who clones the repository gets
+	 * the same `search_path`, which is the point. Never a secret.
+	 */
+	params: connectionParamsSchema,
 	readOnly: z.boolean().default(true),
 	showAllSchemas: z.boolean().default(false),
 });

@@ -143,6 +143,10 @@ export async function runExportConfig(
 					passwordEnv,
 					noPassword: false,
 					tlsMode: connection.tlsMode ?? "disable",
+					// Not a secret, and part of the definition: a teammate who
+					// clones this should get the same `search_path`, or their
+					// unqualified names resolve somewhere else.
+					params: connection.params,
 					readOnly: connection.readOnly,
 					showAllSchemas: connection.showAllSchemas,
 				},

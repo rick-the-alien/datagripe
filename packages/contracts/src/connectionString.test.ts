@@ -118,27 +118,40 @@ describe("parseConnectionString", () => {
 		expect(fields.port).toBe(5433);
 	});
 
+	test("carries the runtime parameters it can honour", () => {
+		const { fields, applied } = parsed(
+			"postgres://u:p@h/d?search_path=sales,public&application_name=dg",
+		);
+		expect(fields.params).toEqual({
+			search_path: "sales,public",
+			application_name: "dg",
+		});
+		expect(applied).toContain("search_path");
+	});
+
 	test.each([
-		["application_name", "parameter store"],
-		["search_path", "schema tree"],
 		["statement_timeout", "overwritten"],
-	])("names %s as recognised but not carried", (key, because) => {
-		// There is no per-datasource parameter store, so the honest answer
-		// is the reason rather than silence — or a store that pretends.
-		const { ignored } = parsed(`postgres://u:p@h/d?${key}=x`);
+		["client_encoding", "decoded"],
+		["default_transaction_read_only", "read only"],
+	])("refuses %s by name, with the reason", (key, because) => {
+		// Accepting one of these and then overriding it is the same failure
+		// as dropping it, wearing a nicer hat.
+		const { fields, ignored } = parsed(`postgres://u:p@h/d?${key}=x`);
+		expect(fields.params).toEqual({});
 		const note = ignored.find((entry) => entry.key === key);
 		expect(note?.reason).toBe("unsupported");
 		expect(note?.detail).toContain(because);
 	});
 
-	test("unpacks options -c settings so each is reported by name", () => {
-		const { ignored } = parsed(
+	test("unpacks options -c settings, carrying and refusing each by name", () => {
+		const { fields, ignored } = parsed(
 			"postgres://u:p@h/d?options=-c%20search_path%3Dsales%20-cwat%3D1",
 		);
-		expect(ignored.map((entry) => entry.key)).toEqual(["search_path", "wat"]);
+		expect(fields.params).toEqual({ search_path: "sales" });
 		// An unrecognised one in the startup packet is a connect-time FATAL,
 		// so carrying it would be a datasource that cannot connect at all.
-		expect(ignored[1]?.reason).toBe("unknown");
+		expect(ignored.map((entry) => entry.key)).toEqual(["wat"]);
+		expect(ignored[0]?.reason).toBe("unknown");
 	});
 
 	test("reports an options fragment it cannot carry", () => {

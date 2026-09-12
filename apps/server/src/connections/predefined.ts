@@ -87,6 +87,7 @@ export async function loadPredefinedConnections(
 				password,
 				tlsMode: definition.tlsMode,
 				readOnly: definition.readOnly,
+				params: definition.params,
 			},
 			loadedAt,
 		});

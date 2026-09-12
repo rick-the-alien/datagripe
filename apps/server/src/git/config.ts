@@ -315,6 +315,11 @@ export function renderConfig(
 		datasource.noPassword = true;
 	}
 	datasource.tlsMode = config.datasource.tlsMode;
+	// Only when set, like `host` and `passwordEnv` above: an empty map in
+	// every generated file would be a setting-shaped hole.
+	if (Object.keys(config.datasource.params).length > 0) {
+		datasource.params = config.datasource.params;
+	}
 	datasource.readOnly = config.datasource.readOnly;
 	datasource.showAllSchemas = config.datasource.showAllSchemas;
 

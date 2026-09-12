@@ -216,6 +216,7 @@ export function createGitDatasourcesService(
 						adapter: "postgres",
 						database: "",
 						tlsMode: "disable",
+						params: {},
 						readOnly: true,
 						showAllSchemas: false,
 						noPassword: false,
@@ -409,6 +410,9 @@ export function createGitDatasourcesService(
 			databaseName: source.database,
 			username: source.username ?? null,
 			tlsMode: source.tlsMode,
+			// The repository's, always: parameters are part of the definition
+			// it owns, not one of the three settings this project overrides.
+			params: source.params,
 			// The repository's value is the default; this project's override
 			// wins where it set one (docs/spec/git-datasources.md).
 			readOnly: entry.readOnlyOverride ?? source.readOnly,
@@ -509,6 +513,7 @@ export function createGitDatasourcesService(
 				// The override reaches the connection, not just the form:
 				// `read only` that did not refuse writes would be a label.
 				readOnly: entry.readOnlyOverride ?? source.readOnly,
+				params: source.params,
 			};
 		},
 

@@ -2,6 +2,7 @@ import type {
 	AdapterCapabilities,
 	ColumnChange,
 	ConnectionAdapter,
+	ConnectionParams,
 	ConnectionTestResult,
 	ObjectAlterResult,
 	ObjectDescribeResult,
@@ -34,6 +35,13 @@ export interface ResolvedConnection {
 	password: string;
 	tlsMode: TlsMode;
 	readOnly: boolean;
+	/**
+	 * PostgreSQL runtime parameters for the startup packet. Empty for
+	 * every other adapter — Bun documents this option as Postgres client
+	 * configuration, and a store that might or might not apply is worse
+	 * than one that visibly does not.
+	 */
+	params: ConnectionParams;
 }
 
 /** One key's value from a keyspace adapter (Redis). */

@@ -44,6 +44,7 @@ const CONNECTION: ResolvedConnection = {
 	// Deliberately *not* a read-only connection: layer 3 would otherwise
 	// be doing the work and layer 2 would go untested.
 	readOnly: false,
+	params: {},
 };
 
 const LIMITS = {

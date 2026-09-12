@@ -13,6 +13,7 @@ import {
 	ADAPTER_CAPABILITIES,
 	formatConnectionString,
 	parseConnectionString,
+	RUNTIME_PARAMS,
 	tlsModeSchema,
 } from "@datagripe/contracts";
 import type { IDockviewPanelProps } from "dockview-react";
@@ -56,6 +57,7 @@ const EMPTY_DRAFT: ConnectionDraft = {
 	username: "",
 	password: "",
 	tlsMode: "disable",
+	params: {},
 	readOnly: true,
 	showAllSchemas: false,
 };
@@ -205,6 +207,7 @@ function ConnectionFormBody(props: {
 			username: editing.username ?? "",
 			password: "",
 			tlsMode: editing.tlsMode ?? "disable",
+			params: editing.params,
 			readOnly: editing.readOnly,
 			showAllSchemas: editing.showAllSchemas,
 		};
@@ -872,6 +875,47 @@ function ConnectionFormBody(props: {
 					</label>
 				)}
 			</div>
+
+			{/* Runtime parameters, for the engines that have them. A fixed
+				    list rather than free-form name/value rows: PostgreSQL
+				    answers an unrecognised one with a FATAL at connect time, so
+				    a typed-in name is a datasource that cannot connect, and the
+				    error would name the parameter rather than the field. */}
+			{has("params") && (
+				<div className="dg-form-section">
+					<span className="dg-form-section-title">runtime parameters</span>
+					<p className="dg-form-hint">
+						Sent when the connection opens. Visible to everyone in the project —
+						not a place for a secret.
+					</p>
+					{Object.entries(RUNTIME_PARAMS).map(([name, info]) => (
+						<label className="dg-field dg-field-path" key={name}>
+							<span>{name}</span>
+							<input
+								type="text"
+								value={draft.params[name] ?? ""}
+								disabled={readOnly}
+								spellCheck={false}
+								autoComplete="off"
+								placeholder="unset"
+								onChange={(event) => {
+									const next = { ...draft.params };
+									// An empty field is the absence of the parameter, not
+									// an empty one: PostgreSQL would take `search_path=''`
+									// literally and resolve nothing.
+									if (event.target.value.trim() === "") {
+										delete next[name];
+									} else {
+										next[name] = event.target.value;
+									}
+									patch({ params: next });
+								}}
+							/>
+							<span className="dg-form-hint">{info.description}</span>
+						</label>
+					))}
+				</div>
+			)}
 
 			{/* Behaviour, not "more fields": read-only is a connection
 				    constraint and show-all-schemas is a display preference. Same

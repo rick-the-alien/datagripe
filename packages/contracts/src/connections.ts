@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { adapterInfoSchema, connectionAdapterSchema } from "./adapters";
 import { workspaceRoleSchema } from "./auth";
+import { connectionParamsSchema } from "./connectionParams";
 import { datasourcePathSchema } from "./files";
 import { documentListEntrySchema } from "./multiplayer";
 
@@ -106,6 +107,14 @@ export const connectionMetadataSchema = z.object({
 	 * which variable to set, not left wondering why the sidebar is empty.
 	 */
 	unavailable: z.string().nullable().default(null),
+	/**
+	 * PostgreSQL runtime parameters sent in the startup packet
+	 * (`connectionParams.ts`). Part of the datasource's definition rather
+	 * than configuration about it — `search_path` changes what a query
+	 * means — so it travels with the connection into `config.yaml` on
+	 * export. Never secret.
+	 */
+	params: connectionParamsSchema,
 	createdAt: z.iso.datetime(),
 	updatedAt: z.iso.datetime(),
 });
@@ -123,6 +132,7 @@ const connectionBaseFields = z.object({
 	tlsMode: tlsModeSchema.optional(),
 	readOnly: z.boolean().default(true),
 	showAllSchemas: z.boolean().default(false),
+	params: connectionParamsSchema,
 });
 
 function checkAdapterFields(ctx: {
@@ -175,6 +185,8 @@ export const connectionUpdateRequestSchema = z.object({
 	username: z.string().min(1).max(255).optional(),
 	password: z.string().max(1024).optional(),
 	tlsMode: tlsModeSchema.optional(),
+	/** Omitted keeps the stored set; `{}` clears it. */
+	params: connectionParamsSchema.optional(),
 	readOnly: z.boolean().optional(),
 	showAllSchemas: z.boolean().optional(),
 	idempotencyKey: z.string().min(8).max(128),

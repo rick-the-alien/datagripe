@@ -53,6 +53,13 @@ export class PostgresAdapter implements DatabaseAdapter {
 			.update(connection.password)
 			.digest("hex")
 			.slice(0, 16);
+		// Sorted, so key order does not fork the pool. Two connections
+		// differing only in `search_path` must not share a client: the same
+		// query would mean different tables, which is the bug the password
+		// fingerprint above exists to prevent, wearing a different hat.
+		const paramsFingerprint = JSON.stringify(
+			Object.entries(connection.params).sort(),
+		);
 		const key = [
 			connection.host,
 			connection.port,
@@ -60,6 +67,7 @@ export class PostgresAdapter implements DatabaseAdapter {
 			connection.username,
 			connection.tlsMode,
 			passwordFingerprint,
+			paramsFingerprint,
 		].join(":");
 		let client = this.clients.get(key);
 		if (client === undefined) {
@@ -71,6 +79,11 @@ export class PostgresAdapter implements DatabaseAdapter {
 				password: connection.password,
 				// libpq's own vocabulary, which this option accepts verbatim.
 				tls: connection.tlsMode,
+				// Absent rather than empty when unused, so nothing changes for
+				// a datasource that never set one.
+				...(Object.keys(connection.params).length > 0
+					? { connection: connection.params }
+					: {}),
 				max: 3,
 				idleTimeout: 20,
 				connectionTimeout: 10,

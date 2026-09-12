@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A datasource can carry `search_path`.** PostgreSQL runtime parameters
+  are sent in the startup packet, so an unqualified name resolves in the
+  schemas the datasource names instead of every query having to say so.
+  `application_name` comes with the same mechanism, and shows up in
+  `pg_stat_activity`. A pasted connection string carrying either now
+  keeps it rather than reporting that it could not.
+
+  An allowlist rather than free-form name/value pairs, because an
+  unrecognised parameter in the startup packet is a connect-time FATAL
+  rather than a warning — a typed-in name would be a datasource that
+  cannot connect at all, reporting a parameter instead of the field it
+  came from. `statement_timeout`, `client_encoding` and
+  `default_transaction_read_only` are refused by name with the reason.
+
+  They travel into `.datagripe/config.yaml` on export, so a teammate who
+  clones the repository resolves names the same way. They are not
+  secrets, and the form says so.
+
 ## 0.0.4 — 2026-09-10
 
 ### Fixed

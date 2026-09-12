@@ -52,6 +52,7 @@ beforeAll(async () => {
 		password: "",
 		tlsMode: "disable",
 		readOnly: false,
+		params: {},
 	};
 });
 

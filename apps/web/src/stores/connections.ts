@@ -1,6 +1,7 @@
 import type {
 	ConnectionAdapter,
 	ConnectionMetadata,
+	ConnectionParams,
 	ConnectionTestResult,
 	TlsMode,
 	WorkspaceOpenResult,
@@ -28,6 +29,7 @@ function scopedPayload(draft: ConnectionDraft) {
 		...(caps.fields.includes("username") ? { username: draft.username } : {}),
 		password: draft.password,
 		...(caps.fields.includes("tlsMode") ? { tlsMode: draft.tlsMode } : {}),
+		params: caps.fields.includes("params") ? draft.params : {},
 		readOnly: draft.readOnly,
 		showAllSchemas: draft.showAllSchemas,
 	};
@@ -43,6 +45,8 @@ export type ConnectionDraft = {
 	/** Empty when editing and keeping the stored password. */
 	password: string;
 	tlsMode: TlsMode;
+	/** PostgreSQL runtime parameters; empty for adapters without them. */
+	params: ConnectionParams;
 	readOnly: boolean;
 	/** Tree shows every schema as an expandable level. */
 	showAllSchemas: boolean;

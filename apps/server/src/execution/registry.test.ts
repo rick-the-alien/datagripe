@@ -46,6 +46,7 @@ const TARGET: ResolvedConnection & { source: ConnectionSource } = {
 	password: "datagripe",
 	tlsMode: "disable",
 	readOnly: false,
+	params: {},
 	source: "predefined",
 };
 

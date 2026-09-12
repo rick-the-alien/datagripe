@@ -27,6 +27,7 @@ function connection(
 		username: "u",
 		tlsMode: "disable",
 		readOnly: true,
+		params: {},
 		showAllSchemas: false,
 		domainExportPath: null,
 		paths,

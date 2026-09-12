@@ -38,6 +38,7 @@ const CONNECTION: ResolvedConnection = {
 	password: "datagripe",
 	tlsMode: "disable",
 	readOnly: false,
+	params: {},
 };
 
 const LIMITS: TableLimits = {

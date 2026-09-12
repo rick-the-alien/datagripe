@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { connectionAdapterSchema } from "./adapters";
+import { connectionParamsSchema } from "./connectionParams";
 import { tlsModeSchema } from "./connections";
 
 /**
@@ -23,6 +24,8 @@ export const predefinedConnectionSchema = z
 		/** Inline secret — development only. */
 		password: z.string().max(1024).optional(),
 		tlsMode: tlsModeSchema.default("disable"),
+		/** PostgreSQL runtime parameters (`connectionParams.ts`). */
+		params: connectionParamsSchema,
 		readOnly: z.boolean().default(true),
 		/** Tree shows every schema as an expandable level. */
 		showAllSchemas: z.boolean().default(false),

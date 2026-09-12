@@ -23,6 +23,12 @@ export function applyParsed(
 		password: fields.password,
 		tlsMode: fields.tlsMode,
 		/**
+		 * Replaced, not merged. A merge would leave a `search_path` from an
+		 * earlier paste attached to a different database, which is the kind
+		 * of leftover nobody thinks to look for.
+		 */
+		params: fields.params,
+		/**
 		 * A name the user already typed survives. The derived one is a
 		 * guess from the host and database, and overwriting a deliberate
 		 * "Prod (read replica)" with "neondb on ep-empty-fire" would be
